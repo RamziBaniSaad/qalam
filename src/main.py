@@ -36,6 +36,14 @@ from input_simulation import InputSimulator
 from utils import ConfigManager
 from llm_processor import LLMProcessor
 
+# .env laden (API-Keys). Wird sonst von run.py erledigt; hier nötig, wenn main.py
+# direkt gestartet wird (macOS-.app startet main.py ohne run.py). Idempotent, Windows-safe.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 
 # --- macOS/pynput-Workaround --------------------------------------------------
 # pynput löst HIServices.AXIsProcessTrusted() erst im Listener-Hintergrundthread
@@ -49,6 +57,41 @@ if sys.platform == 'darwin':
         HIServices.AXIsProcessTrusted()
     except Exception:
         pass
+
+
+# --- Einmal-Instanz-Sperre (macOS/Linux) --------------------------------------
+# Verhindert, dass mehrere qalam-Instanzen laufen (mehrfache Menüleisten-Icons +
+# konkurrierende Hotkey-Listener). Über einen exklusiven Datei-Lock. Auf Windows
+# übersprungen (dort regelt das launcher_hidden.vbs / kein fcntl).
+_SINGLE_INSTANCE_FH = None
+
+
+def acquire_single_instance():
+    global _SINGLE_INSTANCE_FH
+    if sys.platform == 'win32':
+        return True
+    import fcntl
+    import tempfile
+    fh = open(os.path.join(tempfile.gettempdir(), 'qalam.singleton.lock'), 'w')
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return False
+    _SINGLE_INSTANCE_FH = fh
+    return True
+
+
+def release_single_instance():
+    global _SINGLE_INSTANCE_FH
+    if _SINGLE_INSTANCE_FH is not None:
+        try:
+            import fcntl
+            fcntl.flock(_SINGLE_INSTANCE_FH, fcntl.LOCK_UN)
+            _SINGLE_INSTANCE_FH.close()
+        except Exception:
+            pass
+        _SINGLE_INSTANCE_FH = None
 
 
 class QalamApp(QObject):
@@ -141,6 +184,8 @@ class QalamApp(QObject):
     def restart_app(self):
         """Restart the application to apply the new settings."""
         self.cleanup()
+        # Lock freigeben, damit die neu gestartete Instanz ihn übernehmen kann.
+        release_single_instance()
         QApplication.quit()
         QProcess.startDetached(sys.executable, sys.argv)
 
@@ -565,5 +610,8 @@ class QalamApp(QObject):
 
 
 if __name__ == '__main__':
+    if not acquire_single_instance():
+        print('Qalam läuft bereits – zweite Instanz wird beendet.')
+        sys.exit(0)
     app = QalamApp()
     app.run()
