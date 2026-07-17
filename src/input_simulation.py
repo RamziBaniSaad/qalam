@@ -9,6 +9,7 @@ from utils import ConfigManager
 import clipboard_utils
 
 IS_WINDOWS = sys.platform == 'win32'
+IS_MACOS = sys.platform == 'darwin'
 
 # win32clipboard is Windows-only; the macOS/Linux clipboard path lives in
 # clipboard_utils. Guard the import so the module loads on macOS/Linux.
@@ -68,9 +69,17 @@ class InputSimulator:
         Args:
             text (str): The text to type.
         """
+        # macOS: IMMER über die Zwischenablage einfügen. Zeichenweises Tippen würde
+        # hunderte synthetische Tasten erzeugen, die der globale pynput-Listener
+        # mithört und über HIToolbox/TSM (Off-Main-Thread) übersetzt -> Absturz.
+        # Einfügen ist zudem deutlich schneller. (Windows/Linux: unverändert.)
+        if IS_MACOS:
+            self._paste_with_clipboard_preservation(text)
+            return
+
         # Get the character threshold from config, default to 1000 if not set
         char_threshold = ConfigManager.get_config_value('post_processing', 'clipboard_threshold') or 1000
-        
+
         # Use clipboard for long text
         if len(text) > char_threshold:
             self._paste_with_clipboard_preservation(text)

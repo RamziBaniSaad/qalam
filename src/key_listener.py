@@ -398,11 +398,12 @@ class KeyListener:
             self.active_backend.stop()
 
     def suspend(self):
-        """Hotkey-Erkennung pausieren, ohne den Listener-Thread neu zu starten.
-        (macOS-sicher: vermeidet TSM/HIToolbox-Aufruf außerhalb des Hauptthreads.)"""
+        """Listener während der Textausgabe WIRKLICH beenden (synchron, mit join).
+        Grund macOS: Ein laufender pynput-Listener übersetzt jede getippte Zeichen-
+        Taste über HIToolbox/TSM auf seinem eigenen Thread -> das crasht (SIGTRAP),
+        sobald wir den transkribierten Text tippen. Also: Listener aus, tippen, an.
+        Nur den Callback zu pausieren reicht NICHT (pynput übersetzt vor dem Callback)."""
         self.suspended = True
-        # Chord-Zustände zurücksetzen, damit nach dem Fortsetzen kein 'hängender'
-        # gedrückter Zustand die nächste Aktivierung verschluckt.
         for chord in (self.main_key_chord, self.llm_key_chord,
                       self.llm_instruction_key_chord, self.text_cleanup_chord):
             if chord is not None:
@@ -410,10 +411,12 @@ class KeyListener:
                     chord.pressed_keys.clear()
                 except Exception:
                     pass
+        self.stop()
 
     def resume(self):
-        """Hotkey-Erkennung wieder aktivieren."""
+        """Listener nach der Textausgabe neu starten."""
         self.suspended = False
+        self.start()
 
     def load_activation_keys(self):
         """Load activation keys from configuration."""
@@ -988,12 +991,23 @@ class PynputBackend(InputBackend):
         self.mouse_listener.start()
 
     def stop(self):
-        """Stop listening for keyboard and mouse events."""
+        """Stop listening for keyboard and mouse events.
+        Synchron (mit join), damit der Listener-Thread WIRKLICH beendet ist, bevor
+        wir Text tippen – sonst würde er die getippten Zeichen noch verarbeiten und
+        auf macOS über HIToolbox/TSM außerhalb des Hauptthreads abstürzen."""
         if self.keyboard_listener:
             self.keyboard_listener.stop()
+            try:
+                self.keyboard_listener.join(timeout=1.0)
+            except Exception:
+                pass
             self.keyboard_listener = None
         if self.mouse_listener:
             self.mouse_listener.stop()
+            try:
+                self.mouse_listener.join(timeout=1.0)
+            except Exception:
+                pass
             self.mouse_listener = None
 
     def _translate_key_event(self, native_event) -> Optional[tuple[KeyCode, InputEvent]]:
