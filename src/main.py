@@ -58,6 +58,30 @@ if sys.platform == 'darwin':
     except Exception:
         pass
 
+    # pynput ruft bei jeder Tasten-Übersetzung keycode_context() auf, das die
+    # Tastatur-Eingabequelle abfragt (TISCopyCurrentKeyboardInputSource ->
+    # islGetInputSourceListWithAdditions). Auf macOS 26 MUSS das auf dem Hauptthread
+    # laufen – sonst crasht der pynput-Listener-Thread (SIGTRAP/dispatch_assert_queue),
+    # sobald er eine Zeichen-Taste übersetzt. Fix: den Layout-Kontext EINMAL hier im
+    # Hauptthread berechnen und pynput so patchen, dass es den gecachten Wert
+    # wiederverwendet (der Listener-Thread ruft die Carbon-API dann nie selbst auf).
+    try:
+        import contextlib as _ctxlib
+        from pynput._util import darwin as _pu_darwin
+        from pynput.keyboard import _darwin as _kb_darwin
+
+        with _pu_darwin.keycode_context() as _kc:
+            _CACHED_KEYCODE_CONTEXT = _kc
+
+        @_ctxlib.contextmanager
+        def _cached_keycode_context():
+            yield _CACHED_KEYCODE_CONTEXT
+
+        _pu_darwin.keycode_context = _cached_keycode_context
+        _kb_darwin.keycode_context = _cached_keycode_context
+    except Exception:
+        pass
+
 
 # --- Einmal-Instanz-Sperre (macOS/Linux) --------------------------------------
 # Verhindert, dass mehrere qalam-Instanzen laufen (mehrfache Menüleisten-Icons +

@@ -398,11 +398,10 @@ class KeyListener:
             self.active_backend.stop()
 
     def suspend(self):
-        """Listener während der Textausgabe WIRKLICH beenden (synchron, mit join).
-        Grund macOS: Ein laufender pynput-Listener übersetzt jede getippte Zeichen-
-        Taste über HIToolbox/TSM auf seinem eigenen Thread -> das crasht (SIGTRAP),
-        sobald wir den transkribierten Text tippen. Also: Listener aus, tippen, an.
-        Nur den Callback zu pausieren reicht NICHT (pynput übersetzt vor dem Callback)."""
+        """Hotkey-Erkennung pausieren (nur Callback-Ebene). Der Listener-Thread läuft
+        durch – KEIN Neustart, denn jeder neue pynput-Listener würde die Tastatur-
+        Layout-Tabelle über die Carbon-API neu aufbauen (auf macOS Off-Main -> Crash).
+        Der Layout-Kontext wird stattdessen in main.py einmalig gecacht."""
         self.suspended = True
         for chord in (self.main_key_chord, self.llm_key_chord,
                       self.llm_instruction_key_chord, self.text_cleanup_chord):
@@ -411,12 +410,10 @@ class KeyListener:
                     chord.pressed_keys.clear()
                 except Exception:
                     pass
-        self.stop()
 
     def resume(self):
-        """Listener nach der Textausgabe neu starten."""
+        """Hotkey-Erkennung wieder aktivieren (Listener lief durchgehend weiter)."""
         self.suspended = False
-        self.start()
 
     def load_activation_keys(self):
         """Load activation keys from configuration."""
