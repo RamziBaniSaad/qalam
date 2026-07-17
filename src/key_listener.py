@@ -1081,37 +1081,37 @@ class PynputBackend(InputBackend):
         """Create a mapping from pynput keys to our internal KeyCode enum."""
         key_map = {
             # Modifier keys
-            self.keyboard.Key.ctrl_l: KeyCode.CTRL_LEFT,
-            self.keyboard.Key.ctrl_r: KeyCode.CTRL_RIGHT,
-            self.keyboard.Key.shift_l: KeyCode.SHIFT_LEFT,
-            self.keyboard.Key.shift_r: KeyCode.SHIFT_RIGHT,
-            self.keyboard.Key.alt_l: KeyCode.ALT_LEFT,
-            self.keyboard.Key.alt_r: KeyCode.ALT_RIGHT,
-            self.keyboard.Key.alt_gr: KeyCode.ALT_RIGHT,
-            self.keyboard.Key.cmd_l: KeyCode.META_LEFT,
-            self.keyboard.Key.cmd_r: KeyCode.META_RIGHT,
+            getattr(self.keyboard.Key, 'ctrl_l', None): KeyCode.CTRL_LEFT,
+            getattr(self.keyboard.Key, 'ctrl_r', None): KeyCode.CTRL_RIGHT,
+            getattr(self.keyboard.Key, 'shift_l', None): KeyCode.SHIFT_LEFT,
+            getattr(self.keyboard.Key, 'shift_r', None): KeyCode.SHIFT_RIGHT,
+            getattr(self.keyboard.Key, 'alt_l', None): KeyCode.ALT_LEFT,
+            getattr(self.keyboard.Key, 'alt_r', None): KeyCode.ALT_RIGHT,
+            getattr(self.keyboard.Key, 'alt_gr', None): KeyCode.ALT_RIGHT,
+            getattr(self.keyboard.Key, 'cmd_l', None): KeyCode.META_LEFT,
+            getattr(self.keyboard.Key, 'cmd_r', None): KeyCode.META_RIGHT,
 
             # Function keys
-            self.keyboard.Key.f1: KeyCode.F1,
-            self.keyboard.Key.f2: KeyCode.F2,
-            self.keyboard.Key.f3: KeyCode.F3,
-            self.keyboard.Key.f4: KeyCode.F4,
-            self.keyboard.Key.f5: KeyCode.F5,
-            self.keyboard.Key.f6: KeyCode.F6,
-            self.keyboard.Key.f7: KeyCode.F7,
-            self.keyboard.Key.f8: KeyCode.F8,
-            self.keyboard.Key.f9: KeyCode.F9,
-            self.keyboard.Key.f10: KeyCode.F10,
-            self.keyboard.Key.f11: KeyCode.F11,
-            self.keyboard.Key.f12: KeyCode.F12,
-            self.keyboard.Key.f13: KeyCode.F13,
-            self.keyboard.Key.f14: KeyCode.F14,
-            self.keyboard.Key.f15: KeyCode.F15,
-            self.keyboard.Key.f16: KeyCode.F16,
-            self.keyboard.Key.f17: KeyCode.F17,
-            self.keyboard.Key.f18: KeyCode.F18,
-            self.keyboard.Key.f19: KeyCode.F19,
-            self.keyboard.Key.f20: KeyCode.F20,
+            getattr(self.keyboard.Key, 'f1', None): KeyCode.F1,
+            getattr(self.keyboard.Key, 'f2', None): KeyCode.F2,
+            getattr(self.keyboard.Key, 'f3', None): KeyCode.F3,
+            getattr(self.keyboard.Key, 'f4', None): KeyCode.F4,
+            getattr(self.keyboard.Key, 'f5', None): KeyCode.F5,
+            getattr(self.keyboard.Key, 'f6', None): KeyCode.F6,
+            getattr(self.keyboard.Key, 'f7', None): KeyCode.F7,
+            getattr(self.keyboard.Key, 'f8', None): KeyCode.F8,
+            getattr(self.keyboard.Key, 'f9', None): KeyCode.F9,
+            getattr(self.keyboard.Key, 'f10', None): KeyCode.F10,
+            getattr(self.keyboard.Key, 'f11', None): KeyCode.F11,
+            getattr(self.keyboard.Key, 'f12', None): KeyCode.F12,
+            getattr(self.keyboard.Key, 'f13', None): KeyCode.F13,
+            getattr(self.keyboard.Key, 'f14', None): KeyCode.F14,
+            getattr(self.keyboard.Key, 'f15', None): KeyCode.F15,
+            getattr(self.keyboard.Key, 'f16', None): KeyCode.F16,
+            getattr(self.keyboard.Key, 'f17', None): KeyCode.F17,
+            getattr(self.keyboard.Key, 'f18', None): KeyCode.F18,
+            getattr(self.keyboard.Key, 'f19', None): KeyCode.F19,
+            getattr(self.keyboard.Key, 'f20', None): KeyCode.F20,
 
             # Number keys
             self.keyboard.KeyCode.from_char('1'): KeyCode.ONE,
@@ -1154,31 +1154,31 @@ class PynputBackend(InputBackend):
             self.keyboard.KeyCode.from_char('z'): KeyCode.Z,
 
             # Special keys
-            self.keyboard.Key.space: KeyCode.SPACE,
-            self.keyboard.Key.enter: KeyCode.ENTER,
-            self.keyboard.Key.tab: KeyCode.TAB,
-            self.keyboard.Key.backspace: KeyCode.BACKSPACE,
-            self.keyboard.Key.esc: KeyCode.ESC,
-            self.keyboard.Key.insert: KeyCode.INSERT,
-            self.keyboard.Key.delete: KeyCode.DELETE,
-            self.keyboard.Key.home: KeyCode.HOME,
-            self.keyboard.Key.end: KeyCode.END,
-            self.keyboard.Key.page_up: KeyCode.PAGE_UP,
-            self.keyboard.Key.page_down: KeyCode.PAGE_DOWN,
-            self.keyboard.Key.caps_lock: KeyCode.CAPS_LOCK,
-            self.keyboard.Key.num_lock: KeyCode.NUM_LOCK,
-            self.keyboard.Key.scroll_lock: KeyCode.SCROLL_LOCK,
-            self.keyboard.Key.pause: KeyCode.PAUSE,
-            self.keyboard.Key.print_screen: KeyCode.PRINT_SCREEN,
+            getattr(self.keyboard.Key, 'space', None): KeyCode.SPACE,
+            getattr(self.keyboard.Key, 'enter', None): KeyCode.ENTER,
+            getattr(self.keyboard.Key, 'tab', None): KeyCode.TAB,
+            getattr(self.keyboard.Key, 'backspace', None): KeyCode.BACKSPACE,
+            getattr(self.keyboard.Key, 'esc', None): KeyCode.ESC,
+            getattr(self.keyboard.Key, 'insert', None): KeyCode.INSERT,
+            getattr(self.keyboard.Key, 'delete', None): KeyCode.DELETE,
+            getattr(self.keyboard.Key, 'home', None): KeyCode.HOME,
+            getattr(self.keyboard.Key, 'end', None): KeyCode.END,
+            getattr(self.keyboard.Key, 'page_up', None): KeyCode.PAGE_UP,
+            getattr(self.keyboard.Key, 'page_down', None): KeyCode.PAGE_DOWN,
+            getattr(self.keyboard.Key, 'caps_lock', None): KeyCode.CAPS_LOCK,
+            getattr(self.keyboard.Key, 'num_lock', None): KeyCode.NUM_LOCK,
+            getattr(self.keyboard.Key, 'scroll_lock', None): KeyCode.SCROLL_LOCK,
+            getattr(self.keyboard.Key, 'pause', None): KeyCode.PAUSE,
+            getattr(self.keyboard.Key, 'print_screen', None): KeyCode.PRINT_SCREEN,
 
             # Arrow keys
-            self.keyboard.Key.up: KeyCode.UP,
-            self.keyboard.Key.down: KeyCode.DOWN,
-            self.keyboard.Key.left: KeyCode.LEFT,
-            self.keyboard.Key.right: KeyCode.RIGHT,
+            getattr(self.keyboard.Key, 'up', None): KeyCode.UP,
+            getattr(self.keyboard.Key, 'down', None): KeyCode.DOWN,
+            getattr(self.keyboard.Key, 'left', None): KeyCode.LEFT,
+            getattr(self.keyboard.Key, 'right', None): KeyCode.RIGHT,
 
             # Numpad keys
-            self.keyboard.Key.num_lock: KeyCode.NUM_LOCK,
+            getattr(self.keyboard.Key, 'num_lock', None): KeyCode.NUM_LOCK,
             self.keyboard.KeyCode.from_vk(96): KeyCode.NUMPAD_0,
             self.keyboard.KeyCode.from_vk(97): KeyCode.NUMPAD_1,
             self.keyboard.KeyCode.from_vk(98): KeyCode.NUMPAD_2,
@@ -1209,19 +1209,24 @@ class PynputBackend(InputBackend):
             self.keyboard.KeyCode.from_char('/'): KeyCode.SLASH,
 
             # Media keys
-            self.keyboard.Key.media_volume_mute: KeyCode.AUDIO_MUTE,
-            self.keyboard.Key.media_volume_down: KeyCode.AUDIO_VOLUME_DOWN,
-            self.keyboard.Key.media_volume_up: KeyCode.AUDIO_VOLUME_UP,
-            self.keyboard.Key.media_play_pause: KeyCode.MEDIA_PLAY_PAUSE,
-            self.keyboard.Key.media_next: KeyCode.MEDIA_NEXT,
-            self.keyboard.Key.media_previous: KeyCode.MEDIA_PREVIOUS,
+            getattr(self.keyboard.Key, 'media_volume_mute', None): KeyCode.AUDIO_MUTE,
+            getattr(self.keyboard.Key, 'media_volume_down', None): KeyCode.AUDIO_VOLUME_DOWN,
+            getattr(self.keyboard.Key, 'media_volume_up', None): KeyCode.AUDIO_VOLUME_UP,
+            getattr(self.keyboard.Key, 'media_play_pause', None): KeyCode.MEDIA_PLAY_PAUSE,
+            getattr(self.keyboard.Key, 'media_next', None): KeyCode.MEDIA_NEXT,
+            getattr(self.keyboard.Key, 'media_previous', None): KeyCode.MEDIA_PREVIOUS,
 
             # Mouse buttons
             self.mouse.Button.left: KeyCode.MOUSE_LEFT,
             self.mouse.Button.right: KeyCode.MOUSE_RIGHT,
             self.mouse.Button.middle: KeyCode.MOUSE_MIDDLE,
         }
-        
+
+        # Auf manchen Plattformen (z. B. macOS) fehlen Tasten wie insert/num_lock/
+        # scroll_lock/pause/print_screen. Deren getattr(..., None) sammelt sich als
+        # None-Schlüssel im Dict – hier wieder entfernen.
+        key_map.pop(None, None)
+
         # Add uppercase letter mappings
         key_map.update({
             self.keyboard.KeyCode.from_char(c.upper()): getattr(KeyCode, c.upper())

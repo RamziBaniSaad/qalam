@@ -37,6 +37,20 @@ from utils import ConfigManager
 from llm_processor import LLMProcessor
 
 
+# --- macOS/pynput-Workaround --------------------------------------------------
+# pynput löst HIServices.AXIsProcessTrusted() erst im Listener-Hintergrundthread
+# auf. pyobjcs Lazy-Import ist dabei nicht thread-sicher und wirft sporadisch
+# KeyError('AXIsProcessTrusted') -> der Listener-Thread stirbt und der Hotkey
+# funktioniert nie (auch mit erteilten Rechten). Den Aufruf hier einmal im
+# Hauptthread "vorwärmen", damit der Wert gecached ist, bevor der Listener startet.
+if sys.platform == 'darwin':
+    try:
+        import HIServices
+        HIServices.AXIsProcessTrusted()
+    except Exception:
+        pass
+
+
 class QalamApp(QObject):
     def __init__(self):
         """
