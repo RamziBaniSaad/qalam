@@ -305,9 +305,11 @@ class QalamApp(QObject):
     def on_transcription_complete(self, result):
         """Process transcription with or without LLM based on activation type."""
         try:
-            # Temporarily disable key listener
+            # Hotkey-Erkennung pausieren (NICHT stoppen/neu starten – das crasht auf
+            # macOS, weil der neu erzeugte Listener-Thread HIToolbox/TSM außerhalb des
+            # Hauptthreads aufruft). Der Listener-Thread läuft weiter, ignoriert Events.
             if self.key_listener:
-                self.key_listener.stop()
+                self.key_listener.suspend()
 
             recording_mode = ConfigManager.get_config_value('recording_options', 'recording_mode')
             # LLM-Cleanup an 'enabled' koppeln statt an self.use_llm.
@@ -408,12 +410,12 @@ class QalamApp(QObject):
                 self.auto_restart_after_submit = False
                 self.start_result_thread()
             else:
-                self.key_listener.start()
+                self.key_listener.resume()
 
         finally:
-            # Re-enable key listener
+            # Hotkey-Erkennung wieder aktivieren (Thread lief durchgehend weiter).
             if self.key_listener:
-                self.key_listener.start()
+                self.key_listener.resume()
 
     def handle_text_cleanup(self):
         """Handle the text selection cleanup shortcut."""
@@ -539,8 +541,8 @@ class QalamApp(QObject):
                 win32clipboard.CloseClipboard()
             except:
                 pass  # Ensure clipboard is closed even if an error occurred
-            # Ensure key listener is restarted
-            self.key_listener.start()
+            # Hotkey-Erkennung wieder aktivieren.
+            self.key_listener.resume()
 
     def _build_cleanup_system_message(self):
         """Assemble the text-cleanup system message from config + optional file."""
@@ -600,7 +602,7 @@ class QalamApp(QObject):
         except Exception as e:
             ConfigManager.console_print(f"Error cleaning text: {str(e)}")
         finally:
-            self.key_listener.start()
+            self.key_listener.resume()
 
     def run(self):
         """

@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import subprocess
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal, pyqtSlot, QTimer
 from PyQt5.QtGui import QFont, QPainter, QBrush, QColor, QPainterPath
 from PyQt5.QtWidgets import QApplication, QLabel, QHBoxLayout
@@ -177,17 +178,29 @@ class StatusWindow(BaseWindow):
                 self.autoSubmitSignal.emit()
 
     def _play_countdown_sound(self, remaining):
-        """Feste Countdown-Beeps: 10 s, dann 5/4/3/2/1 s. winsound = zuverlaessig."""
+        """Feste Countdown-Beeps: 10 s, dann 5/4/3/2/1 s. Plattformübergreifend:
+        Windows -> winsound, macOS -> afplay, Linux -> aplay/paplay."""
         if remaining in COUNTDOWN_SOUNDS and remaining != self._last_sound_remaining:
             self._last_sound_remaining = remaining
-            if not winsound:
-                return
             path = os.path.join('assets', COUNTDOWN_SOUNDS[remaining])
-            if os.path.exists(path):
-                try:
+            if not os.path.exists(path):
+                return
+            try:
+                if winsound:
                     winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                except Exception as e:
-                    print(f"[Qalam] Countdown-Sound-Fehler: {e}")
+                elif sys.platform == 'darwin':
+                    subprocess.Popen(['afplay', path],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    # Linux: erst paplay (PulseAudio), sonst aplay (ALSA).
+                    for player in (['paplay', path], ['aplay', path]):
+                        try:
+                            subprocess.Popen(player, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            break
+                        except FileNotFoundError:
+                            continue
+            except Exception as e:
+                print(f"[Qalam] Countdown-Sound-Fehler: {e}")
     # ----------------------------------------------------------------------
 
     @pyqtSlot(str, bool)

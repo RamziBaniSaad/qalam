@@ -313,6 +313,11 @@ class KeyListener:
         """Initialize the KeyListener with backends and activation keys."""
         self.backends = []
         self.active_backend = None
+        # Statt den Listener-Thread beim Tippen/Transkribieren zu stoppen und neu zu
+        # starten (auf macOS führte das Neu-Erzeugen zu einem HIToolbox/TSM-Aufruf
+        # außerhalb des Hauptthreads -> SIGTRAP-Absturz), wird er nur "pausiert":
+        # der Thread läuft weiter, Events werden währenddessen ignoriert.
+        self.suspended = False
         self.main_key_chord = None
         self.llm_key_chord = None
         self.llm_instruction_key_chord = None
@@ -391,6 +396,24 @@ class KeyListener:
         """Stop the active backend."""
         if self.active_backend:
             self.active_backend.stop()
+
+    def suspend(self):
+        """Hotkey-Erkennung pausieren, ohne den Listener-Thread neu zu starten.
+        (macOS-sicher: vermeidet TSM/HIToolbox-Aufruf außerhalb des Hauptthreads.)"""
+        self.suspended = True
+        # Chord-Zustände zurücksetzen, damit nach dem Fortsetzen kein 'hängender'
+        # gedrückter Zustand die nächste Aktivierung verschluckt.
+        for chord in (self.main_key_chord, self.llm_key_chord,
+                      self.llm_instruction_key_chord, self.text_cleanup_chord):
+            if chord is not None:
+                try:
+                    chord.pressed_keys.clear()
+                except Exception:
+                    pass
+
+    def resume(self):
+        """Hotkey-Erkennung wieder aktivieren."""
+        self.suspended = False
 
     def load_activation_keys(self):
         """Load activation keys from configuration."""
@@ -477,6 +500,10 @@ class KeyListener:
     def on_input_event(self, event):
         """Handle input events and trigger callbacks if either key chord becomes active or inactive."""
         if not self.active_backend:
+            return
+
+        # Pausiert (z. B. während Tippen/Transkription): Events ignorieren.
+        if self.suspended:
             return
 
         key, event_type = event
