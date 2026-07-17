@@ -1,13 +1,30 @@
 import os
 import sys
 import time
+
+# NOTE: torch must be imported before PyQt5 on Windows. If PyQt5 loads first,
+# it initializes runtime DLLs that break torch's c10.dll load
+# (OSError [WinError 1114] "DLL initialization routine failed").
+# Importing torch here first loads its DLLs cleanly; Qt then coexists.
+try:
+    import torch  # noqa: F401
+except ImportError:
+    pass
+
 from audioplayer import AudioPlayer
 from pynput.keyboard import Controller, Key
 from PyQt5.QtCore import QObject, QProcess
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction, QMessageBox, QLineEdit
-import win32clipboard
-import win32con
+
+import clipboard_utils
+
+IS_WINDOWS = sys.platform == 'win32'
+
+# win32clipboard is Windows-only; macOS/Linux use clipboard_utils instead.
+if IS_WINDOWS:
+    import win32clipboard
+    import win32con
 
 from key_listener import KeyListener
 from result_thread import ResultThread
@@ -20,7 +37,7 @@ from utils import ConfigManager
 from llm_processor import LLMProcessor
 
 
-class WhisperWriterApp(QObject):
+class QalamApp(QObject):
     def __init__(self):
         """
         Initialize the application, opening settings window if no configuration file is found.
@@ -65,8 +82,10 @@ class WhisperWriterApp(QObject):
         self.result_thread = None
         self.llm_processor = LLMProcessor() if ConfigManager.get_config_value('llm_post_processing', 'enabled') else None
 
+        self.auto_restart_after_submit = False
         if not ConfigManager.get_config_value('misc', 'hide_status_window'):
             self.status_window = StatusWindow()
+            self.status_window.autoSubmitSignal.connect(self.on_auto_submit)
 
         self.create_tray_icon()
 
@@ -127,6 +146,13 @@ class WhisperWriterApp(QObject):
             use_llm (bool): Whether to use LLM processing for this activation
             is_instruction_mode (bool): Whether to use instruction mode for LLM processing
         """
+        # Standard-Diktat automatisch durch die LLM-Strukturierung
+        # (Cleanup-Modus) schicken, wenn llm_post_processing aktiv ist. So wird jedes
+        # Diktat strukturiert getippt statt 1:1 – ohne einen extra Hotkey drücken zu müssen.
+        if (not use_llm and not is_instruction_mode and self.llm_processor
+                and ConfigManager.get_config_value('llm_post_processing', 'enabled')):
+            use_llm = True
+
         if self.result_thread and self.result_thread.isRunning():
             recording_mode = ConfigManager.get_config_value('recording_options', 'recording_mode')
             if recording_mode == 'press_to_toggle':
@@ -206,6 +232,14 @@ class WhisperWriterApp(QObject):
         if self.result_thread and self.result_thread.isRunning():
             self.result_thread.stop()
 
+    def on_auto_submit(self):
+        """Auto-Submit-Zeit erreicht (Signal aus dem Status-Fenster).
+        stop_recording() beendet die Aufnahme regulaer -> es wird transkribiert + getippt;
+        danach startet on_transcription_complete die naechste Aufnahme automatisch."""
+        if self.result_thread and self.result_thread.isRunning():
+            self.auto_restart_after_submit = True
+            self.result_thread.stop_recording()
+
     def on_transcription_complete(self, result):
         """Process transcription with or without LLM based on activation type."""
         try:
@@ -214,7 +248,13 @@ class WhisperWriterApp(QObject):
                 self.key_listener.stop()
 
             recording_mode = ConfigManager.get_config_value('recording_options', 'recording_mode')
-            if self.use_llm and self.llm_processor and recording_mode in ('press_to_toggle', 'hold_to_record', 'continuous', 'voice_activity_detection'):
+            # LLM-Cleanup an 'enabled' koppeln statt an self.use_llm.
+            # Grund: bei press_to_toggle setzt der Key-Release (on_deactivation) self.use_llm
+            # zurueck auf False, BEVOR die Transkription fertig ist -> mit self.use_llm liefe
+            # der Cleanup nie. Ueber 'enabled' laeuft er zuverlaessig bei jedem Diktat.
+            llm_should_run = (self.llm_processor is not None
+                              and ConfigManager.get_config_value('llm_post_processing', 'enabled'))
+            if llm_should_run and recording_mode in ('press_to_toggle', 'hold_to_record', 'continuous', 'voice_activity_detection'):
                 try:
                     # Get the system message based on the mode
                     if self.is_instruction_mode:
@@ -258,12 +298,41 @@ class WhisperWriterApp(QObject):
                     processed_result = self.llm_processor.process_text(result, system_message)
                     if processed_result:
                         result = processed_result.strip()
+                        # kleine Nachkorrekturen am LLM-Ergebnis
+                        import re
+                        # a) evtl. Modell-Vorwort ("... bearbeitete Text:") entfernen
+                        _parts = result.split('\n', 1)
+                        if len(_parts) == 2 and _parts[0].strip().endswith(':') and len(_parts[0].strip()) < 120:
+                            result = _parts[1].strip()
+                        # b) umschliessende Anfuehrungszeichen entfernen
+                        result = result.strip('"„“”').strip()
+                        # c) fehlendes Leerzeichen nach Satzende (bekannter Modell-Fehler)
+                        result = re.sub(r'([.!?])(?=[A-Za-zÄÖÜäöü])', r'\1 ', result)
                     else:
                         ConfigManager.console_print("LLM processing failed, using original transcription")
                     
                 except Exception as e:
                     ConfigManager.console_print(f"Error processing text through LLM: {str(e)}")
                     return result
+
+            # letztes Ergebnis immer in die Zwischenablage sichern,
+            # damit nichts verloren geht, falls der Fokus wegspringt. Mit Windows-Zwischenablage-
+            # Verlauf (Win+V) bleibt so jedes Diktat abrufbar.
+            try:
+                if IS_WINDOWS:
+                    win32clipboard.OpenClipboard()
+                    win32clipboard.EmptyClipboard()
+                    win32clipboard.SetClipboardText(result)
+                    win32clipboard.CloseClipboard()
+                else:
+                    clipboard_utils.set_text(result)
+            except Exception as e:
+                ConfigManager.console_print(f"Clipboard-Sicherung fehlgeschlagen: {str(e)}")
+                if IS_WINDOWS:
+                    try:
+                        win32clipboard.CloseClipboard()
+                    except Exception:
+                        pass
 
             # Type the result
             self.input_simulator.typewrite(result)
@@ -272,6 +341,9 @@ class WhisperWriterApp(QObject):
                 AudioPlayer(os.path.join('assets', 'beep.wav')).play(block=True)
 
             if ConfigManager.get_config_value('recording_options', 'recording_mode') == 'continuous':
+                self.start_result_thread()
+            elif getattr(self, 'auto_restart_after_submit', False):
+                self.auto_restart_after_submit = False
                 self.start_result_thread()
             else:
                 self.key_listener.start()
@@ -285,7 +357,12 @@ class WhisperWriterApp(QObject):
         """Handle the text selection cleanup shortcut."""
         if not self.llm_processor:
             return
-        
+
+        # macOS/Linux take a text-only clipboard path (no win32clipboard).
+        if not IS_WINDOWS:
+            self._handle_text_cleanup_posix()
+            return
+
         # Store all clipboard formats
         saved_formats = {}
         win32clipboard.OpenClipboard()
@@ -403,6 +480,66 @@ class WhisperWriterApp(QObject):
             # Ensure key listener is restarted
             self.key_listener.start()
 
+    def _build_cleanup_system_message(self):
+        """Assemble the text-cleanup system message from config + optional file."""
+        base_message = ConfigManager.get_config_value("llm_post_processing", "text_cleanup_system_message")
+        file_path = ConfigManager.get_config_value("llm_post_processing", "text_cleanup_system_message_file_path")
+        system_message = base_message.strip() if base_message else ""
+        if file_path and os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    file_content = file.read().strip()
+                    if file_content:
+                        system_message = f"{system_message}\n\n{file_content}" if system_message else file_content
+            except Exception as e:
+                ConfigManager.console_print(f"Error reading cleanup system message file: {str(e)}")
+        return system_message
+
+    def _handle_text_cleanup_posix(self):
+        """
+        macOS/Linux version of handle_text_cleanup: text-only clipboard, uses
+        the OS-correct paste keystroke (Cmd+V on macOS). No format preservation.
+        """
+        try:
+            clipboard_text = clipboard_utils.get_text()
+            if not clipboard_text:
+                ConfigManager.console_print("No text in clipboard")
+                return
+
+            ConfigManager.console_print(f"Processing clipboard text: {clipboard_text[:100]}...")
+            system_message = self._build_cleanup_system_message()
+            if not system_message:
+                ConfigManager.console_print("Warning: No cleanup system message found")
+                return
+
+            cleaned_text = self.llm_processor.process_text(clipboard_text, system_message)
+            if not cleaned_text or cleaned_text == clipboard_text:
+                ConfigManager.console_print("Text unchanged after LLM processing")
+                return
+
+            try:
+                keyboard = Controller()
+                saved = clipboard_utils.get_text()
+                clipboard_utils.set_text(cleaned_text)
+                try:
+                    # Delete the selected text, then paste the cleaned text.
+                    keyboard.press(Key.delete)
+                    keyboard.release(Key.delete)
+                    time.sleep(0.1)
+                    clipboard_utils.send_paste(keyboard)
+                    if ConfigManager.get_config_value('misc', 'noise_on_completion'):
+                        AudioPlayer(os.path.join('assets', 'beep.wav')).play(block=True)
+                finally:
+                    time.sleep(0.1)  # Wait for paste to complete
+                    clipboard_utils.set_text(saved)
+                self.key_listener.text_cleanup_chord.pressed_keys.clear()
+            except Exception as e:
+                ConfigManager.console_print(f"Error simulating keyboard: {str(e)}")
+        except Exception as e:
+            ConfigManager.console_print(f"Error cleaning text: {str(e)}")
+        finally:
+            self.key_listener.start()
+
     def run(self):
         """
         Start the application.
@@ -411,5 +548,5 @@ class WhisperWriterApp(QObject):
 
 
 if __name__ == '__main__':
-    app = WhisperWriterApp()
+    app = QalamApp()
     app.run()

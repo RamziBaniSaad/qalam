@@ -1,5 +1,5 @@
 [project]
-name = "whisper-writer"
+name = "qalam"
 version = "0.2.0"
 description = "A small speech-to-text app that allows you to write with your voice and optionally clean up your dictated text through LLMs. "
 authors = [
@@ -30,11 +30,12 @@ dependencies = [
     "keyring>=24.3.0",
     "webrtcvad-wheels>=2.0.11.post1",
     "srt>=3.5.3",
-    
-    # Windows-specific dependencies
-    "pycaw>=20240210",
-    "pywin32>=308",
-    "comtypes>=1.4.10",
+    "pyperclip>=1.9.0",  # Cross-platform clipboard (macOS/Linux path)
+
+    # Windows-specific dependencies (skipped on macOS/Linux via markers)
+    "pycaw>=20240210; platform_system == 'Windows'",
+    "pywin32>=308; platform_system == 'Windows'",
+    "comtypes>=1.4.10; platform_system == 'Windows'",
     
     # API integrations
     "openai>=1.28.0",

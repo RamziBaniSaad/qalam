@@ -2,7 +2,7 @@ import keyring
 from utils import ConfigManager
 
 class KeyringManager:
-    APP_NAME = "whisperwriter"
+    APP_NAME = "qalam"
     
     @staticmethod
     def save_api_key(service_name: str, key: str):

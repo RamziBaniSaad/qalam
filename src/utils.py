@@ -26,7 +26,7 @@ class ConfigManager:
         if not cls._schema:
             schema_path = os.path.join(os.path.dirname(__file__), 'config_schema.yaml')
             try:
-                with open(schema_path, 'r') as f:
+                with open(schema_path, 'r', encoding='utf-8') as f:
                     cls._schema = yaml.safe_load(f)
                     # ConfigManager.console_print("Loaded schema:")
                     # ConfigManager.console_print(f"Model options in schema: {cls._schema['model_options']['local']['model']['options']}")
@@ -85,7 +85,7 @@ class ConfigManager:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             schema_path = os.path.join(base_dir, 'config_schema.yaml')
 
-        with open(schema_path, 'r') as file:
+        with open(schema_path, 'r', encoding='utf-8') as file:
             schema = yaml.safe_load(file)
         return schema
 
@@ -115,7 +115,7 @@ class ConfigManager:
 
         if config_path and os.path.isfile(config_path):
             try:
-                with open(config_path, 'r') as file:
+                with open(config_path, 'r', encoding='utf-8') as file:
                     user_config = yaml.safe_load(file)
                     deep_update(self.config, user_config)
             except yaml.YAMLError:
@@ -126,8 +126,8 @@ class ConfigManager:
         """Save the current configuration to a YAML file."""
         if cls._instance is None:
             raise RuntimeError("ConfigManager not initialized")
-        with open(config_path, 'w') as file:
-            yaml.dump(cls._instance.config, file, default_flow_style=False)
+        with open(config_path, 'w', encoding='utf-8') as file:
+            yaml.dump(cls._instance.config, file, default_flow_style=False, allow_unicode=True)
 
     @classmethod
     def reload_config(cls):

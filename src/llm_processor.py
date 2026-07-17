@@ -17,7 +17,8 @@ class LLMProcessor:
     def __init__(self, api_type=None):
         """Initialize the LLM processor."""
         self.config = ConfigManager.get_config_section('llm_post_processing')
-        
+        self.api_key = None  # verhindert AttributeError im Ollama-Modus (unten wird self.api_key ausgewertet, aber im Ollama-Zweig sonst nie gesetzt)
+
         # If api_type is passed, use it; otherwise get from config without assuming a default
         if api_type is None:
             self.api_type = self.config.get('api_type')
@@ -331,7 +332,10 @@ class LLMProcessor:
                     }
                 ],
                 options={
-                    "temperature": temperature
+                    "temperature": temperature,
+                    "num_gpu": 0  # Cleanup-LLM auf CPU -> 0 VRAM. Die 8-GB-Karte
+                                  # bleibt fuer faster-whisper + Desktop/Spotify frei (laeuft eh nach
+                                  # dem Transkribieren, GPU nicht noetig).
                 }
             )
             

@@ -4,10 +4,12 @@ import platform
 import subprocess
 import ctypes
 from ctypes import cast, POINTER
-from comtypes import CLSCTX_ALL
 from utils import ConfigManager
+# comtypes/pycaw are Windows-only (COM audio API). Guard so the module loads
+# on macOS/Linux, which use the Darwin/Linux branches below instead.
 if platform.system() == 'Windows':
     import pythoncom  # For COM initialization
+    from comtypes import CLSCTX_ALL  # noqa: F401
     from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume, IAudioMeterInformation
 
 class MediaController:

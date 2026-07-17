@@ -1,18 +1,20 @@
-# <img src="./assets/ww-logo.png" alt="WhisperWriter icon" width="25" height="25"> WhisperWriter
+# <img src="./assets/ww-logo.png" alt="Qalam icon" width="25" height="25"> Qalam
 
 ![version](https://img.shields.io/badge/version-1.1.1-blue)
 
 <p align="center">
-    <img src="./assets/ww-demo-image-02.gif" alt="WhisperWriter demo gif" width="340" height="136">
+    <img src="./assets/ww-demo-image-02.gif" alt="Qalam demo gif" width="340" height="136">
 </p>
 
-WhisperWriter is a speech-to-text app that lets you dictate and transcribe text, entering it in any app on your computer. It can do so using local transcription models (OpenAI's Whisper models or Alpha Cephei's Vosk models), or via API-based services including OpenAI, Deepgram, and Groq.
+Qalam is a speech-to-text app that lets you dictate and transcribe text, entering it in any app on your computer. It can do so using local transcription models (OpenAI's Whisper models or Alpha Cephei's Vosk models), or via API-based services including OpenAI, Deepgram, and Groq.
 
 This version of the app started as a Windows-focused fork by [Thomas Frank](https://github.com/TomFrankly). The README below has been updated to include all of the changes and updates.
 
+> **Qalam** is a personalized fork that adds local LLM structuring (via Ollama) and macOS support on top of a shared cross-platform codebase. It is built on [WhisperWriter](https://github.com/savbell/whisper-writer) by [savbell](https://github.com/savbell) and remains licensed under **GPLv3** (see [LICENSE](./LICENSE)).
+
 ## Features
 
-WhisperWriter has three main "headliner" features:
+Qalam has three main "headliner" features:
 
 1. **Speech-to-Text in any app**: Hit a hotkey, record your voice, and have it transcribed to the active window, wherever your blinking cursor is.
 2. **LLM Cleanup and Instruction**: Hit *different* hotkeys to send the transcribed text to an LLM provider/model with custom system instructions. Two hotkey slots are provided: One for cleaning up your transcript (improving spelling, grammar, etc.), and one for sending the transcript to an LLM with custom instructions.
@@ -44,7 +46,7 @@ LLM options:
 
 When using an API for LLM processing, specify any official model name your API key can access. Use model names as they're listed in the API provider's documentation - e.g. `gemini-1.5-flash`, `gpt-4o-mini`, `claude-3-5-sonnet-latest`, etc.
 
-WhisperWriter includes the following recording modes:
+Qalam includes the following recording modes:
 
 - **Press-to-toggle** (stop recording when activation key is pressed again) **(default)**
 - **Continuous mode** (auto-restart recording after pause in speech until activation key is pressed again)
@@ -54,7 +56,7 @@ WhisperWriter includes the following recording modes:
 > [!NOTE]
 > When using Continuous mode, you'll need to explicitly check the "Continuous API" checkbox in the settings in order to use any API providers. This is one of several safety features I added to this mode.
 
-Additionally, WhisperWriter has a few other tricks up its sleeve:
+Additionally, Qalam has a few other tricks up its sleeve:
 
 - **Find and Replace**: Add a `.txt` or `.json` file with custom find and replace rules.
   - Simple mode: Add a `.txt` file with a comma-separated list of `find,replace` pairs (one per line).
@@ -65,10 +67,10 @@ Additionally, WhisperWriter has a few other tricks up its sleeve:
 - **Pause Audio While Recording**: You can choose to automatically pause audio while recording; it'll start playing again when you stop recording.
 - **Keyring Credentials**: Keys are stored in the Windows Credential Manager using the `keyring` library.
 
-## Installing WhisperWriter
+## Installing Qalam
 
 ### Prerequisites
-This version of WhisperWriter officially supports Windows. Both of my test machines are running Windows 11. The previous version, 1.0.1, should officially support Linux.
+This version of Qalam officially supports Windows. Both of my test machines are running Windows 11. The previous version, 1.0.1, should officially support Linux.
 
 As it is a Python app, this version can likely be modified to work on Linux and macOS, but it's not 100% set up for either yet.
 
@@ -77,14 +79,14 @@ Before you can run this app, you'll need to have the following software installe
 - Git: [https://git-scm.com/downloads](https://git-scm.com/downloads)
 - Python `3.12`: [https://www.python.org/downloads/](https://www.python.org/downloads/) - *Python 3.13 currently does not work due to incompatibility with the `pynput` library.*
 
-WhisperWriter can use one of several transcription APIs, or it can use a local Whisper or Vosk model.
+Qalam can use one of several transcription APIs, or it can use a local Whisper or Vosk model.
 
 If you have an NVIDIA GPU and want to run local transcription on your GPU, you'll need to install the following NVIDIA libraries:
 
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads?target_os=Windows) - *Installs cuBLAS for CUDA 12*
 - [cuDNN 9 for CUDA 12](https://developer.nvidia.com/cudnn) - *I'm using the full cuDNN 9.7.1 library - specifically the Windows x86_64 on Version 10 with the exe (local) installer type.*
 
-WhisperWriter uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for local transcription. See their README for more information and alternative installation methods.
+Qalam uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for local transcription. See their README for more information and alternative installation methods.
 
 If you don't install these CUDA tools, you can still run local transcription on your CPU, but it will be much slower. You'll likely need to stick with smaller models, like `tiny` or `base`. Of course, you can also use one of the transcription APIs. You can see some of my informal benchmarks below to see how fast various models are on my machine.
 
@@ -98,7 +100,7 @@ To set up and run the project, open a command prompt, navigate to your desired i
 ```
 git clone https://github.com/savbell/whisper-writer
 
-cd whisper-writer
+cd qalam
 ```
 
 #### 2. Create a virtual environment and activate it:
@@ -142,9 +144,9 @@ python run.py
 ```
 
 <details>
-<summary>How to Launch WhisperWriter More Quickly</summary>
+<summary>How to Launch Qalam More Quickly</summary>
 
-After you've run all the commands above once, you can launch WhisperWriter more quickly by creating a batch file. For example, you could create a file called `launcher.bat` (within the whisper-writer directory) and add the following:
+After you've run all the commands above once, you can launch Qalam more quickly by creating a batch file. For example, you could create a file called `launcher.bat` (within the qalam directory) and add the following:
 
 ```
 @echo off
@@ -160,22 +162,22 @@ REM When the app ends, optionally pause to view output
 pause
 ```
 
-Then you can launch WhisperWriter by double-clicking the `launcher.bat` file.
+Then you can launch Qalam by double-clicking the `launcher.bat` file.
 
 
 </details>
 
 
-#### 5. Configure and start WhisperWriter:
+#### 5. Configure and start Qalam:
 On first run, a Settings window should appear. Once configured and saved, another window will open. Press "Start" to activate the keyboard listener. Press the activation key (`ctrl+shift+space` by default) to start recording and transcribing to the active window.
 
-## Using WhisperWriter
+## Using Qalam
 
 ### Configuration Options
 
-WhisperWriter saves changes to settings to a configuration file.
+Qalam saves changes to settings to a configuration file.
 
-The first time you open the app, if a configuration file doesn't exist, a Settings window will appear. You can also access Settings at any time by finding WhisperWriter in the system tray and right-clicking the icon.
+The first time you open the app, if a configuration file doesn't exist, a Settings window will appear. You can also access Settings at any time by finding Qalam in the system tray and right-clicking the icon.
 
 #### Model Options
 - `use_api`: Toggle to choose whether to use the OpenAI API or a local Whisper model for transcription. (Default: `false`)
@@ -208,7 +210,7 @@ The first time you open the app, if a configuration file doesn't exist, a Settin
 - `llm_cleanup_key`: The keyboard shortcut to process the last transcription through LLM cleanup. Separate keys with a `+`. (Default: `null` - I personally use `ctrl+alt+numpad2`)
 - `llm_instruction_key`: The keyboard shortcut to process the last transcription through LLM with custom instructions. Separate keys with a `+`. (Default: `null` - I personally use `ctrl+alt+numpad3`)
 - `text_cleanup_key`: The keyboard shortcut to clean up selected text through LLM. Separate keys with a `+`. (Default: `null` - I personally use `ctrl+alt+numpad4`)
-- `input_backend`: The input backend to use for detecting key presses. `auto` will try to use the best available backend. (Default: `auto`) Since I forked WhisperWriter for Windows use only (using `pynput`), I can't guarantee that `evdev` will work right now.
+- `input_backend`: The input backend to use for detecting key presses. `auto` will try to use the best available backend. (Default: `auto`) Since I forked Qalam for Windows use only (using `pynput`), I can't guarantee that `evdev` will work right now.
 - `recording_mode`: The recording mode to use. Options include `continuous` (auto-restart recording after pause in speech until activation key is pressed again), `voice_activity_detection` (stop recording after pause in speech), `press_to_toggle` (stop recording when activation key is pressed again), `hold_to_record` (stop recording when activation key is released). (Default: `press_to_toggle`)
 - `sound_device`: The device to be used for recording. Shows a dropdown list of available devices. (Default: `null`)
 - `sample_rate`: The sample rate in Hz to use for recording. (Default: `16000`)
@@ -261,7 +263,7 @@ Check out the [CHANGELOG](CHANGELOG.md) for more details on what's been added an
 
 ### Find and Replace
 
-WhisperWriter can use a text or JSON file to find and replace text in the transcribed text. You can set this file in the `find_replace_file` option within the **Post-processing Options** section of the Settings window.
+Qalam can use a text or JSON file to find and replace text in the transcribed text. You can set this file in the `find_replace_file` option within the **Post-processing Options** section of the Settings window.
 
 #### Text Mode
 
@@ -411,7 +413,7 @@ Having more choices is great, but let's try to avoid decision paralysis by break
 
 ### Combination with AutoHotKey
 
-I personally use the following activation keyboard shortcuts within WhisperWriter:
+I personally use the following activation keyboard shortcuts within Qalam:
 
 - `ctrl+alt+numpad1`: Activate transcription mode
 - `ctrl+alt+numpad2`: Activate LLM cleanup mode
@@ -423,9 +425,9 @@ These shortcuts are very uncommon in other apps. To make the first two easier to
 ```
 #Requires AutoHotkey v2.0-a
 
-; ------ WhisperWriter Hotkey ------
+; ------ Qalam Hotkey ------
 ; This binds the right alt key on my keyboard to my custom set 
-; control alt numpad1 activation key for whisper writer.
+; control alt numpad1 activation key for Qalam.
 
 RAlt::
 {

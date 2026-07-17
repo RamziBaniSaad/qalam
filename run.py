@@ -82,6 +82,6 @@ def check_bundled_cuda():
 # Set CUDA paths before anything else
 set_cuda_paths()
 
-print('Starting WhisperWriter...')
+print('Starting Qalam...')
 load_dotenv()
 subprocess.run([sys.executable, os.path.join('src', 'main.py')])

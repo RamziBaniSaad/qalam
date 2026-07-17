@@ -11,6 +11,7 @@ import sounddevice as sd
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ui.base_window import BaseWindow
+from ui.theme import apply_dark_theme
 from utils import ConfigManager
 from keyring_manager import KeyringManager
 from llm_processor import LLMProcessor
@@ -56,6 +57,9 @@ class SettingsWindow(BaseWindow):
 
         self.create_tabs()
         self.create_buttons()
+
+        # Dark-Theme (Farben identisch zum Aufnahme-Overlay)
+        apply_dark_theme(self)
 
         # Connect the use_api checkbox state change
         self.use_api_checkbox = self.findChild(QCheckBox, 'model_options_use_api_input')
@@ -115,6 +119,7 @@ class SettingsWindow(BaseWindow):
         self.main_layout.addWidget(reset_button)
 
         save_button = QPushButton('Save')
+        save_button.setObjectName('saveButton')  # gruener Akzent via Theme
         save_button.setFont(QFont('Segoe UI', 11))
         save_button.clicked.connect(self.save_settings)
         self.main_layout.addWidget(save_button)

@@ -32,7 +32,7 @@ def is_vosk_model(model_name: str) -> bool:
 
 def get_model_path(model_name: str) -> str:
     """Get the path where the model should be stored"""
-    base_path = os.path.join(os.path.expanduser('~'), '.whisperwriter', 'models')
+    base_path = os.path.join(os.path.expanduser('~'), '.qalam', 'models')
     if is_vosk_model(model_name):
         return os.path.join(base_path, 'vosk', model_name)
     return os.path.join(base_path, 'whisper', model_name)

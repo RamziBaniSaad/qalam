@@ -1,12 +1,20 @@
 import subprocess
 import os
 import signal
+import sys
 import time
-import win32clipboard
-import win32con
 from pynput.keyboard import Controller as PynputController, Key
 
 from utils import ConfigManager
+import clipboard_utils
+
+IS_WINDOWS = sys.platform == 'win32'
+
+# win32clipboard is Windows-only; the macOS/Linux clipboard path lives in
+# clipboard_utils. Guard the import so the module loads on macOS/Linux.
+if IS_WINDOWS:
+    import win32clipboard
+    import win32con
 
 def run_command_or_exit_on_failure(command):
     """
@@ -85,6 +93,23 @@ class InputSimulator:
         Args:
             text (str): The text to paste.
         """
+        # macOS/Linux: text-only clipboard preservation via clipboard_utils.
+        if not IS_WINDOWS:
+            saved = clipboard_utils.get_text()
+            clipboard_utils.set_text(text)
+            if self.input_method == 'pynput':
+                clipboard_utils.send_paste(self.keyboard)
+            elif self.input_method == 'ydotool':
+                run_command_or_exit_on_failure(["ydotool", "key", "ctrl+v"])
+            elif self.input_method == 'dotool':
+                assert self.dotool_process and self.dotool_process.stdin
+                self.dotool_process.stdin.write("key ctrl+v\n")
+                self.dotool_process.stdin.flush()
+            time.sleep(0.1)
+            clipboard_utils.set_text(saved)
+            return
+
+        # Windows: full multi-format clipboard preservation.
         # Store all clipboard formats
         saved_formats = {}
         win32clipboard.OpenClipboard()

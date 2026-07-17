@@ -6,6 +6,7 @@ from PyQt5.QtCore import pyqtSignal
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ui.base_window import BaseWindow
+from ui.theme import apply_dark_theme
 
 class MainWindow(BaseWindow):
     openSettings = pyqtSignal()
@@ -16,8 +17,9 @@ class MainWindow(BaseWindow):
         """
         Initialize the main window.
         """
-        super().__init__('WhisperWriter', 320, 180)
+        super().__init__('Qalam', 320, 180)
         self.initMainUI()
+        apply_dark_theme(self)
 
     def initMainUI(self):
         """

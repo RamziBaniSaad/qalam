@@ -179,6 +179,33 @@ recording_options:
     #type: int
     #description: "Maximum duration (in seconds) for continuous recording before forced stop. Set to 0 to disable this limit."
 
+# Aufnahme-Timer + Auto-Submit
+recording_timer:
+  enabled:
+    value: true
+    type: bool
+    description: "Zeigt waehrend der Aufnahme einen Timer (mm:ss) + Farbkreis im Status-Fenster."
+  orange_seconds:
+    value: 60
+    type: int
+    description: "Ab dieser Aufnahmedauer (Sekunden) wird der Farbkreis orange."
+  red_seconds:
+    value: 180
+    type: int
+    description: "Ab dieser Aufnahmedauer (Sekunden) wird der Farbkreis rot."
+  auto_submit_enabled:
+    value: true
+    type: bool
+    description: "Aufnahme nach auto_submit_seconds automatisch abschicken (Text tippen) und neu starten."
+  auto_submit_seconds:
+    value: 300
+    type: int
+    description: "Phase 2: Nach dieser Aufnahmedauer (Sekunden) automatisch abschicken (Default 5 min)."
+  countdown_sounds_enabled:
+    value: true
+    type: bool
+    description: "Phase 2: Countdown-Sounds vor dem automatischen Abschicken (1 min / 30 s / 10 s / 5-4-3-2-1, steigende Tonhoehe). Nur mit auto_submit_enabled."
+
 # Post-processing options for the transcribed text
 post_processing:
   writing_key_press_delay:
