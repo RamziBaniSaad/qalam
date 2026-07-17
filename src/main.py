@@ -126,6 +126,11 @@ class QalamApp(QObject):
         super().__init__()
         self.app = QApplication(sys.argv)
         self.app.setWindowIcon(QIcon(os.path.join('assets', 'ww-logo.png')))
+        # WICHTIG: qalam ist eine Menüleisten-App ohne dauerhaftes Fenster. Ohne dies
+        # beendet Qt die ganze App, sobald das letzte Fenster schließt – z. B. das
+        # Aufnahme-Overlay nach der Transkription -> die App "verschwand" nach jedem
+        # Diktat. Das Tray-Icon zählt nicht als Fenster. Beenden nur noch über Exit.
+        self.app.setQuitOnLastWindowClosed(False)
 
         ConfigManager.initialize()
 
