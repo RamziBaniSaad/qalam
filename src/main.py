@@ -109,9 +109,12 @@ class QalamApp(QObject):
         self.tray_icon.show()
 
     def cleanup(self):
-        if self.key_listener:
+        # getattr-Absicherung: Wird beim ersten Start (Settings speichern, bevor
+        # initialize_components() lief) über restart_app() aufgerufen – dann gibt es
+        # key_listener/input_simulator noch nicht. Betrifft macOS wie Windows.
+        if getattr(self, 'key_listener', None):
             self.key_listener.stop()
-        if self.input_simulator:
+        if getattr(self, 'input_simulator', None):
             self.input_simulator.cleanup()
 
     def exit_app(self):

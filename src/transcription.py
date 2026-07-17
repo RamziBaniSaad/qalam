@@ -117,15 +117,18 @@ def get_optimal_device():
             ConfigManager.console_print("PyTorch has CUDA support but no CUDA devices were found")
     
     # Device selection logic
-    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        ConfigManager.console_print("Using Apple Silicon GPU (MPS)")
-        return "mps"
-    elif torch.cuda.is_available():
+    # Wichtig: faster-whisper (ctranslate2) unterstützt NUR CPU/CUDA – kein Apple-MPS.
+    # Deshalb zuerst CUDA prüfen (Windows/NVIDIA) und auf Apple Silicon bewusst CPU
+    # wählen, statt MPS zu versuchen (das schlug beim Modell-Load bei jedem Start fehl).
+    if torch.cuda.is_available():
         ConfigManager.console_print("Using NVIDIA GPU (CUDA)")
         return "cuda"
     elif hasattr(torch, 'hip') and torch.hip.is_available():
         ConfigManager.console_print("Using AMD GPU (ROCm)")
         return "rocm"
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        ConfigManager.console_print("Apple Silicon erkannt – nutze CPU (ctranslate2 unterstützt kein MPS).")
+        return "cpu"
     else:
         ConfigManager.console_print("Using CPU")
         return "cpu"

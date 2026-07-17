@@ -33,6 +33,28 @@ class ResultThread(QThread):
     statusSignal = pyqtSignal(str, bool)
     resultSignal = pyqtSignal(str)
 
+    @staticmethod
+    def _valid_input_device(device):
+        """
+        Prüft das konfigurierte Eingabegerät. Gibt einen gültigen Geräte-Index
+        zurück oder None (= System-Standardmikrofon), falls das konfigurierte
+        Gerät fehlt/entfernt wurde oder keine Eingangskanäle hat.
+        """
+        try:
+            if device is None or device == '':
+                return None
+            idx = int(device)
+            devices = sd.query_devices()
+            if 0 <= idx < len(devices) and devices[idx].get('max_input_channels', 0) > 0:
+                return idx
+            ConfigManager.console_print(
+                f"Mikrofon-Index {device} nicht verfügbar – nutze Standardmikrofon.")
+            return None
+        except Exception as e:
+            ConfigManager.console_print(
+                f"Mikrofon-Auswahl ungültig ({e}) – nutze Standardmikrofon.")
+            return None
+
     def __init__(self, local_model=None, use_llm=False):
         """
         Initialize the ResultThread.
@@ -160,8 +182,12 @@ class ResultThread(QThread):
             audio_buffer.extend(indata[:, 0])
             data_ready.set()
 
+        # Konfiguriertes Eingabegerät prüfen; bei ungültigem/entferntem Gerät
+        # (z. B. abgezogenes iPhone-Mikro) auf das System-Standardmikrofon zurückfallen.
+        sound_device = self._valid_input_device(recording_options.get('sound_device'))
+
         with sd.InputStream(samplerate=self.sample_rate, channels=1, dtype='int16',
-                            blocksize=frame_size, device=recording_options.get('sound_device'),
+                            blocksize=frame_size, device=sound_device,
                             callback=audio_callback):
             while self.is_running and self.is_recording:
                 data_ready.wait()
