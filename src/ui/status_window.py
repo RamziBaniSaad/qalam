@@ -53,7 +53,16 @@ class StatusWindow(BaseWindow):
 
     def initStatusUI(self):
         """Minimalistische Zeile: Farbkreis + Status + Timer."""
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        # macOS: Qt.Tool-Fenster sind nur sichtbar, wenn die EIGENE App gerade die
+        # aktive App ist. Beim Diktieren ist aber eine andere App vorn -> das Overlay
+        # erschiene nie. Daher auf macOS ohne Qt.Tool, dafür fokus-neutral (klaut dem
+        # Textfeld nicht den Fokus). Windows/Linux behalten Qt.Tool (aus der Taskleiste).
+        flags = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        if sys.platform == 'darwin':
+            flags |= Qt.WindowDoesNotAcceptFocus
+        else:
+            flags |= Qt.Tool
+        self.setWindowFlags(flags)
 
         row = QHBoxLayout()
         row.setContentsMargins(4, 0, 4, 0)
@@ -100,7 +109,11 @@ class StatusWindow(BaseWindow):
         x = (geo.width() - self.width()) // 2
         y = geo.height() - self.height() - 120
         self.move(x, y)
+        # Ohne Fokus-Klau anzeigen (der Text soll im aktiven Fenster landen)
+        # und über andere Fenster heben.
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         super().show()
+        self.raise_()
 
     def closeEvent(self, event):
         """Close-Signal senden."""
