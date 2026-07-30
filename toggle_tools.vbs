@@ -38,8 +38,29 @@ Sub Melde(zustand)
     On Error Goto 0
 End Sub
 
+' --- Noor-Werkzeuge, falls dieser Rechner sie hat -------------------------
+'  Die Tafel und das Aufraeumen liegen im privaten noor-Repo, nicht hier.
+'  Qalam soll auch ohne sie ganz normal funktionieren -- deshalb wird nur
+'  aufgerufen, was tatsaechlich da ist.
+noorWerkzeuge = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\noor\werkzeuge"
+
+Sub NoorSkript(datei, argumente, warten)
+    On Error Resume Next
+    pfad = noorWerkzeuge & "\" & datei
+    If fso.FileExists(pfad) Then
+        sh.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File """ _
+               & pfad & """ " & argumente, 0, warten
+    End If
+    On Error Goto 0
+End Sub
+
 If running Then
-    ' --- STOP: alle zugehoerigen Prozesse beenden ---
+    ' --- STOP: Arbeitsmodus komplett herunterfahren ---
+    '  Reihenfolge mit Absicht: erst Noors Bildschirm leerraeumen und die Tafel
+    '  sauber beenden (samt Sammler im Hintergrund), dann Qalam, dann das VRAM.
+    NoorSkript "noor-links-zu.ps1", "", True
+    NoorSkript "noor-tafel.ps1", "-Stopp", True
+
     For i = 0 To UBound(pids)
         On Error Resume Next
         sh.Run "taskkill /PID " & pids(i) & " /F", 0, True
@@ -52,8 +73,11 @@ If running Then
     On Error Goto 0
     Melde "aus"
 Else
-    ' --- START: App stumm im Hintergrund ---
+    ' --- START: Arbeitsmodus hochfahren ---
     sh.CurrentDirectory = proj
     sh.Run """" & pyw & """ run.py", 0, False
+    ' Die Tafel gehoert dazu: sie ging beim Ausschalten mit, also kommt sie
+    ' beim Einschalten auch wieder. Alles andere waere eine Einbahnstrasse.
+    NoorSkript "noor-tafel.ps1", "", False
     Melde "an"
 End If
