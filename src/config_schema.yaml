@@ -205,6 +205,10 @@ recording_timer:
     value: true
     type: bool
     description: "Phase 2: Countdown-Sounds vor dem automatischen Abschicken (1 min / 30 s / 10 s / 5-4-3-2-1, steigende Tonhoehe). Nur mit auto_submit_enabled."
+  start_sound_enabled:
+    value: true
+    type: bool
+    description: "Kurzes Signal, wenn die Aufnahme startet - auch beim automatischen Neustart nach dem Abschicken. Damit man weiterreden kann, ohne auf den Bildschirm zu sehen."
 
 # Post-processing options for the transcribed text
 post_processing:

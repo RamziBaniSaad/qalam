@@ -28,6 +28,7 @@ APP_NAME = "Qalam"  # Produktname
 
 # Countdown-Sounds bei FESTEN Restsekunden (unabhaengig von auto_submit_seconds):
 # einmal bei 10 s, dann jede der letzten 5 Sekunden (5..1), aufsteigende Tonhoehe.
+START_SOUND = 'rec_start.wav'
 COUNTDOWN_SOUNDS = {10: 'cd_10.wav', 5: 'cd_5.wav', 4: 'cd_4.wav',
                     3: 'cd_3.wav', 2: 'cd_2.wav', 1: 'cd_1.wav'}
 
@@ -177,36 +178,50 @@ class StatusWindow(BaseWindow):
                 self.elapsed_timer.stop()
                 self.autoSubmitSignal.emit()
 
-    def _play_countdown_sound(self, remaining):
-        """Feste Countdown-Beeps: 10 s, dann 5/4/3/2/1 s. Plattformübergreifend:
+    def _play_sound(self, filename):
+        """Eine WAV-Datei aus assets/ abspielen. Plattformübergreifend:
         Windows -> winsound, macOS -> afplay, Linux -> aplay/paplay."""
+        path = os.path.join('assets', filename)
+        if not os.path.exists(path):
+            return
+        try:
+            if winsound:
+                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['afplay', path],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                # Linux: erst paplay (PulseAudio), sonst aplay (ALSA).
+                for player in (['paplay', path], ['aplay', path]):
+                    try:
+                        subprocess.Popen(player, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        break
+                    except FileNotFoundError:
+                        continue
+        except Exception as e:
+            print(f"[Qalam] Sound-Fehler ({filename}): {e}")
+
+    def _play_start_sound(self):
+        """Kurzes Signal, wenn die Aufnahme losläuft.
+
+        Damit Ramzi weiterreden kann, ohne auf den Bildschirm zu sehen -- gerade
+        beim Auto-Submit, wo die nächste Aufnahme von selbst anspringt."""
+        if not self._timer_cfg('start_sound_enabled', True):
+            return
+        self._play_sound(START_SOUND)
+
+    def _play_countdown_sound(self, remaining):
+        """Feste Countdown-Beeps: 10 s, dann 5/4/3/2/1 s."""
         if remaining in COUNTDOWN_SOUNDS and remaining != self._last_sound_remaining:
             self._last_sound_remaining = remaining
-            path = os.path.join('assets', COUNTDOWN_SOUNDS[remaining])
-            if not os.path.exists(path):
-                return
-            try:
-                if winsound:
-                    winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                elif sys.platform == 'darwin':
-                    subprocess.Popen(['afplay', path],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                else:
-                    # Linux: erst paplay (PulseAudio), sonst aplay (ALSA).
-                    for player in (['paplay', path], ['aplay', path]):
-                        try:
-                            subprocess.Popen(player, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            break
-                        except FileNotFoundError:
-                            continue
-            except Exception as e:
-                print(f"[Qalam] Countdown-Sound-Fehler: {e}")
+            self._play_sound(COUNTDOWN_SOUNDS[remaining])
     # ----------------------------------------------------------------------
 
     @pyqtSlot(str, bool)
     def updateStatus(self, status, use_llm=False):
         """Status-Fenster aktualisieren."""
         if status == 'recording':
+            self._play_start_sound()
             self.startElapsedTimer()
             self.status_label.setText('Aufnahme')
             self.status_label.setStyleSheet(f"color: {COL_TEXT}; background: transparent;")

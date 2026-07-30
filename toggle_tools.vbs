@@ -29,6 +29,15 @@ For Each p In procs
     End If
 Next
 
+' --- Rueckmeldung: Ton + Sprechblase, damit man WEISS, was der Hotkey getan hat.
+'     Ohne das drueckt man im Zweifel ein zweites Mal und schaltet zurueck.
+Sub Melde(zustand)
+    On Error Resume Next
+    sh.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File """ _
+           & proj & "\signal.ps1"" -Zustand " & zustand, 0, False
+    On Error Goto 0
+End Sub
+
 If running Then
     ' --- STOP: alle zugehoerigen Prozesse beenden ---
     For i = 0 To UBound(pids)
@@ -41,8 +50,10 @@ If running Then
     sh.Run "cmd /c ollama stop qwen2.5:3b", 0, True
     sh.Run "cmd /c ollama stop llama3.2:3b", 0, True
     On Error Goto 0
+    Melde "aus"
 Else
     ' --- START: App stumm im Hintergrund ---
     sh.CurrentDirectory = proj
     sh.Run """" & pyw & """ run.py", 0, False
+    Melde "an"
 End If
