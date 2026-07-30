@@ -408,6 +408,13 @@ class QalamApp(QObject):
                     ConfigManager.console_print(f"Error processing text through LLM: {str(e)}")
                     return result
 
+            # Abschliessendes Leerzeichen: Beim automatischen Abschicken haengt
+            # sonst das naechste Diktat direkt am vorigen -- "...gemacht.Und dann"
+            # statt "...gemacht. Und dann". Ramzi diktiert in Bloecken, das
+            # passiert also bei jedem langen Text mehrfach.
+            if result and not result.endswith((' ', '\n', '\t')):
+                result += ' '
+
             # letztes Ergebnis immer in die Zwischenablage sichern,
             # damit nichts verloren geht, falls der Fokus wegspringt. Mit Windows-Zwischenablage-
             # Verlauf (Win+V) bleibt so jedes Diktat abrufbar.
