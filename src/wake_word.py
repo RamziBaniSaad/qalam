@@ -138,8 +138,14 @@ class Weckwort:
                 block, _ueberlauf = strom.read(FRAME_LEN)
                 frame = block[:, 0]
 
-                # Solange Qalam aufnimmt oder ich schlafe: hören, aber nichts tun.
-                if qalam_nimmt_auf() or self.schlaeft:
+                # Solange Qalam aufnimmt: wirklich taub. Das ist der einzige
+                # harte Riegel -- Ramzi diktiert gerade, da habe ich zu schweigen.
+                #
+                # "Schlafen" ist ausdruecklich NICHT hier: wer schlaeft, muss
+                # trotzdem geweckt werden koennen. Genau daran ist es beim
+                # ersten Test gescheitert -- ich habe "wach auf" nie gehoert,
+                # weil ich an dieser Stelle schon abgebrochen habe.
+                if qalam_nimmt_auf():
                     puffer.clear()
                     in_sprache = False
                     continue
