@@ -140,3 +140,6 @@ config.yaml
 *.cfg
 *.db
 /keyring/*
+# Laufzeit-Sperre und Stimmmodelle (gross, werden nachgeladen)
+.aufnahme.lock
+stimmen/

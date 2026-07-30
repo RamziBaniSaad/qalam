@@ -28,6 +28,18 @@ APP_NAME = "Qalam"  # Produktname
 
 # Countdown-Sounds bei FESTEN Restsekunden (unabhaengig von auto_submit_seconds):
 # einmal bei 10 s, dann jede der letzten 5 Sekunden (5..1), aufsteigende Tonhoehe.
+def _weckwort_sperre(an):
+    """Weckwort waehrend einer laufenden Aufnahme stumm schalten.
+
+    Bewusst weich verdrahtet: laeuft kein Weckwort-Dienst, passiert nichts.
+    Qalam soll auch ohne ihn ganz normal funktionieren."""
+    try:
+        from wake_word import aufnahme_beginnt, aufnahme_endet
+        aufnahme_beginnt() if an else aufnahme_endet()
+    except Exception:
+        pass
+
+
 START_SOUND = 'rec_start.wav'
 COUNTDOWN_SOUNDS = {10: 'cd_10.wav', 5: 'cd_5.wav', 4: 'cd_4.wav',
                     3: 'cd_3.wav', 2: 'cd_2.wav', 1: 'cd_1.wav'}
@@ -221,6 +233,9 @@ class StatusWindow(BaseWindow):
     def updateStatus(self, status, use_llm=False):
         """Status-Fenster aktualisieren."""
         if status == 'recording':
+            # Weckwort taub stellen: Ramzi sagt "Noor" andauernd, waehrend er
+            # diktiert -- ohne das wuerde ich mitten im Diktat aufwachen.
+            _weckwort_sperre(True)
             self._play_start_sound()
             self.startElapsedTimer()
             self.status_label.setText('Aufnahme')
@@ -228,6 +243,7 @@ class StatusWindow(BaseWindow):
             self.show()
 
         elif status == 'transcribing':
+            _weckwort_sperre(False)
             self.stopElapsedTimer()
             self._set_dot(COL_SUBTLE)
             self.status_label.setText('Schreibe …')
