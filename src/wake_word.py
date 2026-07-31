@@ -271,12 +271,37 @@ class Weckwort:
 
     @property
     def modell(self):
-        """Das genaue Modell für den fertigen Satz. Bewusst auf der CPU:
-        int8, kein VRAM -- die Karte bleibt fürs Diktat und fürs Zocken frei."""
+        """Das genaue Modell für den fertigen Satz -- seit 01.08.2026 auf der Karte.
+
+        Es lag bewusst auf der CPU, damit die Karte fürs Zocken frei bleibt.
+        Ramzi hat das an diesem Abend ausdrücklich aufgehoben: "du kannst bis zu
+        7 Gigabyte benutzen alleine für diesen Prozess, das ist auch sehr
+        wichtig, dass es halt gut wird."
+
+        Der Grund, warum das hier den Unterschied macht, ist sein eigener Befund:
+        "es hat manchmal bis zu 10 Sekunden gebraucht, bis es überhaupt merkt,
+        dass ich aufgehört habe, obwohl meine Redepause auf 2 steht." Diese
+        Sekunden sind genau dieses Modell. Gemessen, 9,4 s Testton:
+
+            CPU  int8      2,30 - 11,58 s   (schwankte stark mit der Kernlast)
+            GPU  float16          0,45 s    Echtzeitfaktor 0,05, +751 MB
+
+        Warum weiterhin `small` und nicht das grosse Modell: `large-v3-turbo`
+        ist auf der Karte sogar minimal schneller (0,40 s), kostet aber
+        2120 MB. Zusammen mit dem Wachmodell wären das 2871 MB, und bei Ramzis
+        Grundlast von rund 4100 MB stünde das bei 6967 von 7000 -- 33 MB
+        Abstand zu einer Grenze, hinter der sein Rechner abstürzt. Beide auf
+        `small` kosten 1502 MB und lassen 1400 MB Luft. Die Qualität gibt das
+        grosse Modell in diesem Test ohnehin nicht her: beide setzen dieselben
+        sechs Satzzeichen und schreiben denselben Text.
+        """
         if self._modell is None:
             from faster_whisper import WhisperModel
-            self._modell = WhisperModel(self.modell_name, device='cpu', compute_type='int8',
-                                        cpu_threads=KERNE_GENAU)
+            geraet, art = self._platz_auf_karte(braucht_mb=751)
+            self._modell = WhisperModel(
+                self.modell_name, device=geraet, compute_type=art,
+                **({'cpu_threads': KERNE_GENAU} if geraet == 'cpu' else {}))
+            print(f'[Weckwort] Genaues Modell laeuft auf {geraet}/{art}.')
         return self._modell
 
     @property
@@ -326,7 +351,7 @@ class Weckwort:
         """
         if self._flink is None:
             from faster_whisper import WhisperModel
-            geraet, art = self._wachplatz()
+            geraet, art = self._platz_auf_karte(braucht_mb=751)
             self._flink = WhisperModel(
                 self.flink_name, device=geraet,
                 compute_type=art,
@@ -335,7 +360,7 @@ class Weckwort:
         return self._flink
 
     @staticmethod
-    def _wachplatz():
+    def _platz_auf_karte(braucht_mb):
         """Grafikkarte -- aber nur, wenn wirklich Platz ist.
 
         Ramzis harte Regel: NIE über 7 von 8 GB, sonst stürzt der Rechner bis
@@ -355,10 +380,12 @@ class Weckwort:
             benutzt = int(roh.splitlines()[0])
         except Exception:
             return 'cpu', 'int8'
-        # 750 MB braucht das Modell, gemessen. 1200 als Puffer, damit ein
-        # kurzer Ausschlag von etwas anderem nicht sofort an die Grenze stösst.
-        if benutzt + 1200 > 7000:
-            print(f'[Weckwort] {benutzt} MB VRAM belegt -- Wachmodell bleibt auf der CPU.')
+        # Der gemessene Bedarf plus 450 MB Puffer, damit ein kurzer Ausschlag
+        # von etwas anderem nicht sofort an die Grenze stösst. Wird zweimal
+        # gefragt (Wachmodell, genaues Modell), und beim zweiten Mal steht das
+        # erste schon in der Zahl -- die Prüfung korrigiert sich also selbst.
+        if benutzt + braucht_mb + 450 > 7000:
+            print(f'[Weckwort] {benutzt} MB VRAM belegt -- Modell bleibt auf der CPU.')
             return 'cpu', 'int8'
         return 'cuda', 'float16'
 
@@ -717,7 +744,8 @@ class Weckwort:
         # geglaubt, der Umzug haette nichts gebracht. Ein Protokoll, das das
         # falsche Bauteil nennt, ist schlimmer als keins.
         print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] {dauer_audio:.1f}s Audio -> '
-              f'{dauer_rechnen:.2f}s Rechenzeit ({self.modell_name}, genau, CPU)')
+              f'{dauer_rechnen:.2f}s Rechenzeit '
+              f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")})')
 
         if not text:
             return
