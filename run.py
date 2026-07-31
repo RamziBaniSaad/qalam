@@ -103,23 +103,59 @@ load_dotenv()
 # Der Umschalter (toggle_tools.vbs) beendet alles, dessen Befehlszeile "qalam"
 # enthält -- das trifft diesen Prozess mit, ohne dass dort etwas zu ändern ist.
 # --------------------------------------------------------------------------
+IST_WINDOWS = sys.platform == 'win32'
+
+# Auf macOS laeuft NUR das Diktat.
+#
+# Ramzis Entscheidung vom 31.07.2026: Ohr, Bruecke und Fenstersteuerung sind
+# tief in Windows verdrahtet (AttachThreadInput, win32clipboard,
+# Fensterklassen). Am MacBook arbeitet er zwei Tage im Monat und wuerde die
+# Sprachschicht dort praktisch nie brauchen -- was er dort braucht, ist Qalam
+# mit der Tastenkombination. Soll ich dort mal ein Fenster oeffnen, sagt er es
+# mir einfach; das kostet ein paar Tokens, aber vielleicht einmal im Monat.
+#
+# KEINE getrennten Zweige im Repo dafuer: zwei Zweige, die sich dauerhaft
+# unterscheiden, driften auseinander, jeder Fehler muss zweimal behoben werden
+# und irgendwann laesst sich nichts mehr zusammenfuehren. Ein Zweig, und die
+# Unterschiede stehen an genau einer Stelle als Bedingung -- hier.
 ohr = None
 ohr_log = None
+schrift = None
+
 try:
     # Unter pythonw gibt es keine Konsole: ein Fehler beim Laden der Modelle
     # verschwindet spurlos, der Prozess laeuft weiter und hoert trotzdem nichts.
     # Genau diese Sorte Fehler ist teuer, also bekommt das Ohr ein Protokoll.
-    ohr_log = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ohr.log'),
-                   'w', encoding='utf-8', buffering=1)
-    ohr = subprocess.Popen([sys.executable, '-u', os.path.join('src', 'assistant.py')],
-                           stdout=ohr_log, stderr=subprocess.STDOUT)
-    print('Weckwort laeuft mit (Protokoll: ohr.log).')
+    if IST_WINDOWS:
+        ohr_log = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ohr.log'),
+                       'w', encoding='utf-8', buffering=1)
+        ohr = subprocess.Popen([sys.executable, '-u', os.path.join('src', 'assistant.py')],
+                               stdout=ohr_log, stderr=subprocess.STDOUT)
+        print('Weckwort laeuft mit (Protokoll: ohr.log).')
+    else:
+        print('Weckwort ausgelassen -- nur unter Windows.')
 except Exception as e:
     print(f'Weckwort nicht gestartet: {e}')
+
+# Die Untertitel gehoeren dazu: sie zeigen, was gehoert und was gesagt wurde.
+# Eigener Prozess, weil auch der Stop-Hook (PowerShell) sie beschriften koennen
+# muss -- die beiden teilen sich eine Datei, keinen Kanal.
+try:
+    if IST_WINDOWS:
+        schrift = subprocess.Popen([sys.executable, os.path.join('src', 'untertitel.py')])
+        print('Untertitel laufen mit.')
+except Exception as e:
+    print(f'Untertitel nicht gestartet: {e}')
 
 try:
     subprocess.run([sys.executable, os.path.join('src', 'main.py')])
 finally:
+    if schrift and schrift.poll() is None:
+        schrift.terminate()
+        try:
+            schrift.wait(timeout=5)
+        except Exception:
+            schrift.kill()
     # Ohne das bliebe das Ohr allein zurueck, wenn Qalam ueber das Tray-Symbol
     # beendet wird -- ein unsichtbarer Prozess, der weiter am Mikrofon haengt.
     if ohr and ohr.poll() is None:

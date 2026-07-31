@@ -37,6 +37,18 @@ def _sag_datum():
     return f'Heute ist {tage[h.weekday()]}, der {h.day}. {h.month}.'
 
 
+def _untertitel(text, wer):
+    """Auf den Untertitel-Streifen schreiben, falls es ihn gibt.
+
+    Weich verdrahtet: läuft kein Streifen, passiert nichts. Der Assistent darf
+    an einer Anzeige nicht scheitern."""
+    try:
+        from untertitel import zeige
+        zeige(text, wer)
+    except Exception:
+        pass
+
+
 def normalisiere(text):
     """Satz auf eine vergleichbare Form bringen.
 
@@ -148,15 +160,28 @@ class Assistent:
     # scheitern.
     AUFWECKER = re.compile(r'\b(wach auf|aufwachen|wach mal auf|bist du (da|wach)|hallo)\b', re.I)
 
+    def _sag(self, text, wer='noor'):
+        """Sprechen UND untertiteln.
+
+        Immer beides zusammen, nie nur eins -- sonst driftet das, was zu hören
+        ist, von dem ab, was zu lesen ist."""
+        if text:
+            _untertitel(text, wer)
+            self.sprecher.sprich_im_hintergrund(text)
+
     def _geweckt(self, text):
         """Wird gerufen, sobald der Name gefallen ist. `text` ist der ganze Satz."""
         print(f'[Noor] gehört: {text!r}')
+        # Zuerst zeigen, was angekommen ist -- noch vor jeder Reaktion. Geht ein
+        # Befehl daneben, ist damit sofort sichtbar, ob es am Sagen oder am
+        # Hören lag.
+        _untertitel(text, 'ramzi')
 
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
         if self.ohr.schlaeft:
             if self.AUFWECKER.search(text):
                 self.ohr.schlaeft = False
-                self.sprecher.sprich_im_hintergrund('Ich bin wieder da.')
+                self._sag('Ich bin wieder da.')
             return
 
         # Wenn ich gerade rede und angesprochen werde: erst mal Klappe halten.
@@ -173,11 +198,11 @@ class Assistent:
             if any(b in geglaettet for b in bruchstuecke):
                 antwort = handler()
                 if antwort:
-                    self.sprecher.sprich_im_hintergrund(antwort)
+                    self._sag(antwort)
                 return
 
         if not auftrag:
-            self.sprecher.sprich_im_hintergrund('Ja?')
+            self._sag('Ja?')
             return
 
         # Alles andere gehört Noor: über die Brücke in die laufende Sitzung.
@@ -194,12 +219,12 @@ class Assistent:
             try:
                 from bruecke import sende
             except Exception as e:
-                self.sprecher.sprich_im_hintergrund('Die Brücke lässt sich nicht laden.')
+                self._sag('Die Brücke lässt sich nicht laden.')
                 print(f'[Noor] Brücke nicht ladbar: {e}')
                 return
             ok, meldung = sende(auftrag)
             if not ok:
-                self.sprecher.sprich_im_hintergrund(meldung or 'Das hat nicht geklappt.')
+                self._sag(meldung or 'Das hat nicht geklappt.')
             # Bei Erfolg sage ich hier NICHTS. Die eigentliche Antwort spricht
             # der Stop-Hook, sobald sie steht -- eine Zwischenansage wuerde sich
             # bei kurzen Antworten mit ihr ins Wort fallen.

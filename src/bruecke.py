@@ -210,6 +210,30 @@ MARKE = '~~noor-marke-4711~~'
 PROBE = 'x'
 
 
+ABSTAND_MERKER = os.path.join(tempfile.gettempdir(), 'noor-bruecke-abstand.txt')
+
+
+def _gemerkter_abstand():
+    """Welcher Abstand hat beim letzten Mal getroffen?
+
+    Die Oberfläche ändert sich selten. Sich den Treffer zu merken, spart beim
+    nächsten Mal das Durchprobieren -- und jeder Fehlversuch markiert sichtbar
+    den Chatverlauf, das sieht Ramzi."""
+    try:
+        with open(ABSTAND_MERKER, encoding='utf-8') as f:
+            return int(f.read().strip())
+    except Exception:
+        return None
+
+
+def _merke_abstand(abstand):
+    try:
+        with open(ABSTAND_MERKER, 'w', encoding='utf-8') as f:
+            f.write(str(abstand))
+    except OSError:
+        pass
+
+
 def _klick(x, y):
     """Einmal klicken und den Mauszeiger zurückstellen.
 
@@ -251,22 +275,11 @@ def fokussiere_eingabefeld(hwnd, tastatur):
     Rückgabe: (getroffen, feld_ist_leer, vorhandener_text)
     """
     from pynput.keyboard import Key
-    r = _RECT()
-    if not _user32.GetWindowRect(hwnd, ctypes.byref(r)):
-        return False, False, ''
-    x = (r.left + r.right) // 2
 
-    # Abstände von der Unterkante. Das Feld sitzt unten und wächst mit seinem
-    # Inhalt nach oben, deshalb von unten gemessen und mehrere Höhen.
-    for abstand in (95, 115, 75, 140, 165):
-        y = r.bottom - abstand
-        if y <= r.top + 40:
-            continue
+    def _versuch():
+        """Prüfzeichen tippen und nachsehen, ob es angekommen ist.
 
-        _klick(x, y)
-
-        # Das Prüfzeichen. Landet es im Feld, steht es hinter allem, was schon
-        # da war -- daran ist beides gleichzeitig ablesbar.
+        Rückgabe: (angekommen, was_vorher_drinstand)"""
         tastatur.press(PROBE)
         tastatur.release(PROBE)
         time.sleep(0.25)
@@ -280,13 +293,45 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         inhalt = _zwischenablage_lesen() or ''
 
         if not inhalt.endswith(PROBE) or len(inhalt) > CHAT_STATT_FELD:
-            # Nicht angekommen -> war kein Eingabefeld. Das getippte Zeichen ist
-            # damit auch nirgends gelandet. Nächste Höhe.
-            _taste(tastatur, Key.end, mit_strg=False)
-            continue
+            _taste(tastatur, Key.end, mit_strg=False)   # Markierung auflösen
+            return False, ''
+        return True, inhalt[:-len(PROBE)]
 
-        vorher = inhalt[:-len(PROBE)]
+    # --- Erst ganz ohne Maus ------------------------------------------------
+    # Chat-Oberflächen lenken einen Tastendruck von selbst ins Eingabefeld --
+    # deshalb hat der allererste Brückenversuch auch ohne jeden Klick
+    # funktioniert. Wenn das reicht, ist es der mit Abstand robusteste Weg:
+    # keine Koordinaten, nichts, was sich beim nächsten Fensterumbau verschiebt.
+    ok, vorher = _versuch()
+    if ok:
         return True, (vorher.strip() == ''), vorher
+
+    r = _RECT()
+    if not _user32.GetWindowRect(hwnd, ctypes.byref(r)):
+        return False, False, ''
+    x = (r.left + r.right) // 2
+
+    # --- Sonst klicken, und zwar nach Erfahrung ------------------------------
+    # Abstände von der Unterkante, weil das Feld unten sitzt. Sie schwanken
+    # aber: über dem Feld kann eine weitere Leiste stehen (der Zweig- und
+    # PR-Balken), und das Feld wächst mit seinem Inhalt nach oben. Genau daran
+    # ist der Klick am 31.07.2026 einmal zu tief gelandet. Deshalb mehrere
+    # Höhen -- und die, die getroffen hat, wird gemerkt und beim nächsten Mal
+    # zuerst probiert.
+    kandidaten = [120, 95, 145, 170, 75, 195, 225]
+    gemerkt = _gemerkter_abstand()
+    if gemerkt:
+        kandidaten = [gemerkt] + [k for k in kandidaten if k != gemerkt]
+
+    for abstand in kandidaten:
+        y = r.bottom - abstand
+        if y <= r.top + 40:
+            continue
+        _klick(x, y)
+        ok, vorher = _versuch()
+        if ok:
+            _merke_abstand(abstand)
+            return True, (vorher.strip() == ''), vorher
 
     return False, False, ''
 
