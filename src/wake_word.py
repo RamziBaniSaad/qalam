@@ -33,6 +33,27 @@ FRAME_LEN = int(RATE * FRAME_MS / 1000)
 # Wie viel Ton der Mitlauscher jeweils ansieht: drei Sekunden reichen, um den
 # Namen zu finden, und halten seine Rechenzeit konstant.
 BLICK_FRAMES = int(3.0 * 1000 / FRAME_MS)
+# Ab wie viel Ton der Mitlauscher überhaupt hinsieht. Nachgemessen mit
+# `werkzeuge_ohr_messen.py`: ein alleinstehendes "Noor" sind 0,66 s -- die
+# Schwelle muss deutlich darunter liegen, sonst wird der häufigste Ruf
+# überhaupt nie angesehen.
+MINDEST_FRAMES = int(0.35 * 1000 / FRAME_MS)
+# Wie viel nachlaufende Stille noch in den Ausschnitt des Mitlauschers wandert.
+# Ohne sie sieht er nur die stimmhaften Bilder und damit nie das Ende einer
+# Äußerung mit seinem natürlichen Ausklang.
+NACHLAUF_FRAMES = int(0.5 * 1000 / FRAME_MS)
+# Ab welcher Unsicherheit ein Satz des schnellen Modells als erfunden gilt.
+# Nachgemessen, siehe _hoer_kurz().
+ERFINDUNGS_SCHWELLE = 0.35
+# Wie viele Kerne die beiden Modelle jeweils nehmen dürfen.
+#
+# Der Rechner hat sechs. Ohne Deckel nimmt sich JEDES Modell alle sechs, und
+# dann rechnen sie gegeneinander statt nebeneinander: im Protokoll vom
+# 31.07.2026 brauchte das genaue Modell für 15 s Ton normalerweise 1,3-3 s,
+# in den schlechtesten Fällen aber 18-24 s -- immer dann, wenn lange
+# durchgesprochen wurde und der Mitlauscher parallel dauerlief.
+KERNE_FLINK = 2
+KERNE_GENAU = 4
 
 # Wie Whisper "Noor" verhören kann. Bewusst großzügig: ein verpasstes Weckwort
 # ist ärgerlicher als ein gelegentlicher Fehlstart, den man einfach ignoriert.
@@ -149,7 +170,8 @@ class Weckwort:
         int8, kein VRAM -- die Karte bleibt fürs Diktat und fürs Zocken frei."""
         if self._modell is None:
             from faster_whisper import WhisperModel
-            self._modell = WhisperModel(self.modell_name, device='cpu', compute_type='int8')
+            self._modell = WhisperModel(self.modell_name, device='cpu', compute_type='int8',
+                                        cpu_threads=KERNE_GENAU)
         return self._modell
 
     @property
@@ -167,7 +189,8 @@ class Weckwort:
         Satz kommt danach vom großen Modell."""
         if self._flink is None:
             from faster_whisper import WhisperModel
-            self._flink = WhisperModel(self.flink_name, device='cpu', compute_type='int8')
+            self._flink = WhisperModel(self.flink_name, device='cpu', compute_type='int8',
+                                       cpu_threads=KERNE_FLINK)
         return self._flink
 
     # ----------------------------------------------------------------------
@@ -272,6 +295,13 @@ class Weckwort:
                 elif in_sprache:
                     stille += 1
                     puffer.append(frame)
+                    # Die erste Sekunde Stille gehört noch zum Ausschnitt.
+                    # Sonst sieht der Mitlauscher bei einem kurzen "Noor" nur
+                    # 0,66 s Ton, und dafür gibt das schnelle Modell oft gar
+                    # keinen Text zurück -- nachgemessen, siehe MINDEST_FRAMES.
+                    if stille <= NACHLAUF_FRAMES:
+                        with self._schloss:
+                            self._laufend = list(puffer)[-BLICK_FRAMES:]
                     if stille >= self.stille_frames:
                         abgeben(endgueltig=True)      # echte Stille -- er ist fertig
                         in_sprache = False
@@ -313,7 +343,15 @@ class Weckwort:
             if not schnipsel:
                 erkannt = False          # Satz vorbei, beim nächsten neu suchen
                 continue
-            if self.schlaeft or len(schnipsel) < 25:
+            if self.schlaeft or len(schnipsel) < MINDEST_FRAMES:
+                continue
+            # Ist der Name gefunden und will niemand den laufenden Mitschrieb,
+            # gibt es hier nichts mehr zu holen -- dann weiter zu rechnen wäre
+            # reine Verschwendung. Und keine harmlose: das genaue Modell rechnet
+            # auf denselben Kernen, und genau in dieser Lage (langer Satz, Name
+            # längst erkannt) standen im Protokoll vom 31.07.2026 die
+            # Ausreißer von 18-24 s Rechenzeit.
+            if erkannt and not self.beim_mitschreiben:
                 continue
 
             vorlaeufig = self._hoer_kurz(schnipsel)
@@ -330,12 +368,30 @@ class Weckwort:
 
         Immer nur ein Ausschnitt, nie der ganze Satz: die Rechenzeit soll
         gleich bleiben, egal wie lange Ramzi schon spricht."""
-        if len(frames) < 20:
+        if len(frames) < MINDEST_FRAMES:
             return None
         audio = np.concatenate(frames).astype(np.float32) / 32768.0
         try:
-            segmente, _ = self.flink.transcribe(audio, language='de', beam_size=1)
-            return ' '.join(s.text for s in segmente).strip()
+            # vad_filter schneidet die Stille weg, BEVOR gerechnet wird. Der
+            # Unterschied ist nicht kosmetisch: nachgemessen am 31.07.2026
+            # brauchte dieses Modell für einen Ausschnitt aus reiner Stille
+            # 6,55 s -- und der Mitlauscher bekommt genau solche Ausschnitte,
+            # wenn Ramzi nach seinem Ruf auf den Ton wartet. Mit dem Filter
+            # sind es 0,00 s. Für echte Sätze ändert sich nichts: gleiches
+            # Ergebnis, gleiche Zeit (0,6 s). Das genaue Modell braucht das
+            # nicht, dort kostet Stille nur 1,4 s -- deshalb steht es nur hier.
+            segmente, _ = self.flink.transcribe(audio, language='de', beam_size=1,
+                                                vad_filter=True)
+            # Nur was das Modell selbst für Sprache hält.
+            #
+            # Whisper erfindet auf Stille Text -- das ist bekannt und war hier
+            # gefährlich, weil so ein erfundener Satz den Namen enthalten und
+            # mich mitten in der Ruhe wecken kann. Nachgemessen am 31.07.2026:
+            # echte Sätze liegen bei no_speech 0,03-0,23, erfundene bei
+            # 0,44-0,49. Die Schwelle liegt dazwischen, mit Luft nach beiden
+            # Seiten.
+            return ' '.join(s.text for s in segmente
+                            if s.no_speech_prob < ERFINDUNGS_SCHWELLE).strip()
         except Exception:
             return None
 

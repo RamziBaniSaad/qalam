@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from pathlib import Path
 import subprocess
 from dotenv import load_dotenv
@@ -148,8 +149,15 @@ try:
     # verschwindet spurlos, der Prozess laeuft weiter und hoert trotzdem nichts.
     # Genau diese Sorte Fehler ist teuer, also bekommt das Ohr ein Protokoll.
     if IST_WINDOWS:
+        # Anhaengen, nicht ueberschreiben. Das Protokoll ist der einzige Ort, an
+        # dem steht, wie lange die Modelle wirklich brauchen -- und am
+        # 31.07.2026 hat genau ein Neustart des Ohrs die Messwerte fast
+        # gekostet, die die Verzoegerung erklaeren sollten. Ein Protokoll, das
+        # ein Neustart loescht, ist bei einem Fehler, der nur manchmal auftritt,
+        # nutzlos.
         ohr_log = open(im_projekt('ohr.log'),
-                       'w', encoding='utf-8', buffering=1)
+                       'a', encoding='utf-8', buffering=1)
+        ohr_log.write(f'\n===== Ohr gestartet {time.strftime("%Y-%m-%d %H:%M:%S")} =====\n')
         ohr = subprocess.Popen([sys.executable, '-u', im_projekt('src', 'assistant.py')],
                                stdout=ohr_log, stderr=subprocess.STDOUT)
         print('Weckwort laeuft mit (Protokoll: ohr.log).')

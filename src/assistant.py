@@ -209,29 +209,53 @@ class Assistent:
             _untertitel(text, wer)
             self.sprecher.sprich_im_hintergrund(text)
 
-    def _erkannt(self):
-        """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
+    def _wach_werden(self):
+        """Aufwachen: Ton, Platzhalter, Folgefenster -- auf welchem Weg der Name
+        auch gehört wurde.
 
-        Ton, und ein ruhiger Platzhalter im Untertitel. Ramzi hat am
-        31.07.2026 ein Video geschickt: der Untertitel zeigte waehrend des
-        Redens wild wechselnden Unsinn. Ursache war NICHT das Ohr -- die
-        richtigen Saetze im Log waren gut lesbar -- sondern die Anzeige: sie
-        zeigte den rohen Text aus _mitschreiben(), und der kommt aus
-        unabhaengigen 3-Sekunden-Fenstern, die irgendwo mitten im Wort
-        anfangen und aufhoeren. Selbst ein perfektes Modell wuerde daraus
-        etwas Zusammenhangloses machen. Deshalb zeigt der Untertitel waehrend
-        des Sprechens jetzt nur noch diesen Platzhalter; den echten,
-        zuverlaessigen Text liefert _geweckt() aus dem genauen Modell."""
+        DASS ES DIESE FUNKTION GIBT, IST DER KERN DER VERZÖGERUNG VOM
+        31.07.2026. Das Aufwachen hing vorher allein am Mitlauscher, und der
+        kann einen kurzen, alleinstehenden Ruf "Noor" gar nicht hören:
+        nachgemessen (`werkzeuge_ohr_messen.py`) sind das 0,66 s Sprache, der
+        Mitlauscher sieht aber erst ab 0,36 s hin und das schnelle Modell gibt
+        für unter einer Sekunde Ton oft gar keinen Text zurück. Ergebnis für
+        Ramzi: er ruft, nichts passiert -- kein Ton, kein Streifen -- und der
+        Satz danach war zusätzlich verloren, weil `folge_bis` nur hier gesetzt
+        wird. Genau das war sein "der Ton kam erst beim dritten Versuch".
+
+        Jetzt darf auch das genaue Modell wecken (siehe _geweckt). Das kostet
+        eine gute Sekunde mehr als der Mitlauscher, ist aber der Weg, der immer
+        funktioniert -- und ein Ton nach 1,5 s ist unendlich besser als keiner.
+
+        Doppelt tönen kann es nicht: ein offenes Folgefenster heißt, dass schon
+        geweckt wurde. Dafür braucht es keinen eigenen Merker, der wieder
+        veralten könnte."""
+        if time.time() < self.ohr.folge_bis:
+            return
         ton('noor_wach.wav')
-        # Platzhalter zurueck (Ramzis Wunsch vom 31.07.2026, ~18:30): er will
-        # SOFORT etwas Sichtbares zum Ton, egal was drinsteht. Das fruehere
-        # Flacker-Problem lag an der 180-Sekunden-Haltezeit, nicht am
-        # Platzhalter selbst -- mit dem jetzt einstellbaren Regler (Standard
-        # 10 s) wird er zuverlaessig durch echten Text ersetzt.
+        # Ramzi will SOFORT etwas Sichtbares zum Ton, egal was drinsteht. Das
+        # frühere Flacker-Problem lag an der 180-Sekunden-Haltezeit, nicht am
+        # Platzhalter selbst -- mit dem einstellbaren Regler (Standard 10 s)
+        # wird er zuverlässig durch echten Text ersetzt.
         _untertitel('… ich höre zu …', 'ramzi')
         # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
         # den Namen, wartet auf dieses Zeichen und redet dann erst los.
         self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
+
+    def _erkannt(self):
+        """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
+
+        Der schnelle Weg: der Mitlauscher hat den Namen im laufenden Satz
+        gefunden, lange bevor der Satz fertig ist. Klappt das, kommt der Ton
+        nach Bruchteilen einer Sekunde. Klappt es nicht, weckt _geweckt().
+
+        Der Untertitel zeigt während des Sprechens bewusst nur den Platzhalter
+        und nicht den rohen Mitschrieb: Ramzi hat am 31.07.2026 ein Video
+        geschickt, in dem der Streifen wild wechselnden Unsinn zeigte. Ursache
+        war nicht das Ohr -- die richtigen Sätze im Log waren gut lesbar --
+        sondern die Anzeige: sie zeigte den Text aus unabhängigen
+        3-Sekunden-Fenstern, die mitten im Wort anfangen und aufhören."""
+        self._wach_werden()
 
     def _geweckt(self, text, endgueltig=True):
         """Wird gerufen, wenn ein Segment erkannt wurde.
@@ -259,15 +283,32 @@ class Assistent:
         # Sätze passiert dort auf der vollständigen, wachsenden Fassung.
         stueck = WECKWORT.sub('', text).strip(' ,.!?')
         self._sammelsatz = f'{self._sammelsatz} {stueck}'.strip() if self._sammelsatz else stueck
-        _untertitel(self._sammelsatz, 'ramzi')
 
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
         if self.ohr.schlaeft:
+            if self._sammelsatz:
+                _untertitel(self._sammelsatz, 'ramzi')
             if endgueltig and self.AUFWECKER.search(text):
                 self.ohr.schlaeft = False
                 self._sag('Ich bin wieder da.')
             self._sammelsatz = ''
             return
+
+        # Der zweite Weg zum Aufwachen -- der, der immer funktioniert. Hat der
+        # Mitlauscher den Namen verpasst (bei einem kurzen Ruf ist das die
+        # Regel, nicht die Ausnahme), weckt hier das genaue Modell. Siehe
+        # _wach_werden() für die Messung dahinter.
+        if WECKWORT.search(text):
+            self._wach_werden()
+
+        # Leeren Text NICHT auf den Streifen legen: der Streifen versteckt sich
+        # bei leerem Text. Ruft Ramzi nur den Namen, bleibt nach dem Abziehen
+        # des Weckworts genau das übrig -- und damit verschwand der Platzhalter
+        # sofort wieder, den _wach_werden() eine Zeile vorher hingeschrieben
+        # hat. Für Ramzi sah es aus, als würde nur noch meine Antwort
+        # untertitelt und sein eigener Satz nie (sein Fund 2 vom 31.07.2026).
+        if self._sammelsatz:
+            _untertitel(self._sammelsatz, 'ramzi')
 
         # Wenn ich gerade rede und angesprochen werde: erst mal Klappe halten.
         # Das ist die einfache Form vom Unterbrochenwerden -- noch nicht
