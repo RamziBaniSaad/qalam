@@ -52,8 +52,40 @@ ERFINDUNGS_SCHWELLE = 0.35
 # 31.07.2026 brauchte das genaue Modell für 15 s Ton normalerweise 1,3-3 s,
 # in den schlechtesten Fällen aber 18-24 s -- immer dann, wenn lange
 # durchgesprochen wurde und der Mitlauscher parallel dauerlief.
-KERNE_FLINK = 2
+#
+# Beide bekommen vier, nicht drei. Sie laufen fast nie gleichzeitig: das genaue
+# Modell fängt erst nach vier Sekunden Stille an, und dann hat der Mitlauscher
+# längst aufgehört (Name gefunden, oder die Äußerung ist vorbei). Für die kurze
+# Überschneidung ein Drittel Tempo beim Aufwachen zu verschenken wäre der
+# falsche Tausch -- die Zeit bis zum Ton ist das, was Ramzi spürt.
+KERNE_FLINK = 4
 KERNE_GENAU = 4
+
+# Wie oft der Mitlauscher in EINER Äußerung nach dem Namen sucht, bevor er
+# aufgibt.
+#
+# Ohne diese Grenze läuft er bei fremder Sprache im Raum (Fernseher, Telefonat)
+# endlos weiter und rechnet gegen das genaue Modell. Wer nach einigen Anläufen
+# den Namen nicht gesagt hat, ruft nicht -- dann ist Schweigen die richtige
+# Antwort, und beim nächsten Redeansatz wird neu gesucht.
+BLICKE_JE_AEUSSERUNG = 6
+
+# Eine KURZE Äußerung braucht keine lange Nachdenkpause.
+#
+# Die Stille-Schwelle steht auf vier Sekunden, und das ist richtig: Ramzi denkt
+# mitten im Satz, und kürzere Werte haben ihn früher mitten im Reden
+# abgeschnitten. Für einen Ruf, der nur aus seinem Namen besteht, ist dieselbe
+# Schwelle aber absurd -- "Noor" sind 0,66 Sekunden, da ist nichts unfertig,
+# was noch kommen könnte. Und weil vorher immer die vier Sekunden abgewartet
+# wurden, kam der Ton auf einen einzelnen Ruf erst nach fünf bis acht Sekunden.
+# Ramzi am 31.07.2026: "die Verzögerung von 8 Sekunden kann ich nicht
+# akzeptieren."
+#
+# Also zwei Schwellen: wer weniger als KURZ_SPRACH_FRAMES gesprochen hat, ist
+# nach KURZE_STILLE_FRAMES fertig. Wer länger geredet hat, bekommt seine vollen
+# vier Sekunden Denkpause -- daran ändert sich nichts.
+KURZ_SPRACH_FRAMES = int(1.5 * 1000 / FRAME_MS)
+KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 
 # Wie Whisper "Noor" verhören kann. Bewusst großzügig: ein verpasstes Weckwort
 # ist ärgerlicher als ein gelegentlicher Fehlstart, den man einfach ignoriert.
@@ -112,7 +144,7 @@ class Weckwort:
 
     def __init__(self, beim_wecken, modell='small', geraet=None,
                  aggressivitaet=3, max_sekunden=15.0, stille_ms=None,
-                 beim_erkennen=None, beim_mitschreiben=None, flink_modell='base',
+                 beim_erkennen=None, beim_mitschreiben=None, flink_modell='small',
                  spricht_gerade=None):
         self.beim_wecken = beim_wecken
         # Solange ICH spreche, ist das Ohr taub -- sonst hört das Mikrofon
@@ -176,17 +208,31 @@ class Weckwort:
 
     @property
     def flink(self):
-        """Das schnelle Modell für den Blick MITTENDRIN.
+        """Das Modell für den Blick MITTENDRIN -- nur zum Aufwachen.
 
         Der Zielkonflikt, den es auflöst: eine lange Redepause braucht eine
-        lange Stille-Schwelle -- aber dann käme das Zeichen "ich höre dich"
-        erst zwei Sekunden nachdem Ramzi ausgeredet hat, und bis dahin redet er
-        ins Ungewisse.
+        lange Stille-Schwelle (4 s), sonst kann Ramzi keinen Satz zu Ende
+        sprechen. Aber dann käme das Zeichen "ich höre dich" erst über fünf
+        Sekunden nachdem er seinen Namen gesagt hat. Also wird schon WÄHREND
+        des Sprechens mitgehört, immer nur auf den letzten Sekunden.
 
-        Also wird schon WÄHREND des Sprechens mitgehört, mit dem kleinsten
-        Modell und nur auf den letzten Sekunden. Das reicht völlig, um den
-        Namen zu finden und einen vorläufigen Untertitel zu zeigen. Der genaue
-        Satz kommt danach vom großen Modell."""
+        WARUM HIER `small` STEHT UND NICHT `base` -- nachgemessen am 31.07.2026,
+        und der Grund ist wichtig genug, ihn aufzuschreiben:
+
+        `base` ist auf gut verständlichen Sätzen dreimal schneller (0,6 s
+        gegen 1,4 s) und wäre die naheliegende Wahl. Auf dem Fall, um den es
+        geht, versagt es aber vollständig: für einen kurzen, alleinstehenden
+        Ruf "Noor" gibt es entweder gar keinen Text zurück oder erfundenen --
+        und es braucht dafür 2,4 bis 4,0 s, weil unklarer Ton das Modell in
+        lange Dekodierschleifen treibt. Es ist also gerade dort langsam UND
+        blind, wo es gebraucht wird, und blockiert in dieser Zeit die Kerne,
+        die das genaue Modell zum Wecken braucht. Ramzi hat genau das gemerkt:
+        die Wartezeit bis zum Ton wurde dadurch länger, nicht kürzer.
+
+        `small` hört den Namen wirklich (im Protokoll bewiesen) und braucht
+        dafür 1,4 s. Es ist ein zweites, eigenes Exemplar mit weniger Kernen --
+        nicht dasselbe wie `modell`, weil faster-whisper ein Exemplar nicht
+        gleichzeitig aus zwei Fäden bedienen kann."""
         if self._flink is None:
             from faster_whisper import WhisperModel
             self._flink = WhisperModel(self.flink_name, device='cpu', compute_type='int8',
@@ -232,6 +278,7 @@ class Weckwort:
 
         puffer = collections.deque()
         stille = 0
+        sprach = 0            # wie viele Bilder davon wirklich Sprache waren
         in_sprache = False
 
         def abgeben(endgueltig):
@@ -271,6 +318,7 @@ class Weckwort:
                 if qalam_nimmt_auf() or self._spricht_gerade():
                     puffer.clear()
                     in_sprache = False
+                    sprach = 0
                     with self._schloss:
                         self._laufend = None
                     continue
@@ -283,6 +331,7 @@ class Weckwort:
                 if ist_sprache:
                     in_sprache = True
                     stille = 0
+                    sprach += 1
                     puffer.append(frame)
                     # Nur einen Ausschnitt hinlegen, damit der Mitlauscher in
                     # seinem eigenen Faden etwas zu tun hat. Kopieren, nicht
@@ -302,10 +351,16 @@ class Weckwort:
                     if stille <= NACHLAUF_FRAMES:
                         with self._schloss:
                             self._laufend = list(puffer)[-BLICK_FRAMES:]
-                    if stille >= self.stille_frames:
+                    # Kurzer Ruf: kurze Schwelle. Siehe KURZ_SPRACH_FRAMES --
+                    # das ist der Unterschied zwischen "Ton nach acht Sekunden"
+                    # und "Ton nach knapp drei".
+                    schwelle = (self.stille_frames if sprach > KURZ_SPRACH_FRAMES
+                                else min(KURZE_STILLE_FRAMES, self.stille_frames))
+                    if stille >= schwelle:
                         abgeben(endgueltig=True)      # echte Stille -- er ist fertig
                         in_sprache = False
                         stille = 0
+                        sprach = 0
 
     def _melde(self, rueckruf, *args):
         """Rückruf aufrufen, ohne dass ein Fehler darin das Ohr umbringt."""
@@ -336,12 +391,14 @@ class Weckwort:
         um keine Millisekunde -- genau daran ist die erste Fassung gescheitert.
         """
         erkannt = False
+        blicke = 0
         while not self._stop.is_set():
             time.sleep(0.3)
             with self._schloss:
                 schnipsel = self._laufend
             if not schnipsel:
                 erkannt = False          # Satz vorbei, beim nächsten neu suchen
+                blicke = 0
                 continue
             if self.schlaeft or len(schnipsel) < MINDEST_FRAMES:
                 continue
@@ -353,7 +410,10 @@ class Weckwort:
             # Ausreißer von 18-24 s Rechenzeit.
             if erkannt and not self.beim_mitschreiben:
                 continue
+            if blicke >= BLICKE_JE_AEUSSERUNG and not erkannt:
+                continue                 # das war kein Ruf -- siehe die Konstante
 
+            blicke += 1
             vorlaeufig = self._hoer_kurz(schnipsel)
             if not vorlaeufig:
                 continue
@@ -364,7 +424,7 @@ class Weckwort:
                 self._melde(self.beim_mitschreiben, vorlaeufig)
 
     def _hoer_kurz(self, frames):
-        """Einen kurzen Ausschnitt mit dem schnellen Modell mithören.
+        """Einen kurzen Ausschnitt mithören, um den Namen zu finden.
 
         Immer nur ein Ausschnitt, nie der ganze Satz: die Rechenzeit soll
         gleich bleiben, egal wie lange Ramzi schon spricht."""
@@ -373,13 +433,11 @@ class Weckwort:
         audio = np.concatenate(frames).astype(np.float32) / 32768.0
         try:
             # vad_filter schneidet die Stille weg, BEVOR gerechnet wird. Der
-            # Unterschied ist nicht kosmetisch: nachgemessen am 31.07.2026
-            # brauchte dieses Modell für einen Ausschnitt aus reiner Stille
-            # 6,55 s -- und der Mitlauscher bekommt genau solche Ausschnitte,
-            # wenn Ramzi nach seinem Ruf auf den Ton wartet. Mit dem Filter
-            # sind es 0,00 s. Für echte Sätze ändert sich nichts: gleiches
-            # Ergebnis, gleiche Zeit (0,6 s). Das genaue Modell braucht das
-            # nicht, dort kostet Stille nur 1,4 s -- deshalb steht es nur hier.
+            # Ausschnitt besteht zum großen Teil aus Stille -- Ramzi hat seinen
+            # Namen gesagt und wartet -- und ohne den Filter rechnet das Modell
+            # darauf mit. Nachgemessen am 31.07.2026: reine Stille kostet mit
+            # Filter 0,01 s statt 1,4 s, und der Name wird zuverlässiger
+            # erkannt ("Nur welcher Tag" statt "Moa, welcher Tag").
             segmente, _ = self.flink.transcribe(audio, language='de', beam_size=1,
                                                 vad_filter=True)
             # Nur was das Modell selbst für Sprache hält.

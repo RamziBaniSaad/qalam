@@ -279,13 +279,18 @@ def fokussiere_eingabefeld(hwnd, tastatur):
     fällt beim Ausschneiden mit ab und wird bei Abbruch zurückgelegt.
 
     Rückgabe: (getroffen, feld_ist_leer, vorhandener_text)
+
+    Wird nichts getroffen, steht in `vorhandener_text` trotzdem, was dabei
+    versehentlich aus einem Feld herausgeschnitten wurde -- damit der Aufrufer
+    es zurücklegen kann. Am 31.07.2026 hat Ramzi genau daran einen langen,
+    gesprochenen Text verloren.
     """
     from pynput.keyboard import Key
 
     def _versuch():
         """Prüfzeichen tippen und nachsehen, ob es angekommen ist.
 
-        Rückgabe: (angekommen, was_vorher_drinstand)"""
+        Rückgabe: (angekommen, was_vorher_drinstand, was_gerettet_werden_muss)"""
         # Schreibmarke ans Ende, BEVOR die Probe getippt wird.
         #
         # Ohne das galt die stille Annahme, Ramzis Schreibmarke stünde schon am
@@ -309,27 +314,39 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         inhalt = _zwischenablage_lesen() or ''
 
         # Zu lang heißt: das war der Chatverlauf, nicht das Feld. Ausgeschnitten
-        # wurde dabei nichts (ein Verlauf ist nicht bearbeitbar), also gibt es
-        # auch nichts zurückzulegen.
+        # wurde dabei nichts (ein Verlauf ist nicht bearbeitbar).
         if len(inhalt) > CHAT_STATT_FELD or PROBE not in inhalt:
             _taste(tastatur, Key.end, mit_strg=False)   # Markierung auflösen
-            return False, ''
+            # ABER: hängt hier etwas, das weder die Marke noch der Chatverlauf
+            # ist, dann wurde eben doch etwas ausgeschnitten -- ein Feld, in dem
+            # die Probe nicht angekommen ist. Das ist Ramzis Text, und er darf
+            # nicht verschwinden, nur weil die Prüfung ihn nicht wiedererkennt.
+            gerettet = ''
+            if inhalt and inhalt != MARKE and len(inhalt) <= CHAT_STATT_FELD:
+                gerettet = inhalt
+            return False, '', gerettet
 
         # Die Probe ist wieder da -- damit ist BEWIESEN, dass hier ein
         # bearbeitbares Feld ist, und zwar unabhängig davon, wo sie gelandet
         # ist. Am Ende ist der Normalfall; sonst die eine Fundstelle entfernen.
         if inhalt.endswith(PROBE):
-            return True, inhalt[:-len(PROBE)]
-        return True, inhalt.replace(PROBE, '', 1)
+            return True, inhalt[:-len(PROBE)], ''
+        return True, inhalt.replace(PROBE, '', 1), ''
 
     # --- Erst ganz ohne Maus ------------------------------------------------
     # Chat-Oberflächen lenken einen Tastendruck von selbst ins Eingabefeld --
     # deshalb hat der allererste Brückenversuch auch ohne jeden Klick
     # funktioniert. Wenn das reicht, ist es der mit Abstand robusteste Weg:
     # keine Koordinaten, nichts, was sich beim nächsten Fensterumbau verschiebt.
-    ok, vorher = _versuch()
+    ok, vorher, gerettet = _versuch()
     if ok:
         return True, (vorher.strip() == ''), vorher
+    # Wurde beim Fehlversuch etwas herausgeschnitten, ist damit BEWIESEN, dass
+    # hier ein Eingabefeld ist -- sonst wäre nichts weggegangen. Dann ist
+    # weitersuchen und -klicken falsch: es würde nur mehr kaputtmachen. Zurück
+    # damit an den Aufrufer, der legt es wieder hinein.
+    if gerettet:
+        return False, False, gerettet
 
     r = _RECT()
     if not _user32.GetWindowRect(hwnd, ctypes.byref(r)):
@@ -353,10 +370,12 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         if y <= r.top + 40:
             continue
         _klick(x, y)
-        ok, vorher = _versuch()
+        ok, vorher, gerettet = _versuch()
         if ok:
             _merke_abstand(abstand)
             return True, (vorher.strip() == ''), vorher
+        if gerettet:
+            return False, False, gerettet
 
     return False, False, ''
 
@@ -384,6 +403,32 @@ def _zurueckschreiben(tastatur, war_leer, seiner):
     time.sleep(0.15)
     _taste(tastatur, 'v')
     time.sleep(0.3)
+
+
+RETTUNG = os.path.join(tempfile.gettempdir(), 'noor-bruecke-rettung.txt')
+
+
+def _rettung_schreiben(auftrag, seiner=''):
+    """Alles Gesprochene und Getippte auf die Platte legen, bevor etwas
+    schiefgehen kann.
+
+    Ramzi hat am 31.07.2026 einen langen, gesprochenen Text verloren, weil die
+    Brücke das Claude-Fenster nicht nach vorn bekam und danach nichts mehr da
+    war -- nicht im Feld, nicht in der Zwischenablage. Sein Satz dazu: bevor
+    überhaupt versucht wird einzufügen, muss das Gesagte gesichert sein.
+
+    Eine Datei und nicht nur die Zwischenablage: die Zwischenablage hat immer
+    nur einen Platz, und auf dem Weg durch die Fokusprüfung wird sie mehrfach
+    gebraucht. Was auf der Platte liegt, übersteht auch einen Absturz."""
+    try:
+        with open(RETTUNG, 'w', encoding='utf-8') as f:
+            f.write(f'--- gesprochen {time.strftime("%Y-%m-%d %H:%M:%S")} ---\n')
+            f.write(auftrag + '\n')
+            if seiner:
+                f.write('\n--- was im Eingabefeld stand ---\n')
+                f.write(seiner + '\n')
+    except OSError:
+        pass
 
 
 def _merker_weg():
@@ -422,10 +467,25 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
     except OSError:
         pass
 
+    # Sichern, BEVOR irgendetwas angefasst wird. Von hier an kann nichts mehr
+    # spurlos verschwinden -- siehe _rettung_schreiben().
+    _rettung_schreiben(auftrag)
+
     from pynput.keyboard import Controller
     tastatur = Controller()
 
     vorher = _zwischenablage_lesen()
+    # Bei einem Fehlschlag bleibt bewusst etwas Wichtiges in der Zwischenablage
+    # liegen. Dann darf sie am Ende NICHT auf ihren alten Inhalt zurückgesetzt
+    # werden -- sonst räumt die Aufräumarbeit genau die Rettung weg.
+    behalten = False
+
+    def _in_die_zwischenablage_retten(text):
+        nonlocal behalten
+        if text and _zwischenablage_schreiben(text):
+            behalten = True
+            return True
+        return False
 
     try:
         # Reihenfolge mit Absicht: erst nach vorn, dann nachsehen, ob das Feld
@@ -434,17 +494,41 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         # Zwischenablage schon überschrieben.
         if not hole_nach_vorn(hwnd):
             _merker_weg()
+            # Hier ist noch nichts angefasst worden, aber der Auftrag wäre weg.
+            # Also in die Zwischenablage damit -- Ramzi drückt einmal Strg+V
+            # und hat ihn zurück.
+            if _in_die_zwischenablage_retten(auftrag):
+                return False, ('Ich bekomme das Claude-Fenster nicht nach vorn. '
+                               'Dein Satz liegt in der Zwischenablage.')
             return False, 'Ich bekomme das Claude-Fenster nicht nach vorn.'
         time.sleep(0.2)
 
         getroffen, leer, seiner = fokussiere_eingabefeld(hwnd, tastatur)
         if not getroffen:
             _merker_weg()
+            # `seiner` ist hier nicht leer, wenn die Prüfung etwas aus einem
+            # Feld herausgeschnitten hat, ohne es wiederzuerkennen. Dann gehört
+            # SEIN Text in die Zwischenablage, nicht mein Auftrag -- meinen
+            # kann er sich wieder sagen, seinen getippten nicht.
+            _rettung_schreiben(auftrag, seiner)
+            if seiner and _in_die_zwischenablage_retten(seiner):
+                return False, ('Ich finde das Eingabefeld nicht. Dein getippter Text '
+                               'liegt in der Zwischenablage, und was du gesagt hast '
+                               'steht in der Rettungsdatei.')
+            if _in_die_zwischenablage_retten(auftrag):
+                return False, ('Ich finde das Eingabefeld nicht. Dein Satz liegt '
+                               'in der Zwischenablage.')
             return False, 'Ich finde das Eingabefeld nicht. Da schreibe ich nichts blind hinein.'
 
         # An dieser Stelle ist das Feld IMMER leer: die Fokusprüfung schneidet
         # aus, was drinstand, und gibt es als `seiner` zurück. Stand dort etwas,
         # muss es hinterher wieder hinein.
+        if not leer:
+            # Sein Text ist ausgeschnitten und hängt nur noch an dieser
+            # Variablen. Auf die Platte damit, bevor die Zwischenablage für den
+            # Auftrag gebraucht wird.
+            _rettung_schreiben(auftrag, seiner)
+
         if not _zwischenablage_schreiben(VORSATZ + auftrag):
             _zurueckschreiben(tastatur, leer, seiner)
             _merker_weg()
@@ -467,8 +551,10 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
     finally:
         # Zwischenablage zurückgeben -- Ramzi hat da oft etwas drin, das er
         # gleich braucht. Kurz warten, sonst überhole ich das eigene Einfügen.
+        # Liegt dort aber eine Rettung, bleibt sie liegen: einen verlorenen Satz
+        # wiederherzustellen ist wichtiger, als eine Zwischenablage aufzuräumen.
         time.sleep(0.4)
-        if vorher is not None:
+        if vorher is not None and not behalten:
             _zwischenablage_schreiben(vorher)
 
     return True, None

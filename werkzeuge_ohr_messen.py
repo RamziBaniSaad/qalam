@@ -90,8 +90,8 @@ def messen(nur_flink=False):
     if not nur_flink:
         _ = ohr.modell
     t_modell = time.time() - t0
-    print(f'  base  geladen in {t_flink:.1f}s')
-    print(f'  small geladen in {t_modell:.1f}s')
+    print(f'  Wachmodell ({ohr.flink_name}) geladen in {t_flink:.1f}s')
+    print(f'  genaues Modell ({ohr.modell_name}) geladen in {t_modell:.1f}s')
     print()
 
     gate = wake_word.MINDEST_FRAMES
@@ -118,7 +118,7 @@ def messen(nur_flink=False):
         vorlaeufig = ohr._hoer_kurz(schnipsel)
         t_kurz = time.time() - t0
         treffer = bool(vorlaeufig and WECKWORT.search(vorlaeufig))
-        print(f'    base  {t_kurz:5.2f}s -> {vorlaeufig!r}   Name gefunden: {treffer}')
+        print(f'    Wachmodell   {t_kurz:5.2f}s -> {vorlaeufig!r}   Name gefunden: {treffer}')
 
         if not nur_flink:
             gehoert = {}
