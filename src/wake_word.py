@@ -447,6 +447,7 @@ class Weckwort:
         """
         erkannt = False
         blicke = 0
+        letzter = ''
         while not self._stop.is_set():
             time.sleep(0.3)
             with self._schloss:
@@ -454,11 +455,13 @@ class Weckwort:
             if not schnipsel:
                 erkannt = False          # Satz vorbei, beim nächsten neu suchen
                 blicke = 0
+                letzter = ''
                 continue
             if self.schlaeft or len(schnipsel) < MINDEST_FRAMES:
                 continue
             # Vorrang für das genaue Modell -- siehe _arbeiter_rechnet.
             if self._arbeiter_rechnet.is_set():
+                self._streifen_wachhalten(letzter, erkannt)
                 continue
             # Ist der Name gefunden und will niemand den laufenden Mitschrieb,
             # gibt es hier nichts mehr zu holen -- dann weiter zu rechnen wäre
@@ -474,7 +477,9 @@ class Weckwort:
             blicke += 1
             vorlaeufig = self._hoer_kurz(schnipsel)
             if not vorlaeufig:
+                self._streifen_wachhalten(letzter, erkannt)
                 continue
+            letzter = vorlaeufig
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True
                 self._melde(self.beim_erkennen)
@@ -488,6 +493,23 @@ class Weckwort:
                             self._kurz_erwartet = True
                     except Exception:
                         pass
+
+    def _streifen_wachhalten(self, letzter, erkannt):
+        """Den letzten Stand nochmal schicken, damit der Streifen nicht abläuft.
+
+        Es gibt zwei Gründe, warum eine Runde des Mitlauschers keinen neuen Text
+        liefert: das genaue Modell hat Vorrang, oder der Ausschnitt gab nichts
+        Lesbares her. Beide sind harmlos -- aber für Ramzi sieht es aus, als
+        wäre das Ohr weg. Am 31.07.2026: "manchmal gibt es kleine Lücken, da
+        habe ich ein bisschen Angst, dass du auf einmal nicht mehr zuhörst.
+        Da würde ich einfach weiterreden."
+
+        Und das ist der teure Teil: er redet dann ins Ungewisse weiter. Also
+        wird derselbe Text noch einmal geschickt. Der Streifen sieht daran einen
+        neuen Zeitpunkt und bleibt stehen, statt in der Haltezeit zu verfallen.
+        """
+        if letzter and (erkannt or time.time() < self.folge_bis):
+            self._melde(self.beim_mitschreiben, letzter)
 
     def _hoer_kurz(self, frames):
         """Einen kurzen Ausschnitt mithören, um den Namen zu finden.
