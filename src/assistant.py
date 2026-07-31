@@ -93,10 +93,13 @@ def _ramzi_untertitel(voller_text, offen):
     NICHT ÜBERNOMMEN, und das ist keine Bequemlichkeit:
       Bei mir leuchtet das Wort, das GERADE klingt. Das kann ich nur, weil ich
       den Ton selbst erzeuge. Sein Text entsteht erst, NACHDEM er gesprochen
-      hat -- ein "aktuelles Wort" gibt es dort nicht mehr, es wäre ein bis drei
-      Sekunden zu spät und würde etwas behaupten, das nicht stimmt.
-      Stattdessen laufen die gerade VERSTANDENEN Wörter einmal durch. Das ist
-      dieselbe Bewegung, sagt aber die Wahrheit: das ist neu angekommen.
+      hat -- ein "aktuelles Wort" gibt es dort nicht mehr.
+
+      Ich hatte es mit einem Durchlauf über die neu verstandenen Wörter
+      versucht. Ramzi hat es gesehen und abgelehnt, mit Recht: "am besten
+      machst du das komplett weg." Bei einer Verzögerung von mehreren Sekunden
+      betont die Bewegung genau das Falsche -- sie sieht lebendig aus, während
+      der Text alt ist. Der Streifen ist hier zum Lesen da, nicht zum Gucken.
     """
     global _ramzi_worte
     try:
@@ -107,20 +110,10 @@ def _ramzi_untertitel(voller_text, offen):
             untertitel.zeige('', 'ramzi')
             return
         anzeige = anzeigen[-1]
-        worte = anzeige.split()
+        _ramzi_worte = anzeige.split()
 
-        # Wie viel davon stand schon da? Der gemeinsame Anfang ist alt, der
-        # Rest ist neu. Wechselt die Anzeige auf eine neue (weil ein Satz voll
-        # ist), stimmt gar nichts überein -- dann leuchtet sie ganz auf, und
-        # das ist richtig so: es ist ja auch alles neu auf dem Streifen.
-        gleich = 0
-        while (gleich < len(worte) and gleich < len(_ramzi_worte)
-               and worte[gleich] == _ramzi_worte[gleich]):
-            gleich += 1
-        _ramzi_worte = worte
-
+        # Ohne `worte`: keine Bewegung, nur Text. Siehe oben.
         untertitel.zeige(anzeige, 'ramzi',
-                         worte=untertitel.sweep_zeiten(worte, gleich),
                          start=time.time(),
                          dauer=None if offen else untertitel.lesezeit(anzeige),
                          offen=offen)

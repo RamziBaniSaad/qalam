@@ -305,12 +305,62 @@ class Weckwort:
         `small` hört den Namen wirklich (im Protokoll bewiesen) und braucht
         dafür 1,4 s. Es ist ein zweites, eigenes Exemplar mit weniger Kernen --
         nicht dasselbe wie `modell`, weil faster-whisper ein Exemplar nicht
-        gleichzeitig aus zwei Fäden bedienen kann."""
+        gleichzeitig aus zwei Fäden bedienen kann.
+
+        Seit dem 01.08.2026 läuft GENAU DIESES Modell auf der Grafikkarte, und
+        nur dieses. Ramzi hat gefragt, ob seine Untertitel schneller gehen und
+        was ihn das an VRAM kostet. Gemessen auf seiner Karte, 5,3 s Testton:
+
+            CPU  int8     1,92 s   (Echtzeitfaktor 0,36)
+            GPU  float16  0,31 s   (Echtzeitfaktor 0,06)   = 6,1x schneller
+            Preis: 750 MB
+
+        Das genaue Modell bleibt bewusst auf der CPU: `large-v3-turbo` bräuchte
+        dort noch einmal rund 2,5 GB, und bei seinen üblichen 4-5 GB Grundlast
+        wäre das über der Grenze. Der laufende Mitschrieb hängt ohnehin an
+        diesem Modell hier, nicht am genauen -- der Gewinn landet also genau da,
+        wo er ihn sehen will.
+
+        Nebeneffekt, der nichts kostet: dieses Modell hat bisher Kerne belegt,
+        auf denen das genaue Modell rechnet. Die sind jetzt frei.
+        """
         if self._flink is None:
             from faster_whisper import WhisperModel
-            self._flink = WhisperModel(self.flink_name, device='cpu', compute_type='int8',
-                                       cpu_threads=KERNE_FLINK)
+            geraet, art = self._wachplatz()
+            self._flink = WhisperModel(
+                self.flink_name, device=geraet,
+                compute_type=art,
+                **({'cpu_threads': KERNE_FLINK} if geraet == 'cpu' else {}))
+            print(f'[Weckwort] Wachmodell laeuft auf {geraet}/{art}.')
         return self._flink
+
+    @staticmethod
+    def _wachplatz():
+        """Grafikkarte -- aber nur, wenn wirklich Platz ist.
+
+        Ramzis harte Regel: NIE über 7 von 8 GB, sonst stürzt der Rechner bis
+        zur Taskleiste ab. Die habe ich am 31.07.2026 schon einmal gerissen.
+        Sie darf nicht davon abhängen, dass gerade zufällig wenig läuft --
+        also wird vor dem Laden nachgesehen, und im Zweifel bleibt es auf der
+        CPU. Lieber langsam als abgestürzt.
+        """
+        import subprocess
+        try:
+            roh = subprocess.check_output(
+                [os.path.join(os.environ.get('WINDIR', r'C:\Windows'),
+                              'System32', 'nvidia-smi.exe'),
+                 '--query-gpu=memory.used', '--format=csv,noheader,nounits'],
+                text=True, stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).strip()
+            benutzt = int(roh.splitlines()[0])
+        except Exception:
+            return 'cpu', 'int8'
+        # 750 MB braucht das Modell, gemessen. 1200 als Puffer, damit ein
+        # kurzer Ausschlag von etwas anderem nicht sofort an die Grenze stösst.
+        if benutzt + 1200 > 7000:
+            print(f'[Weckwort] {benutzt} MB VRAM belegt -- Wachmodell bleibt auf der CPU.')
+            return 'cpu', 'int8'
+        return 'cuda', 'float16'
 
     # ----------------------------------------------------------------------
     def starte(self):
@@ -660,8 +710,14 @@ class Weckwort:
         # Die Messung, die in der Sitzung vom 31.07.2026 fehlte: wie lange
         # braucht das genaue Modell wirklich? Siehe STAND-Sprachschicht.md.
         dauer_rechnen = time.time() - _start
+        # Der Name des Modells stand hier fest als "small" -- und das war
+        # falsch: gemessen wird das GENAUE Modell. Am 01.08.2026 hat mich genau
+        # diese Zeile in die Irre gefuehrt: ich habe das Wachmodell auf die
+        # Grafikkarte geholt, im Protokoll weiter 11 s gesehen und kurz
+        # geglaubt, der Umzug haette nichts gebracht. Ein Protokoll, das das
+        # falsche Bauteil nennt, ist schlimmer als keins.
         print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] {dauer_audio:.1f}s Audio -> '
-              f'{dauer_rechnen:.2f}s Rechenzeit (small)')
+              f'{dauer_rechnen:.2f}s Rechenzeit ({self.modell_name}, genau, CPU)')
 
         if not text:
             return
