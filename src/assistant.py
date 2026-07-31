@@ -37,6 +37,20 @@ def _sag_datum():
     return f'Heute ist {tage[h.weekday()]}, der {h.day}. {h.month}.'
 
 
+def normalisiere(text):
+    """Satz auf eine vergleichbare Form bringen.
+
+    Umlaute auflösen, klein schreiben, Satzzeichen und Mehrfach-Leerzeichen
+    weg. Damit ist es egal, ob Whisper "spät", "spaet" oder "Spät!" schreibt --
+    und die Reflexe unten brauchen jede Schreibweise nur einmal."""
+    t = (text or '').lower()
+    for a, b in (('ä', 'a'), ('ö', 'o'), ('ü', 'u'), ('ß', 'ss'),
+                 ('ae', 'a'), ('oe', 'o'), ('ue', 'u')):
+        t = t.replace(a, b)
+    t = re.sub(r'[^\wäöüß ]+', ' ', t)
+    return re.sub(r'\s+', ' ', t).strip()
+
+
 def _medien(taste):
     """Wiedergabe steuern -- geht ueber die Multimedia-Tasten, also mit jedem
     Player, nicht nur mit Spotify."""
@@ -69,30 +83,62 @@ class Assistent:
         self.ohr = Weckwort(self._geweckt, modell=modell)
         self._laeuft = threading.Event()
 
+        # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
+        #
+        # Vorher stand hier ein Muster wie "wie spät|uhrzeit|wie viel uhr" --
+        # das zwingt Ramzi, eine von drei Formulierungen zu treffen. Er will
+        # reden, nicht ein Kommando aufsagen. Also wird der Satz erst
+        # normalisiert (klein, Umlaute aufgelöst, Satzzeichen weg) und dann auf
+        # kurze Bruchstücke geprüft: ein Treffer genügt.
+        #
+        # Das ist immer noch Mustererkennung, keine Bedeutung. Echtes Verstehen
+        # ("mach mal das Ding aus") kann erst das kleine lokale Modell aus
+        # Stufe 2 -- solange das nicht läuft, ist eine großzügige Liste die
+        # ehrlichere Lösung als ein enges Muster, das oft danebengreift.
         self.reflexe = [
-            # "ae/oe/ue" mit erlauben: Whisper schreibt zwar Umlaute, aber
-            # Tastatur-Eingaben und Tests tun das nicht immer.
-            (re.compile(r'\b(wie sp(ä|ae|a)t|uhrzeit|wie viel uhr)\b', re.I), lambda m: _sag_uhrzeit()),
-            (re.compile(r'\b(welcher tag|welches datum|der wievielte)\b', re.I), lambda m: _sag_datum()),
-            (re.compile(r'\b(schlaf|sei (still|ruhig)|halt die klappe)\b', re.I), self._schlafen),
-            (re.compile(r'\b(wach auf|aufwachen|bist du da)\b', re.I), self._aufwachen),
-            (re.compile(r'\b(stopp?|h[öo]r auf|ruhe)\b', re.I), self._still),
-            (re.compile(r'\b(musik|spotify|lied|song).*(an|aus|weiter|pause|stopp?)', re.I),
-             lambda m: 'Okay.' if _medien('play_pause') else 'Das hat nicht geklappt.'),
-            (re.compile(r'\b(n[äa]chste[rs]?|weiter)\s+(lied|song|titel)', re.I),
-             lambda m: 'Okay.' if _medien('next') else 'Das hat nicht geklappt.'),
+            (['wie spat', 'wie spaet', 'uhrzeit', 'viel uhr', 'uhr haben', 'uhr ist',
+              'zeit haben', 'welche zeit', 'spat ist', 'sag mir die zeit', 'zeit sag'],
+             lambda: _sag_uhrzeit()),
+
+            (['welcher tag', 'welchen tag', 'welches datum', 'wievielte', 'datum',
+              'fur ein tag', 'wochentag', 'heute fur ein'],
+             lambda: _sag_datum()),
+
+            (['schlaf', 'sei still', 'sei ruhig', 'halt die klappe', 'lass mich in ruhe',
+              'pause machen', 'mach pause'],
+             lambda: self._schlafen()),
+
+            (['wach auf', 'aufwachen', 'wach mal auf', 'bist du da', 'bist du wach'],
+             lambda: self._aufwachen()),
+
+            (['hor auf', 'sei mal still', 'ruhe', 'stopp reden', 'nicht weiter reden'],
+             lambda: self._still()),
+
+            (['musik an', 'musik aus', 'musik weiter', 'musik pause', 'musik stopp',
+              'spotify an', 'spotify aus', 'spotify pause', 'mach musik', 'mach mal musik',
+              'lied an', 'lied aus', 'song an', 'song aus', 'playlist an', 'pausier die musik',
+              'stell die musik', 'mach die musik'],
+             lambda: 'Okay.' if _medien('play_pause') else 'Das hat nicht geklappt.'),
+
+            (['nachstes lied', 'nachster song', 'nachste lied', 'nachsten song', 'nachstes stuck',
+              'skip', 'uberspring', 'weiter im lied', 'nachster titel', 'nachstes titel'],
+             lambda: 'Okay.' if _medien('next') else 'Das hat nicht geklappt.'),
+
+            (['vorheriges lied', 'vorheriger song', 'ein lied zuruck', 'nochmal von vorne',
+              'letztes lied'],
+             lambda: 'Okay.' if _medien('previous') else 'Das hat nicht geklappt.'),
         ]
 
     # ------------------------------------------------------------------
-    def _schlafen(self, _m):
+    def _schlafen(self):
         self.ohr.schlaeft = True
         return 'Okay, ich bin still. Sag "Noor, wach auf", wenn du mich brauchst.'
 
-    def _aufwachen(self, _m):
+    def _aufwachen(self):
         self.ohr.schlaeft = False
         return 'Ich bin da.'
 
-    def _still(self, _m):
+    def _still(self):
         self.sprecher.stoppe()
         return None      # nichts sagen -- er will ja gerade Ruhe
 
@@ -121,11 +167,11 @@ class Assistent:
 
         # Weckwort aus dem Satz nehmen, damit der Rest der reine Auftrag ist.
         auftrag = WECKWORT.sub('', text).strip(' ,.!?')
+        geglaettet = normalisiere(auftrag)
 
-        for muster, handler in self.reflexe:
-            treffer = muster.search(auftrag)
-            if treffer:
-                antwort = handler(treffer)
+        for bruchstuecke, handler in self.reflexe:
+            if any(b in geglaettet for b in bruchstuecke):
+                antwort = handler()
                 if antwort:
                     self.sprecher.sprich_im_hintergrund(antwort)
                 return

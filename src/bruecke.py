@@ -171,16 +171,52 @@ def _taste(tastatur, buchstabe, mit_strg=True):
         tastatur.release(buchstabe)
 
 
+class _RECT(ctypes.Structure):
+    _fields_ = [('left', ctypes.c_long), ('top', ctypes.c_long),
+                ('right', ctypes.c_long), ('bottom', ctypes.c_long)]
+
+
+def klick_ins_eingabefeld(hwnd):
+    """In das Eingabefeld klicken, bevor irgendetwas getippt wird.
+
+    Ohne das ist nicht bestimmt, welches Element den Tastaturfokus hat. Am
+    31.07.2026 hat genau das zugeschlagen: Strg+A hat den **Chatverlauf**
+    markiert statt des Eingabefeldes, die Prüfung meldete "da steht was" und
+    die Brücke hat grundlos abgebrochen -- bei einem tatsächlich leeren Feld.
+
+    Das Eingabefeld sitzt unten im Fenster über die volle Breite. Ein Klick
+    knapp über den unteren Rand, mittig, trifft es. Der Mauszeiger wird danach
+    zurückgestellt -- Ramzi soll nicht merken, dass jemand seine Maus benutzt
+    hat.
+    """
+    from pynput.mouse import Controller as Maus, Button
+    r = _RECT()
+    if not _user32.GetWindowRect(hwnd, ctypes.byref(r)):
+        return False
+    x = (r.left + r.right) // 2
+    y = r.bottom - 60          # gemessen an der Desktop-App, Eingabezeile unten
+    if y <= r.top:
+        return False
+
+    maus = Maus()
+    vorher = maus.position
+    maus.position = (x, y)
+    time.sleep(0.12)
+    maus.click(Button.left)
+    time.sleep(0.25)
+    maus.position = vorher
+    return True
+
+
 def _eingabefeld_ist_leer(tastatur):
     """Steht schon etwas im Eingabefeld?
 
-    Am 31.07.2026 teuer gelernt: Ramzi hat gerade getippt, als die Brücke
-    einfügte -- mitten in seinen halben Satz. Also vorher nachsehen: alles
-    markieren, kopieren, lesen, Markierung mit Ende wieder auflösen.
+    Setzt voraus, dass vorher ins Feld geklickt wurde -- sonst misst diese
+    Prüfung irgendein anderes Element und ihre Antwort ist wertlos.
 
-    Im Zweifel wird abgebrochen. Kommt beim Kopieren etwas Unerwartetes zurück
-    (weil die Markierung die ganze Seite erwischt hat statt des Feldes), ist
-    "nicht leer" die richtige Antwort -- lieber nichts tun als etwas zerstören.
+    Alles markieren, kopieren, lesen, Markierung mit Ende wieder auflösen. Kam
+    die gesetzte Marke unverändert zurück, war nichts zu kopieren: das Feld ist
+    leer.
     """
     from pynput.keyboard import Key
     marke = '\x00noor-leer\x00'
@@ -194,7 +230,6 @@ def _eingabefeld_ist_leer(tastatur):
     # Markierung auflösen, sonst überschreibt das folgende Einfügen sie.
     _taste(tastatur, Key.end, mit_strg=False)
     time.sleep(0.15)
-    # Unverändert = es war nichts zu kopieren = das Feld ist leer.
     return inhalt == marke or not (inhalt or '').strip()
 
 
@@ -256,6 +291,10 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
             _merker_weg()
             return False, 'Ich bekomme das Claude-Fenster nicht nach vorn.'
         time.sleep(0.2)
+
+        # Erst hinklicken, dann messen. Ohne den Klick misst die Prüfung
+        # darunter irgendein anderes Element.
+        klick_ins_eingabefeld(hwnd)
 
         if not _eingabefeld_ist_leer(tastatur):
             _merker_weg()
