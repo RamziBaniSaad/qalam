@@ -40,6 +40,10 @@ def _sag_datum():
 
 TOENE = os.path.join(PROJEKT, 'assets')
 
+# Bis zu wie vielen Woertern eine Aeusserung als Reflex gelten darf.
+# Begruendung steht in _geweckt(), an der Stelle, wo es geprueft wird.
+REFLEX_MAX_WOERTER = 10
+
 
 def ton(name):
     """Ein Tonzeichen abspielen, ohne auf das Ende zu warten.
@@ -374,7 +378,24 @@ class Assistent:
         self._sammelsatz = ''
         geglaettet = normalisiere(auftrag)
 
-        for bruchstuecke, handler in self.reflexe:
+        # Reflexe gelten NUR fuer kurze Aeusserungen.
+        #
+        # Das ist die teuerste Lektion des 31.07.2026. Ramzi hat vier Minuten
+        # geredet, wurde leise -- und bekam als Antwort die Uhrzeit. Der Grund
+        # steht in seinem eigenen Satz: "bald um 10 UHR IST mein Limit
+        # zurueckgesetzt". Das Bruchstueck "uhr ist" steht in der Liste unten,
+        # und geprueft wurde der GANZE gesammelte Text. In vier Minuten Rede
+        # steckt irgendwo immer eines dieser Bruchstuecke -- die Liste ist
+        # bewusst grosszuegig, damit er nicht Kommandos aufsagen muss, und
+        # genau diese Grosszuegigkeit wird bei langem Text zur Falle. Sein
+        # ganzer Auftrag war damit weg, und er hat es als "ich rede fuenf
+        # Minuten umsonst" erlebt.
+        #
+        # Ein Reflex ist von Natur aus kurz: "wie spaet ist es", "mach die
+        # Musik an", "lass mich in Ruhe". Zehn Woerter sind reichlich Luft --
+        # der laengste echte Reflex in seinen Tests hatte sechs.
+        kurz_genug = len(geglaettet.split()) <= REFLEX_MAX_WOERTER
+        for bruchstuecke, handler in (self.reflexe if kurz_genug else []):
             if any(b in geglaettet for b in bruchstuecke):
                 # Ein Auftrag ist erledigt -- ab jetzt wieder zu, bis der Name
                 # erneut fällt. Ohne das bliebe das Ohr nach jedem "Noor, wie
