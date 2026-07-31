@@ -109,6 +109,10 @@ def main():
     WACHSTUM = 0.15
     RUHIG_ANTEIL = 0.78       # so hell sind die übrigen Wörter, damit das
                               # aktive überhaupt heraussticht
+    # Platz am linken und rechten Rand, in den die Nachbarn ausweichen dürfen.
+    # Ein Wort von 130 px wächst um 15 Prozent, das sind knapp 10 px je Seite;
+    # 14 px reichen also auch für das längste Wort, das hier je steht.
+    SEITENLUFT = 14
 
     BREITE = 860
     RAND_UNTEN = 90
@@ -154,14 +158,19 @@ def main():
             else:
                 stuecke = [(w, 0.0, 0.0) for w in text.split() if w]
 
-            self._zeilen = []
-            aktuell, x = [], 0
+            # Links und rechts bleibt ein Streifen frei, in den die Nachbarn des
+            # wachsenden Wortes ausweichen dürfen, ohne aus dem Kasten zu
+            # laufen. Siehe paintEvent -- das ist die Hälfte der Lösung für
+            # Ramzis Einwand, dass ein großes Wort an seinen Nachbarn klebt.
+            aktuell, x = [], SEITENLUFT
             leer = mass.horizontalAdvance(' ')
+            nutzbar = self._breite - 2 * SEITENLUFT
+            self._zeilen = []
             for wort, ab, dauer in stuecke:
                 b = mass.horizontalAdvance(wort)
-                if aktuell and x + b > self._breite:
+                if aktuell and x - SEITENLUFT + b > nutzbar:
                     self._zeilen.append(aktuell)
-                    aktuell, x = [], 0
+                    aktuell, x = [], SEITENLUFT
                 aktuell.append((wort, x, ab, dauer))
                 x += b + leer
             if aktuell:
@@ -197,29 +206,60 @@ def main():
 
             for nr, zeile in enumerate(self._zeilen):
                 grund = nr * self._zeilenhoehe + mass.ascent()
-                for wort, x, ab, dauer in zeile:
-                    # Wie weit ist dieses Wort? sin(pi*p) ist genau die Kurve,
-                    # die Ramzi beschrieben hat: weich hoch bis zur Mitte, weich
-                    # wieder runter -- kein Sprung an den Enden.
-                    staerke = 0.0
-                    if vergangen is not None and dauer > 0 and ab <= vergangen < ab + dauer:
-                        staerke = math.sin(math.pi * (vergangen - ab) / dauer)
 
-                    if staerke <= 0.01:
+                # Erst suchen, WELCHES Wort dieser Zeile gerade wächst und wie
+                # weit es dabei über seinen eigenen Platz hinausragt.
+                #
+                # Ramzis Einwand vom 01.08.2026: "das Wort wird so groß, dass
+                # man keinen Abstand mehr sieht -- das klebt dann an den Wörtern
+                # links und rechts." Er hat recht, und mein Entwurf war schuld:
+                # ein Wortzwischenraum ist rund 5 px, ein langes Wort wächst
+                # aber um knapp 10 px je Seite. Es MUSSTE kleben.
+                #
+                # Die Lösung, die weder klebt noch hüpft: die Nachbarn weichen
+                # um genau den Überstand aus -- die links nach links, die rechts
+                # nach rechts. Damit bleibt der sichtbare Abstand konstant,
+                # egal wie groß das Wort gerade ist. Der Umbruch bleibt davon
+                # unberührt (er ist bei Größe 1,0 berechnet), es kann also
+                # nichts in die nächste Zeile rutschen -- genau das wäre das
+                # Hüpfen, das er nicht wollte.
+                aktiv_i, staerke_aktiv, ueberstand = -1, 0.0, 0.0
+                for i, (wort, x, ab, dauer) in enumerate(zeile):
+                    if vergangen is not None and dauer > 0 and ab <= vergangen < ab + dauer:
+                        aktiv_i = i
+                        staerke_aktiv = math.sin(math.pi * (vergangen - ab) / dauer)
+                        ueberstand = (WACHSTUM * staerke_aktiv
+                                      * mass.horizontalAdvance(wort) / 2.0)
+                        break
+
+                for i, (wort, x, ab, dauer) in enumerate(zeile):
+                    if aktiv_i < 0 or i == aktiv_i:
+                        versatz = 0.0
+                    elif i < aktiv_i:
+                        versatz = -ueberstand
+                    else:
+                        versatz = ueberstand
+                    xx = x + versatz
+
+                    if i != aktiv_i:
                         maler.setPen(ruhig)
-                        maler.drawText(x, grund, wort)
+                        maler.drawText(int(round(xx)), grund, wort)
                         continue
 
+                    # sin(pi*p) ist genau die Kurve, die Ramzi beschrieben hat:
+                    # weich hoch bis zur Mitte, weich wieder runter -- kein
+                    # Sprung an den Enden.
                     maler.save()
-                    mitte_x = x + mass.horizontalAdvance(wort) / 2.0
+                    mass_faktor = 1 + WACHSTUM * staerke_aktiv
+                    mitte_x = xx + mass.horizontalAdvance(wort) / 2.0
                     mitte_y = grund - mass.ascent() / 3.0
                     maler.translate(mitte_x, mitte_y)
-                    maler.scale(1 + WACHSTUM * staerke, 1 + WACHSTUM * staerke)
+                    maler.scale(mass_faktor, mass_faktor)
                     maler.translate(-mitte_x, -mitte_y)
                     hell = QColor(self._farbe)
-                    hell.setAlphaF(RUHIG_ANTEIL + (1.0 - RUHIG_ANTEIL) * staerke)
+                    hell.setAlphaF(RUHIG_ANTEIL + (1.0 - RUHIG_ANTEIL) * staerke_aktiv)
                     maler.setPen(hell)
-                    maler.drawText(x, grund, wort)
+                    maler.drawText(int(round(xx)), grund, wort)
                     maler.restore()
 
     class Streifen(QWidget):
