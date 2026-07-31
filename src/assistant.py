@@ -90,7 +90,15 @@ class Assistent:
 
     # Reflexe: Muster -> was zurückgesagt wird. Bewusst klein gehalten --
     # alles, was hier nicht steht, geht an Noor.
-    def __init__(self, stimme=None, modell='base'):
+    # "small" statt "base": base hat Ramzis "wie spät ist es" am 31.07.2026 als
+    # "wie ich pittest es" verstanden -- der Reflex konnte gar nicht greifen,
+    # und der Satz ging unnötig über die Brücke an mich. Nicht die Musterliste
+    # war zu eng, das Hören war zu schlecht.
+    #
+    # small kostet etwa dreimal so viel Rechenzeit wie base, aber weiterhin
+    # KEIN VRAM (int8 auf der CPU, ~250 MB RAM). Bei Sätzen von zwei, drei
+    # Sekunden fällt der Unterschied nicht auf -- ein verhörter Befehl schon.
+    def __init__(self, stimme=None, modell='small'):
         self.sprecher = Sprecher(stimme) if stimme else Sprecher()
         self.ohr = Weckwort(self._geweckt, modell=modell)
         self._laeuft = threading.Event()
@@ -250,7 +258,7 @@ def main(argv=None):
     import argparse
     p = argparse.ArgumentParser(description='Noor hört zu (lokal)')
     p.add_argument('--stimme', default=None)
-    p.add_argument('--modell', default='base', help='Whisper-Größe fürs Weckwort')
+    p.add_argument('--modell', default='small', help='Whisper-Größe fürs Weckwort')
     args = p.parse_args(argv)
 
     a = Assistent(stimme=args.stimme, modell=args.modell)

@@ -144,3 +144,4 @@ config.yaml
 .aufnahme.lock
 stimmen/
 ohr.log
+ohr-fehler.log
