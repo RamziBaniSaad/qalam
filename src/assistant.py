@@ -223,10 +223,12 @@ class Assistent:
         des Sprechens jetzt nur noch diesen Platzhalter; den echten,
         zuverlaessigen Text liefert _geweckt() aus dem genauen Modell."""
         ton('noor_wach.wav')
-        # KEIN Platzhalter im Untertitel mehr. Er wuerde den letzten echten Satz
-        # ueberschreiben und genau das Flackern erzeugen, das Ramzi stoert --
-        # der Streifen soll stehen bleiben, bis echter Text ihn ersetzt. Dass
-        # ich zuhoere, sagt der Ton, und der ist schneller als jede Anzeige.
+        # Platzhalter zurueck (Ramzis Wunsch vom 31.07.2026, ~18:30): er will
+        # SOFORT etwas Sichtbares zum Ton, egal was drinsteht. Das fruehere
+        # Flacker-Problem lag an der 180-Sekunden-Haltezeit, nicht am
+        # Platzhalter selbst -- mit dem jetzt einstellbaren Regler (Standard
+        # 10 s) wird er zuverlaessig durch echten Text ersetzt.
+        _untertitel('… ich höre zu …', 'ramzi')
         # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
         # den Namen, wartet auf dieses Zeichen und redet dann erst los.
         self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
