@@ -20,7 +20,9 @@ gebraucht wird sie von JEDEM Prozess, der sprechen will -- auch vom Sprech-Hook,
 der bei jeder Antwort neu startet und nicht erst numpy/sounddevice laden soll,
 nur um nachzusehen, ob gerade Stille ist.
 """
+import json
 import os
+import tempfile
 import time
 
 PROJEKT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -86,6 +88,72 @@ def redet_merken(an):
             os.remove(REDET_SPERRE)
     except OSError:
         pass
+
+
+# --- Mein eigenes Echo erkennen -------------------------------------------
+#
+# Das Problem, das Ramzi am 01.08.2026 nicht losgelassen hat: er redet, ich
+# rede trotzdem weiter. Sein Bild dazu war richtig -- wer redet, hält den Platz,
+# wie eine geöffnete Tabelle -- und mein Einwand hat ihn zu Recht gestört.
+#
+# Der Einwand stimmt trotzdem, und der Grund steht in wake_word.py: der Platz
+# wird gesetzt, sobald der Name erkannt ist ODER das Folgefenster offen ist,
+# und das ist 20 Sekunden lang der Fall. In genau diesen 20 Sekunden antworte
+# ich. Sein Lautsprecher steht neben seinem Mikrofon, also hört das Ohr MICH,
+# hält das für "da redet jemand" und erneuert den Platz. Prüfte ich den Platz
+# während des Redens, würgte ich mich nach dem ersten Satz selbst ab.
+#
+# Die Lösung braucht aber keine Stimmerkennung, wie ich zuerst dachte, sondern
+# nur etwas, das seit heute Nacht ohnehin da ist: ICH WEISS, WAS ICH GERADE
+# SAGE. Der Untertitel-Streifen enthält genau den Satz samt Startzeit und
+# gemessener Dauer. Was das Mikrofon hört, lässt sich also mit meinem eigenen
+# Text vergleichen -- deckt es sich, war ich es selbst.
+UNTERTITEL = os.path.join(tempfile.gettempdir(), 'noor-untertitel.json')
+
+
+def _mein_satz():
+    """Was ich GERADE sage -- oder None, wenn ich gerade nichts sage."""
+    try:
+        with open(UNTERTITEL, encoding='utf-8') as f:
+            d = json.load(f)
+    except Exception:
+        return None
+    if (d.get('wer') or '').lower() != 'noor':
+        return None
+    start, dauer = d.get('start'), d.get('dauer')
+    if not start or not dauer:
+        return None
+    # Etwas Nachlauf: der Schall braucht seinen Weg, und das Ohr sieht immer
+    # ein Stück Vergangenheit an.
+    if not (start - 0.3 <= time.time() <= start + dauer + 1.0):
+        return None
+    return d.get('text') or None
+
+
+def noor_spricht_gerade():
+    return _mein_satz() is not None
+
+
+def _worte(text):
+    return {w for w in ''.join(
+        c.lower() if c.isalnum() or c.isspace() else ' ' for c in text).split() if len(w) > 2}
+
+
+def ist_mein_echo(gehoert):
+    """Ist das, was das Ohr gehört hat, in Wahrheit meine eigene Stimme?
+
+    Verglichen wird über die Wörter, nicht Zeichen für Zeichen: das schnelle
+    Modell verhört sich, und ein einziger falscher Buchstabe darf die Erkennung
+    nicht kippen. Kurze Wörter fliegen raus, weil "und", "das", "ist" in jedem
+    Satz vorkommen und sonst jede Äußerung wie mein Echo aussähe.
+    """
+    meiner = _mein_satz()
+    if not meiner or not gehoert:
+        return False
+    g = _worte(gehoert)
+    if not g:
+        return False
+    return len(g & _worte(meiner)) / len(g) >= 0.6
 
 
 def ramzi_ist_dran():

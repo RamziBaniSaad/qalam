@@ -542,7 +542,14 @@ class Weckwort:
             # Erneuert jede 0,3 s, solange das gilt; explizit gelöscht wird der
             # Platz in assistant.py, sobald eine echte Stille eintrifft --
             # nicht erst, wenn diese Markierung von selbst verfaellt.
-            if erkannt or time.time() < self.folge_bis:
+            #
+            # ABER nicht, während ich selbst rede: sein Lautsprecher steht neben
+            # seinem Mikrofon, das Ohr hört mich also mit und hielte das für ihn.
+            # In diesem Fall wird erst unten entschieden, wenn der Text da ist
+            # und sich sagen lässt, ob er von ihm stammt oder von mir.
+            im_gespraech = erkannt or time.time() < self.folge_bis
+            ich_rede = warteschlange.noor_spricht_gerade()
+            if im_gespraech and not ich_rede:
                 warteschlange.redet_merken(True)
             # Vorrang für das genaue Modell -- siehe _arbeiter_rechnet.
             if self._arbeiter_rechnet.is_set():
@@ -565,6 +572,12 @@ class Weckwort:
                 self._streifen_wachhalten(letzter, erkannt)
                 continue
             letzter = vorlaeufig
+            # Jetzt steht der Text da: rede ich noch, und ist das NICHT mein
+            # eigenes Echo, dann hat Ramzi mitten in meinem Satz übernommen --
+            # und genau dann soll ich aufhören. Das ist die Lage, die er
+            # beschrieben hat: "ich rede, und du redest trotzdem weiter."
+            if ich_rede and im_gespraech and not warteschlange.ist_mein_echo(vorlaeufig):
+                warteschlange.redet_merken(True)
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True
                 self._melde(self.beim_erkennen)

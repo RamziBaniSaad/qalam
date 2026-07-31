@@ -244,20 +244,24 @@ def _untertitel(text, worte, start, dauer):
 def _er_hat_uebernommen():
     """Hat Ramzi den Platz in der Warteschlange genommen, WÄHREND ich rede?
 
-    Absichtlich nur die Aufnahme-Sperre, NICHT ramzi_redet(): die setzt der
-    Mitlauscher, und der hört über das Mikrofon auch mich selbst -- das Echo
-    ist bis heute ungelöst. Mit ramzi_redet() würde ich mich nach dem ersten
-    Satz jedes Mal selbst abwürgen, und zwar auch dann, wenn im Raum niemand
-    etwas gesagt hat.
+    Beide Wege zählen, und dass der zweite jetzt dabei sein DARF, ist Ramzis
+    Verdienst (01.08.2026). Er hat nicht lockergelassen: "während ich rede, ist
+    das Sprechen blockiert -- da gibt's kein Abwürgen." Sein Bild war richtig,
+    mein Einwand aber auch: das Ohr hört über sein Mikrofon meine eigene Stimme
+    und hätte mich für ihn gehalten.
 
-    Die Aufnahme-Sperre entsteht dagegen nur, wenn er eine Taste gedrückt hat.
-    Das ist eine menschliche Handlung und kann kein Mikrofonartefakt sein --
-    und es ist genau der Fall, in dem es schiefgegangen ist: er hat diktiert,
-    während ich vorgelesen habe.
+    Aufgelöst ist das jetzt im Ohr selbst: es vergibt den Platz nicht mehr
+    blind, sondern vergleicht das Gehörte mit dem, was ich gerade sage --
+    warteschlange.ist_mein_echo(). Damit bedeutet ramzi_redet() endlich das,
+    was der Name sagt, und darf hier geprüft werden.
+
+        Aufnahme-Sperre  -- er hat die Diktat-Taste gedrückt (sofort)
+        ramzi_redet()    -- er spricht mich an, während ich rede (nach dem
+                            nächsten Durchgang des Mitlauschers)
     """
     try:
         import warteschlange
-        return warteschlange.qalam_nimmt_auf()
+        return warteschlange.ramzi_ist_dran()
     except Exception:
         return False
 
