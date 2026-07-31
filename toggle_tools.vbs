@@ -81,9 +81,27 @@ If running Then
     ' weiter, obwohl der Arbeitsmodus aus ist. Bewusst NACH der Rueckmeldung --
     ' mit Claude endet auch eine laufende Sitzung, und der Ton soll vorher da
     ' sein.
-    On Error Resume Next
-    sh.Run "taskkill /IM claude.exe /T /F", 0, True
-    On Error Goto 0
+    '
+    ' NICHT per "taskkill /IM claude.exe": "claude.exe" ist unter Windows
+    ' KEIN eindeutiger Name. Die Claude-Code-Sitzung (dieser CLI-Hintergrund-
+    ' prozess, unter AppData\Roaming\Claude\claude-code\<version>\claude.exe)
+    ' heisst GENAUSO wie die Desktop-App unter WindowsApps\Claude_*\Claude.exe.
+    ' Ein blinder Kill nach Namen haette beim naechsten Ausschalten die
+    ' laufende Noor-Sitzung mit sich gerissen -- am 31.07.2026 vor dem ersten
+    ' echten Einsatz bemerkt, nie ausgeloest. Deshalb wird ueber WMI nach dem
+    ' tatsaechlichen Installationspfad gefiltert: nur was unter "WindowsApps"
+    ' liegt, ist die Desktop-App.
+    Set claudeProcs = svc.ExecQuery( _
+        "SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'Claude.exe'")
+    For Each cp In claudeProcs
+        If Not IsNull(cp.ExecutablePath) Then
+            If InStr(LCase(cp.ExecutablePath), "\windowsapps\") > 0 Then
+                On Error Resume Next
+                sh.Run "taskkill /PID " & cp.ProcessId & " /T /F", 0, True
+                On Error Goto 0
+            End If
+        End If
+    Next
 Else
     ' --- START: Arbeitsmodus hochfahren ---
     sh.CurrentDirectory = proj
