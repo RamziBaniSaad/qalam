@@ -37,6 +37,28 @@ def _sag_datum():
     return f'Heute ist {tage[h.weekday()]}, der {h.day}. {h.month}.'
 
 
+TOENE = os.path.join(PROJEKT, 'assets')
+
+
+def ton(name):
+    """Ein Tonzeichen abspielen, ohne auf das Ende zu warten.
+
+    Ramzis wichtigster Wunsch dabei: er will HÖREN, dass ich zuhöre, bevor er
+    weiterredet -- sonst redet er ins Ungewisse. Deshalb asynchron und ganz
+    vorn, vor jeder Verarbeitung.
+
+    winsound und keine Bibliothek: es ist in Windows eingebaut, braucht kein
+    Audiogerät zu öffnen und ist damit auch dann noch da, wenn Piper gerade
+    spricht."""
+    try:
+        import winsound
+        pfad = os.path.join(TOENE, name)
+        if os.path.exists(pfad):
+            winsound.PlaySound(pfad, winsound.SND_FILENAME | winsound.SND_ASYNC)
+    except Exception:
+        pass
+
+
 def _untertitel(text, wer):
     """Auf den Untertitel-Streifen schreiben, falls es ihn gibt.
 
@@ -180,9 +202,13 @@ class Assistent:
     def _geweckt(self, text):
         """Wird gerufen, sobald der Name gefallen ist. `text` ist der ganze Satz."""
         print(f'[Noor] gehört: {text!r}')
-        # Zuerst zeigen, was angekommen ist -- noch vor jeder Reaktion. Geht ein
-        # Befehl daneben, ist damit sofort sichtbar, ob es am Sagen oder am
-        # Hören lag.
+        # Ton ZUERST, noch vor allem anderen. Er ist die Antwort auf Ramzis
+        # "rede ich hier gerade ins Leere?" -- alles, was davor käme, würde ihn
+        # warten lassen.
+        if not self.ohr.schlaeft:
+            ton('noor_wach.wav')
+        # Dann zeigen, was angekommen ist. Geht ein Befehl daneben, ist damit
+        # sofort sichtbar, ob es am Sagen oder am Hören lag.
         _untertitel(text, 'ramzi')
 
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
@@ -204,16 +230,23 @@ class Assistent:
 
         for bruchstuecke, handler in self.reflexe:
             if any(b in geglaettet for b in bruchstuecke):
+                # Musik bekommt ihr eigenes Zeichen -- Ramzi hört dann schon am
+                # Ton, dass es kein Missverständnis war, bevor Spotify reagiert.
+                ton('noor_musik.wav' if 'musik' in bruchstuecke[0] or 'lied' in bruchstuecke[0]
+                    else 'noor_reflex.wav')
                 antwort = handler()
                 if antwort:
                     self._sag(antwort)
                 return
 
+        # Nur der Name, kein Auftrag: der Wach-Ton oben hat schon alles gesagt.
+        # Ein gesprochenes "Ja?" wäre langsamer und würde ihm ins Wort fallen,
+        # wenn er gerade weiterredet.
         if not auftrag:
-            self._sag('Ja?')
             return
 
         # Alles andere gehört Noor: über die Brücke in die laufende Sitzung.
+        ton('noor_bruecke.wav')
         self._an_noor(auftrag)
 
     # ------------------------------------------------------------------

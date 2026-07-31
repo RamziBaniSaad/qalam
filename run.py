@@ -104,6 +104,27 @@ load_dotenv()
 # enthält -- das trifft diesen Prozess mit, ohne dass dort etwas zu ändern ist.
 # --------------------------------------------------------------------------
 IST_WINDOWS = sys.platform == 'win32'
+HIER = os.path.dirname(os.path.abspath(__file__))
+
+
+def im_projekt(*teile):
+    """Absoluter Pfad ins Projekt -- und das ist kein Schoenheitsfehler.
+
+    Der Umschalter (toggle_tools.vbs) beendet alles, dessen Befehlszeile das
+    Wort "qalam" enthaelt. Bei einem relativen Aufruf wie `src\\assistant.py`
+    steht "qalam" aber nur im Pfad der venv-Huelle -- der ECHTE Python-Prozess
+    dahinter laeuft unter dem System-Python und heisst dann schlicht
+    `pythonw.exe src\\assistant.py`. Der wurde vom Umschalter nie getroffen.
+
+    Folge, am 31.07.2026 am Geraet gemessen: jedes Aus-und-wieder-An liess ein
+    Ohr und einen Untertitel-Streifen zurueck und startete neue dazu. Zwei Ohren
+    streiten sich um dasselbe Mikrofon -- danach hoerte keines mehr etwas, und
+    Ramzi hat dreissigmal vergeblich meinen Namen gerufen.
+
+    Mit dem absoluten Pfad steht "qalam" in JEDER Befehlszeile, und der
+    Umschalter trifft alles.
+    """
+    return os.path.join(HIER, *teile)
 
 # Auf macOS laeuft NUR das Diktat.
 #
@@ -127,9 +148,9 @@ try:
     # verschwindet spurlos, der Prozess laeuft weiter und hoert trotzdem nichts.
     # Genau diese Sorte Fehler ist teuer, also bekommt das Ohr ein Protokoll.
     if IST_WINDOWS:
-        ohr_log = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ohr.log'),
+        ohr_log = open(im_projekt('ohr.log'),
                        'w', encoding='utf-8', buffering=1)
-        ohr = subprocess.Popen([sys.executable, '-u', os.path.join('src', 'assistant.py')],
+        ohr = subprocess.Popen([sys.executable, '-u', im_projekt('src', 'assistant.py')],
                                stdout=ohr_log, stderr=subprocess.STDOUT)
         print('Weckwort laeuft mit (Protokoll: ohr.log).')
     else:
@@ -142,13 +163,13 @@ except Exception as e:
 # muss -- die beiden teilen sich eine Datei, keinen Kanal.
 try:
     if IST_WINDOWS:
-        schrift = subprocess.Popen([sys.executable, os.path.join('src', 'untertitel.py')])
+        schrift = subprocess.Popen([sys.executable, im_projekt('src', 'untertitel.py')])
         print('Untertitel laufen mit.')
 except Exception as e:
     print(f'Untertitel nicht gestartet: {e}')
 
 try:
-    subprocess.run([sys.executable, os.path.join('src', 'main.py')])
+    subprocess.run([sys.executable, im_projekt('src', 'main.py')])
 finally:
     if schrift and schrift.poll() is None:
         schrift.terminate()

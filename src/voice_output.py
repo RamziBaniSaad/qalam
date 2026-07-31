@@ -12,6 +12,7 @@ Aufruf von außen (das ist der Weg, den Skripte nehmen):
     python -m src.voice_output --stimme de_DE-ramona-low "Hallo."
     echo "Text" | python -m src.voice_output -
 """
+import contextlib
 import os
 import queue
 import re
@@ -55,6 +56,43 @@ def in_saetze(text):
     return [s for s in _SATZ_ENDE.split(text) if s.strip()]
 
 
+@contextlib.contextmanager
+def _redeplatz(wartezeit=25.0):
+    """Nur einer redet -- über Prozessgrenzen hinweg.
+
+    Das Problem ist nicht ein Programm, sondern zwei: das Ohr (assistant.py)
+    beantwortet einen Reflex, und gleichzeitig liest der Stop-Hook aus einem
+    ganz anderen Prozess meine Chat-Antwort vor. Ein Schloss innerhalb eines
+    Programms hilft dagegen nicht.
+
+    Ein benannter Windows-Mutex schon: den kennen alle Prozesse unter demselben
+    Namen, und Windows gibt ihn von selbst frei, wenn ein Prozess abstürzt --
+    eine Sperrdatei bliebe liegen und ich wäre für immer stumm.
+
+    Auf anderen Systemen passiert hier nichts; dort läuft die Sprachschicht
+    ohnehin nicht (siehe project_noor_windows_macos im Gedächtnis).
+    """
+    if sys.platform != 'win32':
+        yield
+        return
+
+    import ctypes
+    k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    griff = k32.CreateMutexW(None, False, 'Global\\NoorSprichtGerade')
+    if not griff:
+        yield
+        return
+    try:
+        # Wartet, statt sofort loszureden. Läuft die Wartezeit ab, wird trotzdem
+        # gesprochen -- lieber einmal übereinander als eine verschluckte Antwort.
+        k32.WaitForSingleObject(ctypes.c_void_p(griff), int(wartezeit * 1000))
+        yield
+    finally:
+        k32.ReleaseMutex(ctypes.c_void_p(griff))
+        k32.CloseHandle(ctypes.c_void_p(griff))
+
+
 class Sprecher:
     """Spricht Text über die Lautsprecher. Ein Sprecher pro Prozess reicht.
 
@@ -83,24 +121,30 @@ class Sprecher:
         if not saetze:
             return
 
-        stimme = self.stimme
-        rate = stimme.config.sample_rate
-        self._stop.clear()
+        # Warten, bis niemand sonst spricht. Ohne das reden zwei Prozesse
+        # gleichzeitig: das Ohr beantwortet einen Reflex, während der Stop-Hook
+        # meine Chat-Antwort vorliest. Ramzi hat am 31.07.2026 beides
+        # übereinander gehört und nicht mehr auseinanderhalten können, was
+        # Antwort auf was war.
+        with _redeplatz():
+            stimme = self.stimme
+            rate = stimme.config.sample_rate
+            self._stop.clear()
 
-        # Ein Strom für alle Sätze: sonst knackt es bei jedem Satzwechsel.
-        strom = sd.OutputStream(samplerate=rate, channels=1, dtype='int16')
-        strom.start()
-        try:
-            for satz in saetze:
-                if self._stop.is_set():
-                    break
-                for stueck in stimme.synthesize(satz):
+            # Ein Strom für alle Sätze: sonst knackt es bei jedem Satzwechsel.
+            strom = sd.OutputStream(samplerate=rate, channels=1, dtype='int16')
+            strom.start()
+            try:
+                for satz in saetze:
                     if self._stop.is_set():
                         break
-                    strom.write(stueck.audio_int16_array)
-        finally:
-            strom.stop()
-            strom.close()
+                    for stueck in stimme.synthesize(satz):
+                        if self._stop.is_set():
+                            break
+                        strom.write(stueck.audio_int16_array)
+            finally:
+                strom.stop()
+                strom.close()
 
     def sprich_im_hintergrund(self, text):
         """Startet das Sprechen und kehrt sofort zurück."""

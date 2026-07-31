@@ -61,9 +61,14 @@ If running Then
     NoorSkript "noor-links-zu.ps1", "", True
     NoorSkript "noor-tafel.ps1", "-Stopp", True
 
+    ' /T beendet den ganzen Baum, nicht nur den einen Prozess. Eine venv startet
+    ' den echten Interpreter als Kindprozess; ohne /T bleibt der stehen, und beim
+    ' naechsten Einschalten laufen zwei davon. Zwei Ohren streiten sich dann um
+    ' dasselbe Mikrofon und keines hoert mehr etwas -- am 31.07.2026 genau so
+    ' passiert, Ramzi hat dreissigmal vergeblich gerufen.
     For i = 0 To UBound(pids)
         On Error Resume Next
-        sh.Run "taskkill /PID " & pids(i) & " /F", 0, True
+        sh.Run "taskkill /PID " & pids(i) & " /T /F", 0, True
         On Error Goto 0
     Next
     ' --- zusaetzlich: LLM-Modell aus dem VRAM entladen, damit beim Zocken alles frei ist ---
@@ -72,6 +77,13 @@ If running Then
     sh.Run "cmd /c ollama stop llama3.2:3b", 0, True
     On Error Goto 0
     Melde "aus"
+    ' Claude ganz zum Schluss: er belegt Arbeitsspeicher und laeuft sonst still
+    ' weiter, obwohl der Arbeitsmodus aus ist. Bewusst NACH der Rueckmeldung --
+    ' mit Claude endet auch eine laufende Sitzung, und der Ton soll vorher da
+    ' sein.
+    On Error Resume Next
+    sh.Run "taskkill /IM claude.exe /T /F", 0, True
+    On Error Goto 0
 Else
     ' --- START: Arbeitsmodus hochfahren ---
     sh.CurrentDirectory = proj
@@ -79,5 +91,15 @@ Else
     ' Die Tafel gehoert dazu: sie ging beim Ausschalten mit, also kommt sie
     ' beim Einschalten auch wieder. Alles andere waere eine Einbahnstrasse.
     NoorSkript "noor-tafel.ps1", "", False
+    ' Claude wieder mit hoch. Der Startbefehl steht im Autostart-Eintrag der
+    ' App selbst -- so bleibt er richtig, auch wenn die App sich aktualisiert
+    ' und ihre Versionsnummer im Pfad wechselt.
+    On Error Resume Next
+    claudeBefehl = sh.RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Claude")
+    If Err.Number = 0 And Len(claudeBefehl) > 0 Then
+        sh.Run claudeBefehl, 0, False
+    End If
+    Err.Clear
+    On Error Goto 0
     Melde "an"
 End If
