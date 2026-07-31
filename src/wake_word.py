@@ -33,6 +33,8 @@ FRAME_LEN = int(RATE * FRAME_MS / 1000)
 # Wie viel Ton der Mitlauscher jeweils ansieht: drei Sekunden reichen, um den
 # Namen zu finden, und halten seine Rechenzeit konstant.
 BLICK_FRAMES = int(3.0 * 1000 / FRAME_MS)
+# Satzpause -- siehe starte(), Stille-Zweig. Kein Regler, siehe dort.
+SATZ_STILLE_FRAMES = int(0.6 * 1000 / FRAME_MS)
 # Ab wie viel Ton der Mitlauscher überhaupt hinsieht. Nachgemessen mit
 # `werkzeuge_ohr_messen.py`: ein alleinstehendes "Noor" sind 0,66 s -- die
 # Schwelle muss deutlich darunter liegen, sonst wird der häufigste Ruf
@@ -559,6 +561,37 @@ class Weckwort:
                     kurz = sprach <= KURZ_SPRACH_FRAMES or self._kurz_erwartet
                     schwelle = (min(KURZE_STILLE_FRAMES, self.stille_frames) if kurz
                                 else self.stille_frames)
+
+                    # Satzpause: den bisherigen Satz durchs GENAUE Modell schicken
+                    # und zeigen -- ohne aufzuhoeren zuzuhoeren.
+                    #
+                    # Der eigentliche Fehler, den Ramzi am 01.08.2026 gefunden hat:
+                    # "manchmal live, manchmal nicht, zufaellig". Ursache war eine
+                    # Verwechslung zweier Zwecke. self._laufend/_hoer_kurz sind fuers
+                    # WECKWORT gebaut -- ein 3-Sekunden-Fenster reicht, um "Noor" zu
+                    # finden, mehr braucht das nicht. Genau dieses 3-Sekunden-Fenster
+                    # landete aber auch als "Live-Vorschau" auf dem Streifen -- der
+                    # wuchsende Satz wurde nie angezeigt, nur ein wechselnder
+                    # Ausschnitt seines Endes.
+                    #
+                    # Bisher wurde das GENAUE Modell nur bei echter Stille
+                    # (schwelle, meist mehrere Sekunden) oder wenn der Puffer
+                    # ueberlief gerufen. Jetzt zusaetzlich bei einer kurzen
+                    # Satzpause: mit den Modellen auf der Karte kostet ein
+                    # Zwischenstueck nur noch Bruchteile einer Sekunde (gemessen
+                    # 0,25-0,6 s), das ist guenstig genug fuer jeden Atemzug.
+                    #
+                    # SATZ_STILLE_FRAMES ist bewusst fest und NICHT sein Regler:
+                    # der Regler ("stille_ms") entscheidet, wann er wirklich
+                    # FERTIG ist -- das hier ist kein zweiter Regler, sondern nur
+                    # ein Zwischenstand. Wirkt nur, wenn sie klar VOR seiner
+                    # eigenen Schwelle liegt, sonst wuerden beide auf demselben
+                    # Bild feuern.
+                    if (not kurz and SATZ_STILLE_FRAMES < schwelle
+                            and stille == SATZ_STILLE_FRAMES):
+                        abgeben(endgueltig=False, gesprochene_bilder=sprach)
+                        sprach = 0     # naechstes Stueck faengt bei null an
+
                     if stille >= schwelle:
                         # echte Stille -- er ist fertig
                         abgeben(endgueltig=True, gesprochene_bilder=sprach)
