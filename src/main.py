@@ -125,7 +125,7 @@ class QalamApp(QObject):
         """
         super().__init__()
         self.app = QApplication(sys.argv)
-        self.app.setWindowIcon(QIcon(os.path.join('assets', 'ww-logo.png')))
+        self.app.setWindowIcon(QIcon(os.path.join('assets', 'qalam-logo.png')))
         # WICHTIG: qalam ist eine Menüleisten-App ohne dauerhaftes Fenster. Ohne dies
         # beendet Qt die ganze App, sobald das letzte Fenster schließt – z. B. das
         # Aufnahme-Overlay nach der Transkription -> die App "verschwand" nach jedem
@@ -179,7 +179,7 @@ class QalamApp(QObject):
         """
         Create the system tray icon and its context menu.
         """
-        self.tray_icon = QSystemTrayIcon(QIcon(os.path.join('assets', 'ww-logo.png')), self.app)
+        self.tray_icon = QSystemTrayIcon(QIcon(os.path.join('assets', 'qalam-logo.png')), self.app)
 
         tray_menu = QMenu()
 

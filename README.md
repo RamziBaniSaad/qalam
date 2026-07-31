@@ -1,4 +1,4 @@
-# <img src="./assets/ww-logo.png" alt="Qalam icon" width="25" height="25"> Qalam
+# <img src="./assets/qalam-logo.png" alt="Qalam icon" width="25" height="25"> Qalam
 
 ![version](https://img.shields.io/badge/version-1.1.1-blue)
 
