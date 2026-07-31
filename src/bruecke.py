@@ -134,30 +134,46 @@ def hole_nach_vorn(hwnd):
 # --------------------------------------------------------------------------
 # Text hineinschreiben
 # --------------------------------------------------------------------------
-def _zwischenablage_lesen():
-    try:
-        import win32clipboard
-        win32clipboard.OpenClipboard()
+# Die Zwischenablage gehört unter Windows immer nur einem Prozess gleichzeitig.
+# Direkt nach einem Strg+C hält der kopierende Prozess sie noch, und
+# OpenClipboard scheitert schlicht. Ohne Wiederholung sah das aus wie "da ist
+# kein Text" -- und die Prüfung, ob das Eingabefeld leer ist, hat daraufhin
+# jedes Mal "leer" gesagt, egal was drinstand. Am 31.07.2026 gemessen.
+def _mit_geduld(arbeit, versuche=12, pause=0.08):
+    import win32clipboard
+    for i in range(versuche):
         try:
-            return win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+            win32clipboard.OpenClipboard()
+        except Exception:
+            time.sleep(pause)
+            continue
+        try:
+            return True, arbeit(win32clipboard)
         finally:
-            win32clipboard.CloseClipboard()
-    except Exception:
-        return None
+            try:
+                win32clipboard.CloseClipboard()
+            except Exception:
+                pass
+    return False, None
+
+
+def _zwischenablage_lesen():
+    def _lies(wc):
+        try:
+            return wc.GetClipboardData(wc.CF_UNICODETEXT)
+        except Exception:
+            return None          # kein Text drin -- das ist keine Störung
+    ok, wert = _mit_geduld(_lies)
+    return wert if ok else None
 
 
 def _zwischenablage_schreiben(text):
-    try:
-        import win32clipboard
-        win32clipboard.OpenClipboard()
-        try:
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
-        finally:
-            win32clipboard.CloseClipboard()
+    def _schreib(wc):
+        wc.EmptyClipboard()
+        wc.SetClipboardText(text, wc.CF_UNICODETEXT)
         return True
-    except Exception:
-        return False
+    ok, _ = _mit_geduld(_schreib)
+    return ok
 
 
 def _taste(tastatur, buchstabe, mit_strg=True):
@@ -176,61 +192,103 @@ class _RECT(ctypes.Structure):
                 ('right', ctypes.c_long), ('bottom', ctypes.c_long)]
 
 
-def klick_ins_eingabefeld(hwnd):
-    """In das Eingabefeld klicken, bevor irgendetwas getippt wird.
+# Wenn eine Markierung mehr als so viele Zeichen liefert, war es nicht das
+# Eingabefeld, sondern der Chatverlauf. Ramzis längste Nachrichten sind lange
+# Diktate von zwei- bis dreitausend Zeichen; ein Chatverlauf ist ein Vielfaches
+# davon. Die Grenze trennt beides sicher.
+CHAT_STATT_FELD = 8000
 
-    Ohne das ist nicht bestimmt, welches Element den Tastaturfokus hat. Am
-    31.07.2026 hat genau das zugeschlagen: Strg+A hat den **Chatverlauf**
-    markiert statt des Eingabefeldes, die Prüfung meldete "da steht was" und
-    die Brücke hat grundlos abgebrochen -- bei einem tatsächlich leeren Feld.
+# KEIN \x00 darin: die Windows-Zwischenablage behandelt das Null-Zeichen als
+# Ende der Zeichenkette und legt effektiv einen leeren Text ab. Der Marker war
+# damit nicht wiederzuerkennen, und die Prüfung meldete jedes Mal "leer" --
+# egal was wirklich im Feld stand.
+MARKE = '~~noor-marke-4711~~'
 
-    Das Eingabefeld sitzt unten im Fenster über die volle Breite. Ein Klick
-    knapp über den unteren Rand, mittig, trifft es. Der Mauszeiger wird danach
-    zurückgestellt -- Ramzi soll nicht merken, dass jemand seine Maus benutzt
-    hat.
-    """
+# Das Zeichen, mit dem geprüft wird, ob ein Klick wirklich in einem Eingabefeld
+# gelandet ist. Muss ein ganz gewöhnliches Schriftzeichen sein -- Sonderzeichen
+# lösen in Oberflächen gern Tastenkürzel aus.
+PROBE = 'x'
+
+
+def _klick(x, y):
+    """Einmal klicken und den Mauszeiger zurückstellen.
+
+    Zurückstellen, weil Ramzi nicht merken soll, dass jemand seine Maus
+    benutzt hat -- und weil ein Zeiger, der irgendwo stehen bleibt,
+    Schwebe-Menüs aufklappt."""
     from pynput.mouse import Controller as Maus, Button
-    r = _RECT()
-    if not _user32.GetWindowRect(hwnd, ctypes.byref(r)):
-        return False
-    x = (r.left + r.right) // 2
-    y = r.bottom - 60          # gemessen an der Desktop-App, Eingabezeile unten
-    if y <= r.top:
-        return False
-
     maus = Maus()
     vorher = maus.position
     maus.position = (x, y)
     time.sleep(0.12)
     maus.click(Button.left)
-    time.sleep(0.25)
+    time.sleep(0.3)
     maus.position = vorher
-    return True
 
 
-def _eingabefeld_ist_leer(tastatur):
-    """Steht schon etwas im Eingabefeld?
+def fokussiere_eingabefeld(hwnd, tastatur):
+    """Das Eingabefeld treffen -- und es BEWEISEN, statt es zu hoffen.
 
-    Setzt voraus, dass vorher ins Feld geklickt wurde -- sonst misst diese
-    Prüfung irgendein anderes Element und ihre Antwort ist wertlos.
+    Drei Anläufe am 31.07.2026, jeder auf seine Art danebengegangen:
 
-    Alles markieren, kopieren, lesen, Markierung mit Ende wieder auflösen. Kam
-    die gesetzte Marke unverändert zurück, war nichts zu kopieren: das Feld ist
-    leer.
+      1. Ohne Klick stand nicht fest, welches Element den Tastaturfokus hat.
+         Strg+A markierte den Chatverlauf.
+      2. Klick auf `unterkante - 60` traf die Werkzeugleiste UNTER dem Feld.
+      3. Die Prüfung selbst war blind: sie legte eine Marke in die
+         Zwischenablage und wollte sehen, ob sie ein Strg+C überlebt. Electron
+         **leert** die Zwischenablage aber beim Kopieren einer leeren Auswahl --
+         danach ist gar nichts mehr da, und "gar nichts" sah aus wie "leeres
+         Feld". Die Prüfung sagte deshalb IMMER "leer", egal was drinstand.
+         Auch der Weg über die Windows-Zugänglichkeit fiel aus: Electron gibt
+         seinen Baum nur an Vorlesehilfen heraus, alle Felder kamen ohne
+         Ausmaße und ohne Wert zurück.
+
+    Was jetzt passiert, hängt an nichts davon ab: hinklicken, **ein Zeichen
+    tippen** und nachsehen, ob es angekommen ist. Kommt es an, war es ein
+    Eingabefeld -- das ist kein Indiz, das ist ein Beweis. Was vorher drinstand,
+    fällt beim Ausschneiden mit ab und wird bei Abbruch zurückgelegt.
+
+    Rückgabe: (getroffen, feld_ist_leer, vorhandener_text)
     """
     from pynput.keyboard import Key
-    marke = '\x00noor-leer\x00'
-    _zwischenablage_schreiben(marke)
-    time.sleep(0.15)
-    _taste(tastatur, 'a')
-    time.sleep(0.25)
-    _taste(tastatur, 'c')
-    time.sleep(0.45)
-    inhalt = _zwischenablage_lesen()
-    # Markierung auflösen, sonst überschreibt das folgende Einfügen sie.
-    _taste(tastatur, Key.end, mit_strg=False)
-    time.sleep(0.15)
-    return inhalt == marke or not (inhalt or '').strip()
+    r = _RECT()
+    if not _user32.GetWindowRect(hwnd, ctypes.byref(r)):
+        return False, False, ''
+    x = (r.left + r.right) // 2
+
+    # Abstände von der Unterkante. Das Feld sitzt unten und wächst mit seinem
+    # Inhalt nach oben, deshalb von unten gemessen und mehrere Höhen.
+    for abstand in (95, 115, 75, 140, 165):
+        y = r.bottom - abstand
+        if y <= r.top + 40:
+            continue
+
+        _klick(x, y)
+
+        # Das Prüfzeichen. Landet es im Feld, steht es hinter allem, was schon
+        # da war -- daran ist beides gleichzeitig ablesbar.
+        tastatur.press(PROBE)
+        tastatur.release(PROBE)
+        time.sleep(0.25)
+
+        _zwischenablage_schreiben(MARKE)
+        time.sleep(0.12)
+        _taste(tastatur, 'a')
+        time.sleep(0.22)
+        _taste(tastatur, 'x')          # ausschneiden, nicht kopieren
+        time.sleep(0.45)
+        inhalt = _zwischenablage_lesen() or ''
+
+        if not inhalt.endswith(PROBE) or len(inhalt) > CHAT_STATT_FELD:
+            # Nicht angekommen -> war kein Eingabefeld. Das getippte Zeichen ist
+            # damit auch nirgends gelandet. Nächste Höhe.
+            _taste(tastatur, Key.end, mit_strg=False)
+            continue
+
+        vorher = inhalt[:-len(PROBE)]
+        return True, (vorher.strip() == ''), vorher
+
+    return False, False, ''
 
 
 def _einfuegen_und_senden(tastatur):
@@ -292,11 +350,18 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
             return False, 'Ich bekomme das Claude-Fenster nicht nach vorn.'
         time.sleep(0.2)
 
-        # Erst hinklicken, dann messen. Ohne den Klick misst die Prüfung
-        # darunter irgendein anderes Element.
-        klick_ins_eingabefeld(hwnd)
-
-        if not _eingabefeld_ist_leer(tastatur):
+        getroffen, leer, seiner = fokussiere_eingabefeld(hwnd, tastatur)
+        if not getroffen:
+            _merker_weg()
+            return False, 'Ich finde das Eingabefeld nicht. Da schreibe ich nichts blind hinein.'
+        if not leer:
+            # Sein Text hängt jetzt in der Zwischenablage -- zurücklegen, bevor
+            # abgebrochen wird. Sonst hätte die Prüfung genau das zerstört, was
+            # sie schützen sollte.
+            _zwischenablage_schreiben(seiner)
+            time.sleep(0.15)
+            _taste(tastatur, 'v')
+            time.sleep(0.3)
             _merker_weg()
             return False, 'Du hast noch etwas im Eingabefeld. Ich warte.'
 
