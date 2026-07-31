@@ -66,6 +66,68 @@ def ton(name):
         pass
 
 
+# Was zuletzt auf RAMZIS Streifen stand -- als Wortliste, damit sich sagen
+# lässt, welche Wörter neu dazugekommen sind. Absichtlich ein Modul-Zustand und
+# kein Feld im Assistenten: geschrieben wird aus zwei Ecken (_mitschreiben und
+# _geweckt), und beide meinen denselben Streifen.
+_ramzi_worte = []
+
+
+def _ramzi_untertitel(voller_text, offen):
+    """Ramzis eigene Untertitel -- dasselbe System wie meine, so weit es geht.
+
+    Sein Auftrag vom 01.08.2026: "ich hätte gerne, dass es bei mir so
+    funktioniert wie bei dir. Was möglich ist, kann rein; was nicht möglich
+    ist, muss nicht."
+
+    ÜBERNOMMEN:
+      * die Einteilung (zwei Sätze, gedeckelt durch Länge) -- gemeinsame
+        Fassung in untertitel.einteilen()
+      * der harte Wortumbruch, wenn Whisper gar keine Satzzeichen setzt. Genau
+        daran lag seine Textwand: die Zwei-Satz-Grenze griff nie, weil alles
+        EIN Satz war.
+      * dass der Streifen nicht mitten im Satz verschwindet -- solange er redet,
+        steht die Anzeige (`offen`), danach zählt eine Lesezeit statt seines
+        Reglers.
+
+    NICHT ÜBERNOMMEN, und das ist keine Bequemlichkeit:
+      Bei mir leuchtet das Wort, das GERADE klingt. Das kann ich nur, weil ich
+      den Ton selbst erzeuge. Sein Text entsteht erst, NACHDEM er gesprochen
+      hat -- ein "aktuelles Wort" gibt es dort nicht mehr, es wäre ein bis drei
+      Sekunden zu spät und würde etwas behaupten, das nicht stimmt.
+      Stattdessen laufen die gerade VERSTANDENEN Wörter einmal durch. Das ist
+      dieselbe Bewegung, sagt aber die Wahrheit: das ist neu angekommen.
+    """
+    global _ramzi_worte
+    try:
+        import untertitel
+        anzeigen = untertitel.einteilen(voller_text)
+        if not anzeigen:
+            _ramzi_worte = []
+            untertitel.zeige('', 'ramzi')
+            return
+        anzeige = anzeigen[-1]
+        worte = anzeige.split()
+
+        # Wie viel davon stand schon da? Der gemeinsame Anfang ist alt, der
+        # Rest ist neu. Wechselt die Anzeige auf eine neue (weil ein Satz voll
+        # ist), stimmt gar nichts überein -- dann leuchtet sie ganz auf, und
+        # das ist richtig so: es ist ja auch alles neu auf dem Streifen.
+        gleich = 0
+        while (gleich < len(worte) and gleich < len(_ramzi_worte)
+               and worte[gleich] == _ramzi_worte[gleich]):
+            gleich += 1
+        _ramzi_worte = worte
+
+        untertitel.zeige(anzeige, 'ramzi',
+                         worte=untertitel.sweep_zeiten(worte, gleich),
+                         start=time.time(),
+                         dauer=None if offen else untertitel.lesezeit(anzeige),
+                         offen=offen)
+    except Exception:
+        pass
+
+
 def _untertitel(text, wer):
     """Auf den Untertitel-Streifen schreiben, falls es ihn gibt.
 
@@ -239,7 +301,10 @@ class Assistent:
         ton('noor_nichts.wav')
         # Leerer Text versteckt den Streifen -- sichtbares Zeichen, dass es
         # weg ist, ohne dass ich etwas dazu sage (er will ja gerade Ruhe davor).
-        _untertitel('', 'ramzi')
+        # Ueber _ramzi_untertitel, damit auch der Merker der zuletzt gezeigten
+        # Woerter mit zurueckgesetzt wird -- sonst gaelte der naechste Satz
+        # teilweise als "schon dagewesen" und wuerde nicht aufleuchten.
+        _ramzi_untertitel('', offen=False)
 
     def _abbruch_taste_starten(self):
         """Globale Tastenkombination für _abbrechen().
@@ -361,7 +426,9 @@ class Assistent:
         ihn, und tat nichts. Wer mitgeschrieben wird, wird auch gehört."""
         if not vorlaeufig:
             return
-        _untertitel(vorlaeufig, 'ramzi')
+        # `offen`: er redet noch. Der Streifen bleibt stehen, egal wie kurz die
+        # Haltezeit eingestellt ist.
+        _ramzi_untertitel(vorlaeufig, offen=True)
         self.ohr.folge_bis = max(self.ohr.folge_bis,
                                  time.time() + einstellungen.hole('folge_sekunden'))
 
@@ -424,7 +491,7 @@ class Assistent:
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
         if self.ohr.schlaeft:
             if self._sammelsatz:
-                _untertitel(self._sammelsatz, 'ramzi')
+                _ramzi_untertitel(self._sammelsatz, offen=not endgueltig)
             if endgueltig and self.AUFWECKER.search(text):
                 self.ohr.schlaeft = False
                 self._sag('Ich bin wieder da.')
@@ -445,7 +512,10 @@ class Assistent:
         # hat. Für Ramzi sah es aus, als würde nur noch meine Antwort
         # untertitelt und sein eigener Satz nie (sein Fund 2 vom 31.07.2026).
         if self._sammelsatz:
-            _untertitel(self._sammelsatz, 'ramzi')
+            # `offen` hängt daran, ob das eine echte Stille war: solange er
+            # mitten im Satz nachdenkt, bleibt die Anzeige stehen. Ist er
+            # fertig, zählt eine Lesezeit -- und nicht mehr sein Regler.
+            _ramzi_untertitel(self._sammelsatz, offen=not endgueltig)
 
         # Wenn ich gerade rede und angesprochen werde: erst mal Klappe halten.
         # Das ist die einfache Form vom Unterbrochenwerden -- noch nicht

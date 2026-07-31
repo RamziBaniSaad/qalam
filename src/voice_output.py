@@ -155,42 +155,25 @@ def _redeplatz(wartezeit=25.0):
 # die erzeugten Samples. Damit ist auch seine Sorge erledigt, ein verschobener
 # Tempo-Regler könnte die Anzeige aus dem Tritt bringen: das Tempo steckt bereits
 # im fertigen Ton.
-SAETZE_PRO_ANZEIGE = 2
-# Grobe Obergrenze fuer eine Anzeige, in Zeichen. Nur fuer die EINTEILUNG --
-# die angezeigte Dauer kommt danach aus dem echten Ton. Etwa 120 Zeichen sind
-# bei normalem Tempo gut vier Sekunden: lang genug zum Lesen, kurz genug, dass
-# der Streifen keine Wand wird.
-ZEICHEN_PRO_ANZEIGE = 120
-
-
-def _anzeigen_einteilen(saetze):
+def _anzeigen_einteilen(text):
     """Sätze zu Anzeigen bündeln -- Ramzis Hybrid aus Sätzen UND Länge.
 
     Sein Wunsch, wortgetreu: "normalerweise zwei Sätze, aber gleichzeitig
     abhängig von der Zeit -- wenn du einen langen Satz hast, der so viel Zeit
     braucht wie zwei, dann nimmst du nur den."
 
-    Die ERSTE Anzeige ist absichtlich kürzer. Grund, nachgemessen: bevor der
+    Die Regel selbst liegt seit dem 01.08.2026 in untertitel.py, weil sie beide
+    Seiten betrifft -- meine Sätze und seine. Zwei Fassungen würden
+    auseinanderlaufen, und dann sähen seine Untertitel wieder anders aus als
+    meine; genau das wollte er ja loswerden.
+
+    `erste_kuerzer` ist der einzige Unterschied und gilt nur hier: bevor der
     erste Ton läuft, muss die erste Anzeige fertig erzeugt sein -- nur so steht
-    ihre Dauer fest. Bei voller Länge waren das 0,52 s bis zum ersten Wort statt
-    der gewohnten 0,12 s, und eine Assistentin, die eine halbe Sekunde später
-    anfängt, fühlt sich träger an. Ein einzelner erster Satz halbiert das,
-    danach läuft die Erzeugung ohnehin dem Abspielen davon.
+    ihre Dauer fest. Nachgemessen sind das 0,46 s bis zum ersten Wort statt der
+    gewohnten 0,12 s; ein kurzer erster Satz drückt das, so weit es geht.
     """
-    anzeigen, aktuell, zeichen = [], [], 0
-    for satz in saetze:
-        erste = not anzeigen
-        grenze_saetze = 1 if erste else SAETZE_PRO_ANZEIGE
-        grenze_zeichen = 60 if erste else ZEICHEN_PRO_ANZEIGE
-        if aktuell and (len(aktuell) >= grenze_saetze
-                        or zeichen + len(satz) > grenze_zeichen):
-            anzeigen.append(' '.join(aktuell))
-            aktuell, zeichen = [], 0
-        aktuell.append(satz)
-        zeichen += len(satz)
-    if aktuell:
-        anzeigen.append(' '.join(aktuell))
-    return anzeigen
+    import untertitel
+    return untertitel.einteilen(text, erste_kuerzer=True)
 
 
 def _wortzeiten(text, dauer):
@@ -345,7 +328,7 @@ class Sprecher:
             # brächte nichts und würde beim Abbrechen nur weggeworfen.
             import numpy as np
 
-            anzeigen = _anzeigen_einteilen(saetze)
+            anzeigen = _anzeigen_einteilen(' '.join(saetze))
             fertig = queue.Queue(maxsize=1)
             schluss = threading.Event()
 

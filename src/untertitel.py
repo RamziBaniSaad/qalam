@@ -65,7 +65,111 @@ SAETZE_SICHTBAR = 2
 NACHLAUF = 1.2
 
 
-def zeige(text, wer='noor', worte=None, start=None, dauer=None):
+# --- Einteilen: wie viel steht gleichzeitig da? ----------------------------
+#
+# Hier und nicht in voice_output.py, weil es seit dem 01.08.2026 BEIDE Seiten
+# betrifft: was ich sage und was Ramzi sagt. Zwei Fassungen derselben Regel
+# würden auseinanderlaufen, und dann sähen seine Untertitel wieder anders aus
+# als meine -- genau das wollte er ja loswerden.
+SAETZE_PRO_ANZEIGE = 2
+ZEICHEN_PRO_ANZEIGE = 120
+
+
+def einteilen(text, erste_kuerzer=False):
+    """Text in Anzeigen bündeln -- Ramzis Hybrid aus Sätzen UND Länge.
+
+    Sein Wunsch, wortgetreu: "normalerweise zwei Sätze, aber gleichzeitig
+    abhängig von der Zeit -- wenn du einen langen Satz hast, der so viel Zeit
+    braucht wie zwei, dann nimmst du nur den."
+
+    `erste_kuerzer` gilt nur beim Sprechen: dort muss die erste Anzeige fertig
+    erzeugt sein, bevor der erste Ton läuft, und eine kurze erste Anzeige macht
+    den Anfang schneller. Für gehörten Text ergibt das keinen Sinn -- da ist
+    der Ton längst vorbei.
+    """
+    saetze = [s for s in re.split(r'(?<=[.!?…])\s+', ' '.join((text or '').split()))
+              if s.strip()]
+    if not saetze:
+        return []
+    anzeigen, aktuell, zeichen = [], [], 0
+    for satz in saetze:
+        erste = erste_kuerzer and not anzeigen
+        grenze_saetze = 1 if erste else SAETZE_PRO_ANZEIGE
+        grenze_zeichen = 60 if erste else ZEICHEN_PRO_ANZEIGE
+        if aktuell and (len(aktuell) >= grenze_saetze
+                        or zeichen + len(satz) > grenze_zeichen):
+            anzeigen.append(' '.join(aktuell))
+            aktuell, zeichen = [], 0
+        aktuell.append(satz)
+        zeichen += len(satz)
+    if aktuell:
+        anzeigen.append(' '.join(aktuell))
+
+    # Whisper setzt bei durchgehendem Reden oft GAR KEINE Satzzeichen. Dann ist
+    # alles ein einziger Satz, die Zwei-Satz-Grenze greift nie, und Ramzi
+    # bekommt den ganzen Block als Wand -- genau das, was er als "mal fünf Sätze
+    # auf einmal" beschrieben hat. Also notfalls hart nach Wörtern trennen.
+    #
+    # Getrennt wird NUR, wo Whisper gar keine Satzzeichen geliefert hat. Wo
+    # echte Sätze stehen, bleibt der Satz heil -- ihn nach Zeichen zu zerhacken
+    # wäre schlimmer als eine Zeile zu viel.
+    fein = []
+    for a in anzeigen:
+        if re.search(r'[.!?…]', a):
+            fein.append(a)
+            continue
+        while len(a) > ZEICHEN_PRO_ANZEIGE:
+            worte, teil = a.split(), []
+            while worte and len(' '.join(teil + worte[:1])) <= ZEICHEN_PRO_ANZEIGE:
+                teil.append(worte.pop(0))
+            if not teil:
+                break
+            fein.append(' '.join(teil))
+            a = ' '.join(worte)
+        if a:
+            fein.append(a)
+    return fein
+
+
+def sweep_zeiten(worte, ab_index):
+    """Zeiten für Ramzis Seite: die NEU dazugekommenen Wörter leuchten auf.
+
+    Warum nicht dasselbe wie bei mir: bei mir hebe ich das Wort hervor, das
+    GERADE klingt -- das kann ich, weil ich den Ton selbst erzeuge. Bei ihm
+    entsteht der Text erst, NACHDEM er gesprochen hat. Ein "aktuelles Wort"
+    gibt es dort nicht mehr; es wäre immer ein bis drei Sekunden zu spät und
+    damit gelogen.
+
+    Was ehrlich ist und dasselbe Gefühl gibt: die Wörter, die gerade erst
+    verstanden wurden, laufen einmal von links nach rechts durch. Er sieht
+    dadurch genau, was neu angekommen ist -- und dass ich noch zuhöre.
+
+    Die Wörter lösen sich ab, statt gleichzeitig zu leuchten: der Streifen
+    zeichnet je Zeile ein aktives Wort, und daran hängt auch das Ausweichen der
+    Nachbarn. Ein Durchlauf bleibt unter einer Sekunde.
+    """
+    n = max(0, len(worte) - ab_index)
+    je = min(0.13, 0.9 / n) if n else 0.0
+    zeiten, k = [], 0
+    for i, w in enumerate(worte):
+        if i < ab_index:
+            zeiten.append({'w': w, 'ab': 0.0, 'd': 0.0})
+        else:
+            zeiten.append({'w': w, 'ab': round(k * je, 3), 'd': round(je * 0.95, 3)})
+            k += 1
+    return zeiten
+
+
+def lesezeit(text):
+    """Wie lange ein fertiger Satz stehen bleiben soll, damit man ihn liest.
+
+    Ramzis Regel dazu bleibt gültig: lieber zu lang als zu kurz.
+    """
+    n = len([w for w in (text or '').split() if w])
+    return max(2.5, 0.32 * n)
+
+
+def zeige(text, wer='noor', worte=None, start=None, dauer=None, offen=False):
     """Einen Satz auf die Untertitel legen. Kostet nichts und blockiert nicht.
 
     `worte` ist der Zusatz für MEINE eigenen Untertitel (Ramzis Wunsch vom
@@ -81,6 +185,12 @@ def zeige(text, wer='noor', worte=None, start=None, dauer=None):
     if worte:
         d['worte'] = worte
         d['start'] = start if start is not None else time.time()
+    if offen:
+        # "Er redet noch" -- der Streifen darf nicht ausblenden, egal was für
+        # eine Haltezeit eingestellt ist. Genau daran lag Ramzis "manchmal ist
+        # der Untertitel einfach weg": er dachte mitten im Satz nach, es kam
+        # eine Runde lang nichts Neues, und die Haltezeit lief ab.
+        d['offen'] = True
     if dauer:
         # Wie lange DIESE Anzeige zu hören ist. Ramzis Einwand vom 01.08.2026:
         # "deine Länge, die du einschätzt, ist immer zu kurz." Sie war gar keine
@@ -356,7 +466,8 @@ def main():
                 except Exception:
                     return
                 self.setze(d.get('text', ''), d.get('wer', 'noor'), d.get('zeit', 0),
-                           d.get('worte'), d.get('start'), d.get('dauer'))
+                           d.get('worte'), d.get('start'), d.get('dauer'),
+                           d.get('offen', False))
 
             # Läuft gerade eine Wort-Bewegung? Dann schnell nachzeichnen, sonst
             # zurück in den Ruhetakt. Ohne das Zurückschalten liefe der Streifen
@@ -387,6 +498,13 @@ def main():
             if self.isVisible():
                 if haltezeit <= 0:
                     self.hide()                       # Regler auf 0 = ganz aus
+                elif self._offen:
+                    # Er redet noch. Nur ein Notausgang, falls das Ohr stirbt,
+                    # während es "offen" stehen gelassen hat -- sonst bliebe der
+                    # Streifen für immer stehen, und eine Anzeige, die nicht
+                    # mehr weggeht, ist genauso kaputt wie eine, die zu früh geht.
+                    if time.time() - (self._zeit or 0) > 90:
+                        self.hide()
                 elif self._dauer:
                     if time.time() > (self._start or self._zeit) + self._dauer + NACHLAUF:
                         self.hide()
@@ -396,12 +514,15 @@ def main():
         _zeit = 0
         _dauer = None
         _start = None
+        _offen = False
 
-        def setze(self, text, wer, zeit, worte=None, start=None, dauer=None):
+        def setze(self, text, wer, zeit, worte=None, start=None, dauer=None,
+                  offen=False):
             text = ' '.join((text or '').split())
             self._zeit = zeit or time.time()
             self._dauer = dauer
             self._start = start
+            self._offen = offen
             if not text:
                 self.hide()
                 return
