@@ -18,6 +18,7 @@ WARUM NICHT openWakeWord (Stand 30.07.2026):
 """
 import collections
 import os
+import queue
 import re
 import threading
 import time
@@ -29,6 +30,9 @@ import webrtcvad
 RATE = 16000
 FRAME_MS = 30
 FRAME_LEN = int(RATE * FRAME_MS / 1000)
+# Wie viel Ton der Mitlauscher jeweils ansieht: drei Sekunden reichen, um den
+# Namen zu finden, und halten seine Rechenzeit konstant.
+BLICK_FRAMES = int(3.0 * 1000 / FRAME_MS)
 
 # Wie Whisper "Noor" verhören kann. Bewusst großzügig: ein verpasstes Weckwort
 # ist ärgerlicher als ein gelegentlicher Fehlstart, den man einfach ignoriert.
@@ -86,7 +90,7 @@ class Weckwort:
     """
 
     def __init__(self, beim_wecken, modell='small', geraet=None,
-                 aggressivitaet=2, max_sekunden=25.0, stille_ms=None,
+                 aggressivitaet=2, max_sekunden=15.0, stille_ms=None,
                  beim_erkennen=None, beim_mitschreiben=None, flink_modell='base'):
         self.beim_wecken = beim_wecken
         # Wird gerufen, SOBALD der Name im laufenden Satz auftaucht -- lange
@@ -105,6 +109,9 @@ class Weckwort:
         self._flink = None
         self._stop = threading.Event()
         self._thread = None
+        self._schloss = threading.Lock()
+        self._laufend = None
+        self._auftraege = queue.Queue()
         self.schlaeft = False   # per "Noor, schlaf" abschaltbar
         # Bis wann ein Satz OHNE Weckwort noch als Auftrag gilt. Ramzi sagt oft
         # erst nur den Namen, wartet auf das Zeichen und redet dann weiter --
@@ -172,13 +179,35 @@ class Weckwort:
 
     # ----------------------------------------------------------------------
     def _schleife(self):
+        """Nur zuhören und einsammeln -- NIEMALS hier etwas ausrechnen.
+
+        Der Fehler, der das am 31.07.2026 einmal komplett zerstört hat: Die
+        Erkennung lief in genau dieser Schleife. Während transkribiert wurde,
+        hat niemand mehr Ton vom Mikrofon abgeholt, der Eingangspuffer lief
+        über, und Ramzi bekam nach zwanzig Sekunden alles auf einmal und
+        verstümmelt. Er hat es sofort gemerkt: "das ist komplett kaputt".
+
+        Merksatz: eine Aufnahmeschleife darf nur lesen. Alles, was Zeit kostet,
+        gehört in einen eigenen Faden.
+        """
         _ = self.flink   # das schnelle zuerst -- es wird als Erstes gebraucht
         _ = self.modell
+
+        self._auftraege = queue.Queue()
+        self._laufend = None
+        threading.Thread(target=self._arbeiter, daemon=True).start()
+        threading.Thread(target=self._mitlauscher, daemon=True).start()
+
         puffer = collections.deque()
         stille = 0
         in_sprache = False
-        erkannt = False          # Name im laufenden Satz schon gefunden?
-        letzter_blick = 0.0
+
+        def abgeben():
+            """Fertiges Segment an den Arbeiter geben und neu anfangen."""
+            self._auftraege.put(list(puffer))
+            puffer.clear()
+            with self._schloss:
+                self._laufend = None
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype='int16',
                             blocksize=FRAME_LEN, device=self.geraet) as strom:
@@ -196,6 +225,8 @@ class Weckwort:
                 if qalam_nimmt_auf():
                     puffer.clear()
                     in_sprache = False
+                    with self._schloss:
+                        self._laufend = None
                     continue
 
                 try:
@@ -207,36 +238,20 @@ class Weckwort:
                     in_sprache = True
                     stille = 0
                     puffer.append(frame)
-
-                    # Mittendrin hineinhören: alle paar Zehntel, sobald genug
-                    # Ton da ist. Nur mit dem schnellen Modell und nur auf den
-                    # letzten Sekunden -- das kostet wenig und bringt das
-                    # Zeichen "ich höre dich" um Sekunden nach vorn.
-                    jetzt = time.time()
-                    if (len(puffer) >= 25 and jetzt - letzter_blick > 0.7
-                            and not self.schlaeft):
-                        letzter_blick = jetzt
-                        vorlaeufig = self._hoer_kurz(puffer)
-                        if vorlaeufig:
-                            if not erkannt and WECKWORT.search(vorlaeufig):
-                                erkannt = True
-                                self._melde(self.beim_erkennen)
-                            if erkannt or time.time() < self.folge_bis:
-                                self._melde(self.beim_mitschreiben, vorlaeufig)
-
+                    # Nur einen Ausschnitt hinlegen, damit der Mitlauscher in
+                    # seinem eigenen Faden etwas zu tun hat. Kopieren, nicht
+                    # teilen: an der Deque wird gleich weitergearbeitet.
+                    with self._schloss:
+                        self._laufend = list(puffer)[-BLICK_FRAMES:]
                     if len(puffer) >= self.max_frames:
-                        self._pruefe(puffer)
-                        puffer.clear()
+                        abgeben()
                         in_sprache = False
-                        erkannt = False
                 elif in_sprache:
                     stille += 1
                     puffer.append(frame)
                     if stille >= self.stille_frames:
-                        self._pruefe(puffer)
-                        puffer.clear()
+                        abgeben()
                         in_sprache = False
-                        erkannt = False
                         stille = 0
 
     def _melde(self, rueckruf, *args):
@@ -248,12 +263,50 @@ class Weckwort:
         except Exception as e:
             print(f'[Weckwort] Rückruf fehlgeschlagen: {e}')
 
-    def _hoer_kurz(self, puffer, sekunden=3.0):
-        """Die letzten Sekunden mit dem schnellen Modell mithören.
+    def _arbeiter(self):
+        """Fertige Segmente genau transkribieren -- in Ruhe, neben der Aufnahme."""
+        while not self._stop.is_set():
+            try:
+                frames = self._auftraege.get(timeout=0.4)
+            except queue.Empty:
+                continue
+            try:
+                self._pruefe(frames)
+            except Exception as e:
+                print(f'[Weckwort] Auswertung fehlgeschlagen: {e}')
 
-        Nur ein Ausschnitt, nicht der ganze Puffer: die Rechenzeit soll gleich
-        bleiben, egal wie lange Ramzi schon spricht."""
-        frames = list(puffer)[-int(sekunden * 1000 / FRAME_MS):]
+    def _mitlauscher(self):
+        """Mithören, WÄHREND gesprochen wird -- eigener Faden, eigenes Tempo.
+
+        Er nimmt sich immer nur den letzten Ausschnitt, den die Aufnahme
+        hingelegt hat. Braucht er dafür mal länger, verzögert das die Aufnahme
+        um keine Millisekunde -- genau daran ist die erste Fassung gescheitert.
+        """
+        erkannt = False
+        while not self._stop.is_set():
+            time.sleep(0.3)
+            with self._schloss:
+                schnipsel = self._laufend
+            if not schnipsel:
+                erkannt = False          # Satz vorbei, beim nächsten neu suchen
+                continue
+            if self.schlaeft or len(schnipsel) < 25:
+                continue
+
+            vorlaeufig = self._hoer_kurz(schnipsel)
+            if not vorlaeufig:
+                continue
+            if not erkannt and WECKWORT.search(vorlaeufig):
+                erkannt = True
+                self._melde(self.beim_erkennen)
+            if erkannt or time.time() < self.folge_bis:
+                self._melde(self.beim_mitschreiben, vorlaeufig)
+
+    def _hoer_kurz(self, frames):
+        """Einen kurzen Ausschnitt mit dem schnellen Modell mithören.
+
+        Immer nur ein Ausschnitt, nie der ganze Satz: die Rechenzeit soll
+        gleich bleiben, egal wie lange Ramzi schon spricht."""
         if len(frames) < 20:
             return None
         audio = np.concatenate(frames).astype(np.float32) / 32768.0
