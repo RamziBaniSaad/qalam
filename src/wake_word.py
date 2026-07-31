@@ -102,10 +102,25 @@ KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 # darunter ist es kein Ruf, und dann lohnt sich das Rechnen nicht.
 MINDEST_SPRACH_FRAMES = int(0.35 * 1000 / FRAME_MS)
 
-# Wie Whisper "Noor" verhören kann. Bewusst großzügig: ein verpasstes Weckwort
-# ist ärgerlicher als ein gelegentlicher Fehlstart, den man einfach ignoriert.
+# Wie Whisper "Noor" verhören kann -- zweigeteilt, und das ist der Kern.
+#
+# "nur" ist eines der häufigsten deutschen Wörter. Solange es überall im Satz
+# als Weckwort galt, hat mich jedes Video geweckt: am 31.07.2026 hat Ramzis
+# TikTok mir mitten in der Nacht einen zusammenhanglosen Satz über
+# "legislative, judicial or executive" geschickt. Das ist nicht nur lästig --
+# jeder Fehlstart schickt eine Nachricht an mich und kostet ihn Nutzungslimit.
+#
+# Ramzis Entscheidung dazu (31.07.2026): die eindeutigen Schreibweisen zählen
+# überall, die zweifelhaften nur am ANFANG. Wer ruft, fängt mit dem Namen an;
+# wer "ich habe nur kurz" sagt, hat ihn mitten im Satz. Das trennt beides
+# sauber, ohne einen echten Ruf zu verlieren.
+#
+# Der Preis, bewusst in Kauf genommen: sagt er mitten im Satz "und Noor, mach
+# mal ..." und Whisper schreibt es als "nur", geht dieser Ruf verloren.
+_EINDEUTIG = r'(?:noor|nour|nuur|nuor|nuhr|noah|nura)'
+_ZWEIFELHAFT = r'(?:nur|nor)'
 WECKWORT = re.compile(
-    r'\b(n[ouû]{1,3}r|nuhr|noah|nura|nur|noor|nour)\b',
+    rf'(?:^[\s,.!?"\']*{_ZWEIFELHAFT}\b|\b{_EINDEUTIG}\b)',
     re.IGNORECASE
 )
 
