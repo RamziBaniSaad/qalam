@@ -241,7 +241,10 @@ class Assistent:
         enthielt "Noor" und wurde sofort unvollständig verschickt, danach ging
         das Fenster zu und der Rest seiner ein bis zwei Minuten war verloren.
         """
-        print(f'[Noor] gehört ({"fertig" if endgueltig else "Zwischenstück"}): {text!r}')
+        # Zeitstempel im Log -- ohne den war nicht messbar, wie lange zwischen
+        # Sprechen und Reaktion wirklich vergeht. Siehe
+        # Privat/Ideen/Noor-Ueberall/STAND-Sprachschicht.md, Abschnitt 1.
+        print(f'[{time.strftime("%H:%M:%S")}] [Noor] gehört ({"fertig" if endgueltig else "Zwischenstück"}): {text!r}')
 
         # Weckwort aus dem Satz nehmen und an das bisher Gesammelte anhängen --
         # VOR dem Untertitel, nicht danach. Ramzi hat einen echten Fehler

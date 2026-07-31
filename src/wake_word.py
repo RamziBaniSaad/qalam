@@ -349,12 +349,19 @@ class Weckwort:
         if len(puffer) < 8:      # unter ~0,25 s ist es kein Wort, sondern ein Geräusch
             return
         audio = np.concatenate(list(puffer)).astype(np.float32) / 32768.0
+        dauer_audio = len(puffer) * FRAME_MS / 1000
+        _start = time.time()
         try:
             segmente, _ = self.modell.transcribe(audio, language='de', beam_size=1)
             text = ' '.join(s.text for s in segmente).strip()
         except Exception as e:
             print(f'[Weckwort] Erkennung fehlgeschlagen: {e}')
             return
+        # Die Messung, die in der Sitzung vom 31.07.2026 fehlte: wie lange
+        # braucht das genaue Modell wirklich? Siehe STAND-Sprachschicht.md.
+        dauer_rechnen = time.time() - _start
+        print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] {dauer_audio:.1f}s Audio -> '
+              f'{dauer_rechnen:.2f}s Rechenzeit (small)')
 
         if not text:
             return
