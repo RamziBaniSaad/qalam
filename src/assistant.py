@@ -244,16 +244,23 @@ class Assistent:
     def _abbruch_taste_starten(self):
         """Globale Tastenkombination für _abbrechen().
 
-        Pause/Break -- eine Taste, die kaum je aus Versehen gedrückt wird und
-        historisch schon "laufenden Vorgang abbrechen" bedeutet (Strg+Pause in
-        DOS/Windows-Konsolen). PROVISORISCH: Ramzi wollte sich die Taste noch
-        aussuchen ("ich habe keine Ahnung welche"). Ändern reicht eine Zeile:
-        `keyboard.Key.pause` unten ersetzen."""
+        Die RECHTE Strg-Taste, allein. Ramzis Wahl vom 31.07.2026 aus vier
+        Vorschlägen: "ich benutze immer die linke für alles, was es braucht --
+        die rechte ist für mich wie eine leere Taste."
+
+        Sie ist gleichzeitig ein Modifikator, also könnte ein Strg+C mit der
+        rechten Hand hier fälschlich abbrechen. Bewusst NICHT abgesichert, auf
+        seine ausdrückliche Ansage: "viel zu kompliziert und viel zu
+        unwahrscheinlich -- und jetzt, wo ich es weiß, mache ich es sowieso
+        nicht." Eine Sonderbehandlung für einen Fall, den es nicht gibt, wäre
+        Code, den niemand je wieder versteht.
+
+        Ändern reicht weiterhin eine Zeile: `keyboard.Key.ctrl_r` unten."""
         try:
             from pynput import keyboard
 
             def _gedrueckt(taste):
-                if taste == keyboard.Key.pause:
+                if taste == keyboard.Key.ctrl_r:
                     self._abbrechen()
 
             self._abbruch_listener = keyboard.Listener(on_press=_gedrueckt)

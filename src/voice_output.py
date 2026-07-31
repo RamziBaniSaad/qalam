@@ -143,6 +143,27 @@ def _redeplatz(wartezeit=25.0):
         k32.CloseHandle(ctypes.c_void_p(griff))
 
 
+def _er_hat_uebernommen():
+    """Hat Ramzi den Platz in der Warteschlange genommen, WÄHREND ich rede?
+
+    Absichtlich nur die Aufnahme-Sperre, NICHT ramzi_redet(): die setzt der
+    Mitlauscher, und der hört über das Mikrofon auch mich selbst -- das Echo
+    ist bis heute ungelöst. Mit ramzi_redet() würde ich mich nach dem ersten
+    Satz jedes Mal selbst abwürgen, und zwar auch dann, wenn im Raum niemand
+    etwas gesagt hat.
+
+    Die Aufnahme-Sperre entsteht dagegen nur, wenn er eine Taste gedrückt hat.
+    Das ist eine menschliche Handlung und kann kein Mikrofonartefakt sein --
+    und es ist genau der Fall, in dem es schiefgegangen ist: er hat diktiert,
+    während ich vorgelesen habe.
+    """
+    try:
+        import warteschlange
+        return warteschlange.qalam_nimmt_auf()
+    except Exception:
+        return False
+
+
 class Sprecher:
     """Spricht Text über die Lautsprecher. Ein Sprecher pro Prozess reicht.
 
@@ -213,6 +234,21 @@ class Sprecher:
             try:
                 for satz in saetze:
                     if self._stop.is_set():
+                        break
+                    # Und zwischen JEDEM Satz noch einmal nachsehen.
+                    #
+                    # Ramzi am 31.07.2026, nachdem ich mitten in seine Nachricht
+                    # gesprochen habe: "das mit der Warteschlange funktioniert
+                    # nicht so gut -- ich rede gerade und du hast trotzdem mit
+                    # reingesprochen." Er hat recht, und die Lücke ist genau
+                    # diese: die Prüfung oben lief EINMAL, bevor das erste Wort
+                    # kam. Fängt er danach an, hört mich niemand mehr auf. Je
+                    # länger ich rede, desto größer wird dieses Fenster -- und
+                    # ich sollte an dem Abend länger reden, nicht kürzer.
+                    #
+                    # Der Satz ist die richtige Körnung: ich höre an einer
+                    # natürlichen Stelle auf, nicht mitten im Wort.
+                    if _er_hat_uebernommen():
                         break
                     for stueck in stimme.synthesize(satz, syn_config=klang):
                         if self._stop.is_set():

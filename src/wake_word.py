@@ -117,8 +117,21 @@ MINDEST_SPRACH_FRAMES = int(0.35 * 1000 / FRAME_MS)
 #
 # Der Preis, bewusst in Kauf genommen: sagt er mitten im Satz "und Noor, mach
 # mal ..." und Whisper schreibt es als "nur", geht dieser Ruf verloren.
-_EINDEUTIG = r'(?:noor|nour|nuur|nuor|nuhr|noah|nura)'
-_ZWEIFELHAFT = r'(?:nur|nor)'
+# Ramzis Zusatz vom 31.07.2026: "ich habe manchmal Probleme damit, deinen Namen
+# zu sagen ... auch wenn du sowas wie 'Mur' hörst, also mit M, dass du trotzdem
+# reagierst. Wenn sie nah dran sind, ist das gut genug."
+#
+# Also kommen die M-Verhörer dazu, und sie fallen in dieselbe Zweiteilung: was
+# als deutsches Wort praktisch nie vorkommt, zählt überall; was kurz und
+# alltäglich ist, nur am Anfang. "moor" ist zwar ein deutsches Wort, kommt in
+# Ramzis Sprache aber so selten vor, dass ein Fehlstart daran unwahrscheinlicher
+# ist als ein verpasster Ruf.
+#
+# Der wackeligste Eintrag ist "mo" -- das kann auch der Anfang eines Videos
+# sein. Er steht deshalb nur in der Anfangs-Liste und wäre der erste, den ich
+# wieder herausnehme, falls Fehlstarts auftauchen.
+_EINDEUTIG = r'(?:noor|nour|nuur|nuor|nuhr|noah|nura|moor|muur|muhr|mohr|noer|nohr|mura)'
+_ZWEIFELHAFT = r'(?:nur|nor|mur|mor|moe|mo)'
 WECKWORT = re.compile(
     rf'(?:^[\s,.!?"\']*{_ZWEIFELHAFT}\b|\b{_EINDEUTIG}\b)',
     re.IGNORECASE
