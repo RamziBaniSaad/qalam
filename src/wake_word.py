@@ -87,6 +87,21 @@ BLICKE_JE_AEUSSERUNG = 6
 KURZ_SPRACH_FRAMES = int(1.5 * 1000 / FRAME_MS)
 KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 
+# Ab wann etwas ueberhaupt ein Wort sein kann.
+#
+# Der Stimmenmelder steht auf der empfindlichsten Stufe und schlaegt auch bei
+# einem Huesteln, einem Tastenklick oder einem Gerausch von draussen an. Solange
+# jedes Segment vier Sekunden Stille abwarten musste, fiel das nicht auf -- was
+# danach kam, wuchs einfach mit hinein. Mit der kurzen Schwelle wird aus jedem
+# Gerausch ein eigener Auftrag: im Protokoll vom 31.07.2026 ueber sechzig
+# Einträge "0,9 s Ton -> 1,3 s Rechenzeit", alle ergebnislos. Und weil das
+# genaue Modell dabei dauernd beschaeftigt war, standen daneben Ausreisser von
+# 9,7 s und 25,8 s -- die Wartezeit, die Ramzi spuert.
+#
+# "Noor" sind 0,66 Sekunden. Ein Drittel davon ist eine sichere Untergrenze:
+# darunter ist es kein Ruf, und dann lohnt sich das Rechnen nicht.
+MINDEST_SPRACH_FRAMES = int(0.35 * 1000 / FRAME_MS)
+
 # Wie Whisper "Noor" verhören kann. Bewusst großzügig: ein verpasstes Weckwort
 # ist ärgerlicher als ein gelegentlicher Fehlstart, den man einfach ignoriert.
 WECKWORT = re.compile(
@@ -174,6 +189,15 @@ class Weckwort:
         self._schloss = threading.Lock()
         self._laufend = None
         self._auftraege = queue.Queue()
+        # Rechnet das genaue Modell gerade? Dann hält der Mitlauscher still.
+        #
+        # Die beiden teilen sich sechs Kerne, und wenn sie gleichzeitig rechnen,
+        # verlieren beide. Im Protokoll vom 31.07.2026 stand dafür ein
+        # eindeutiger Beweis: 15 s Ton brauchten normalerweise 2 s, in der
+        # Überschneidung aber 31 s. Der Vorrang ist klar -- das genaue Modell
+        # hält Ramzis fertigen Satz in der Hand, der Mitlauscher sucht nur
+        # nach dem Namen und kann das eine Runde später tun.
+        self._arbeiter_rechnet = threading.Event()
         self.schlaeft = False   # per "Noor, schlaf" abschaltbar
         # Bis wann ein Satz OHNE Weckwort noch als Auftrag gilt. Ramzi sagt oft
         # erst nur den Namen, wartet auf das Zeichen und redet dann weiter --
@@ -281,7 +305,7 @@ class Weckwort:
         sprach = 0            # wie viele Bilder davon wirklich Sprache waren
         in_sprache = False
 
-        def abgeben(endgueltig):
+        def abgeben(endgueltig, gesprochene_bilder=None):
             """Segment an den Arbeiter geben und neu anfangen.
 
             `endgueltig` unterscheidet ZWEI ganz verschiedene Gründe, warum ein
@@ -296,7 +320,16 @@ class Weckwort:
             gehackt, und JEDES Stück einzeln als fertiger Befehl behandelt --
             das erste enthielt "Noor" und wurde sofort (unvollständig!) an
             Noor geschickt, wonach das Fenster wieder zuging und der ganze
-            Rest verloren war."""
+            Rest verloren war.
+
+            War zu wenig Sprache dabei, um ein Wort zu sein, wird gar nichts
+            abgegeben -- siehe MINDEST_SPRACH_FRAMES."""
+            if (gesprochene_bilder is not None
+                    and gesprochene_bilder < MINDEST_SPRACH_FRAMES):
+                puffer.clear()
+                with self._schloss:
+                    self._laufend = None
+                return
             self._auftraege.put((list(puffer), endgueltig))
             puffer.clear()
             with self._schloss:
@@ -357,7 +390,8 @@ class Weckwort:
                     schwelle = (self.stille_frames if sprach > KURZ_SPRACH_FRAMES
                                 else min(KURZE_STILLE_FRAMES, self.stille_frames))
                     if stille >= schwelle:
-                        abgeben(endgueltig=True)      # echte Stille -- er ist fertig
+                        # echte Stille -- er ist fertig
+                        abgeben(endgueltig=True, gesprochene_bilder=sprach)
                         in_sprache = False
                         stille = 0
                         sprach = 0
@@ -378,10 +412,13 @@ class Weckwort:
                 frames, endgueltig = self._auftraege.get(timeout=0.4)
             except queue.Empty:
                 continue
+            self._arbeiter_rechnet.set()
             try:
                 self._pruefe(frames, endgueltig)
             except Exception as e:
                 print(f'[Weckwort] Auswertung fehlgeschlagen: {e}')
+            finally:
+                self._arbeiter_rechnet.clear()
 
     def _mitlauscher(self):
         """Mithören, WÄHREND gesprochen wird -- eigener Faden, eigenes Tempo.
@@ -401,6 +438,9 @@ class Weckwort:
                 blicke = 0
                 continue
             if self.schlaeft or len(schnipsel) < MINDEST_FRAMES:
+                continue
+            # Vorrang für das genaue Modell -- siehe _arbeiter_rechnet.
+            if self._arbeiter_rechnet.is_set():
                 continue
             # Ist der Name gefunden und will niemand den laufenden Mitschrieb,
             # gibt es hier nichts mehr zu holen -- dann weiter zu rechnen wäre
