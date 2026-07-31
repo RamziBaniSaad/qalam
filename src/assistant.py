@@ -199,6 +199,70 @@ class Assistent:
         return None      # nichts sagen -- er will ja gerade Ruhe
 
     # ------------------------------------------------------------------
+    def _abbrechen(self, per_taste=True):
+        """Eine laufende Äußerung sofort verwerfen -- Ramzis Notbremse.
+
+        Sein Wunsch, wortgetreu (31.07.2026): "während ich aufnehme, drücke
+        ich <Taste>, dann passiert das" -- ausdrücklich eine Taste, KEIN
+        Sprachbefehl. Ein gesprochenes "abbrechen" könnte fällig fallen, ohne
+        dass er es meint; eine Taste ist ein bewusster Griff.
+
+        "Du kannst das Ganze in der Zwischenablage speichern, falls ich das
+        aus Versehen gemacht habe und doch meine Meinung geändert habe" --
+        genau das passiert hier: nichts geht endgültig verloren, es landet nur
+        nicht bei mir.
+
+        Wirkt auf zwei Ebenen (Begründung in wake_word.py::abbrechen()):
+        den Puffer, den die Aufnahmeschleife gerade füllt, UND alles, was
+        schon abgegeben, aber noch nicht transkribiert ist."""
+        text = self._sammelsatz
+        self._sammelsatz = ''
+        self.ohr.folge_bis = 0.0
+        self.ohr.abbrechen()
+
+        try:
+            import warteschlange
+            warteschlange.redet_merken(False)
+        except Exception:
+            pass
+
+        if text:
+            try:
+                from bruecke import _zwischenablage_schreiben
+                _zwischenablage_schreiben(text)
+            except Exception:
+                pass
+            print(f'[Noor] Abgebrochen -- in der Zwischenablage gesichert: {text!r}')
+        else:
+            print('[Noor] Abbrechen gedrückt, nichts Laufendes zu verwerfen.')
+
+        ton('noor_nichts.wav')
+        # Leerer Text versteckt den Streifen -- sichtbares Zeichen, dass es
+        # weg ist, ohne dass ich etwas dazu sage (er will ja gerade Ruhe davor).
+        _untertitel('', 'ramzi')
+
+    def _abbruch_taste_starten(self):
+        """Globale Tastenkombination für _abbrechen().
+
+        Pause/Break -- eine Taste, die kaum je aus Versehen gedrückt wird und
+        historisch schon "laufenden Vorgang abbrechen" bedeutet (Strg+Pause in
+        DOS/Windows-Konsolen). PROVISORISCH: Ramzi wollte sich die Taste noch
+        aussuchen ("ich habe keine Ahnung welche"). Ändern reicht eine Zeile:
+        `keyboard.Key.pause` unten ersetzen."""
+        try:
+            from pynput import keyboard
+
+            def _gedrueckt(taste):
+                if taste == keyboard.Key.pause:
+                    self._abbrechen()
+
+            self._abbruch_listener = keyboard.Listener(on_press=_gedrueckt)
+            self._abbruch_listener.start()
+        except Exception as e:
+            self._abbruch_listener = None
+            print(f'[Noor] Abbruch-Taste nicht verfügbar: {e}')
+
+    # ------------------------------------------------------------------
     # Was mich aus dem Schlaf holt. Absichtlich grosszuegig und ohne Weckwort
     # gedacht -- wer mich zehnmal ruft, soll nicht an einer Formulierung
     # scheitern.
@@ -510,6 +574,7 @@ class Assistent:
         self.ohr.starte()
         self._laeuft.set()
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
+        self._abbruch_taste_starten()
         print('[Noor] Ich höre zu. Sag meinen Namen.')
         self.sprecher.sprich('Ich höre zu.')
 
@@ -517,6 +582,8 @@ class Assistent:
         self._laeuft.clear()
         self.ohr.stoppe()
         self.sprecher.stoppe()
+        if getattr(self, '_abbruch_listener', None):
+            self._abbruch_listener.stop()
 
 
 def main(argv=None):

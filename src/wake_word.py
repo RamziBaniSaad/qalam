@@ -230,6 +230,10 @@ class Weckwort:
         # hält Ramzis fertigen Satz in der Hand, der Mitlauscher sucht nur
         # nach dem Namen und kann das eine Runde später tun.
         self._arbeiter_rechnet = threading.Event()
+        # Von einer Notbremse gesetzt (siehe abbrechen()), von der
+        # Aufnahmeschleife selbst wieder geloescht -- ein einmaliges Signal,
+        # keine dauerhafte Sperre wie qalam_nimmt_auf().
+        self._abbrechen_jetzt = threading.Event()
         self.schlaeft = False   # per "Noor, schlaf" abschaltbar
         # Bis wann ein Satz OHNE Weckwort noch als Auftrag gilt. Ramzi sagt oft
         # erst nur den Namen, wartet auf das Zeichen und redet dann weiter --
@@ -311,6 +315,32 @@ class Weckwort:
     def laeuft(self):
         return bool(self._thread and self._thread.is_alive())
 
+    def abbrechen(self):
+        """Eine laufende Aufnahme sofort verwerfen.
+
+        Ramzis Wunsch vom 31.07.2026: eine Notbremse per Taste (nicht per
+        Sprache -- ein gesprochenes "abbrechen" könnte fällig fallen, ohne
+        dass er es meint), die *sofort* wirkt, während er noch mitten in einer
+        Äußerung an mich ist.
+
+        Wirkt auf zwei Ebenen, und beide sind nötig:
+          * der Puffer, den die Aufnahmeschleife GERADE füllt -- geleert im
+            nächsten Durchlauf, spätestens 30 ms später (siehe _schleife()).
+          * alles, was schon fertig aufgenommen, aber noch nicht transkribiert
+            ist -- sonst käme genau der Satz, den er gerade abgebrochen hat,
+            ein paar Sekunden später doch noch bei mir an.
+
+        Was das genaue Modell in DIESEM Moment schon transkribiert (ein
+        Fenster von unter zwei Sekunden), kann dieser Aufruf nicht mehr
+        zurückholen -- das wäre ein zweites, viel größeres Stück Arbeit für
+        einen sehr schmalen Zeitraum und ist bewusst nicht gelöst."""
+        self._abbrechen_jetzt.set()
+        try:
+            while True:
+                self._auftraege.get_nowait()
+        except queue.Empty:
+            pass
+
     # ----------------------------------------------------------------------
     def _schleife(self):
         """Nur zuhören und einsammeln -- NIEMALS hier etwas ausrechnen.
@@ -383,6 +413,20 @@ class Weckwort:
                 if qalam_nimmt_auf() or self._spricht_gerade():
                     puffer.clear()
                     in_sprache = False
+                    sprach = 0
+                    self._kurz_erwartet = False
+                    with self._schloss:
+                        self._laufend = None
+                    continue
+
+                # Die Notbremse -- siehe abbrechen(). Ein einmaliges Signal,
+                # deshalb sofort löschen; sonst würde JEDE nachfolgende
+                # Äußerung ebenfalls verworfen.
+                if self._abbrechen_jetzt.is_set():
+                    self._abbrechen_jetzt.clear()
+                    puffer.clear()
+                    in_sprache = False
+                    stille = 0
                     sprach = 0
                     self._kurz_erwartet = False
                     with self._schloss:
