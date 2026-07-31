@@ -72,8 +72,31 @@ def ton(name):
 # _geweckt), und beide meinen denselben Streifen.
 _ramzi_worte = []
 
+# Bis wann eine Vorschau NICHT mehr anzeigen darf.
+#
+# DER FEHLER, DEN RAMZI GESEHEN HAT (01.08.2026): "warum steht da jetzt auf
+# einmal mein erster Satz? Das verstehe ich nicht." Mal war der Streifen live,
+# mal blieb er stehen, mal sprang er zurueck.
+#
+# Es sind ZWEI Schreiber aus ZWEI Faeden:
+#   der Mitlauscher  -> die laufende Vorschau (_mitschreiben)
+#   der Arbeiter     -> der fertige Satz      (_geweckt)
+# Beide beschriften dieselbe Datei, und wer zuletzt schreibt, gewinnt. Der
+# fertige Satz betrifft aber Ton, der SCHON VORBEI ist -- kommt er nach einer
+# neueren Vorschau an, ueberschreibt er Neues mit Aeltererem. Genau das sah
+# Ramzi als "mein erster Satz steht wieder da".
+#
+# Mit den Modellen auf der Grafikkarte ist es sogar HAEUFIGER geworden: die
+# Ergebnisse kommen jetzt so schnell, dass sie sich ueberholen.
+#
+# Die Regel dagegen ist einfach: ein fertiger Satz gewinnt, und kurz danach
+# darf keine Vorschau mehr dazwischenfunken. Sie handelt ohnehin von Ton, den
+# der fertige Satz schon enthaelt.
+_final_sperre_bis = 0.0
+SPERRE_NACH_FINAL = 1.5
 
-def _ramzi_untertitel(voller_text, offen):
+
+def _ramzi_untertitel(voller_text, offen, vorschau=False):
     """Ramzis eigene Untertitel -- dasselbe System wie meine, so weit es geht.
 
     Sein Auftrag vom 01.08.2026: "ich hätte gerne, dass es bei mir so
@@ -101,7 +124,11 @@ def _ramzi_untertitel(voller_text, offen):
       betont die Bewegung genau das Falsche -- sie sieht lebendig aus, während
       der Text alt ist. Der Streifen ist hier zum Lesen da, nicht zum Gucken.
     """
-    global _ramzi_worte
+    global _ramzi_worte, _final_sperre_bis
+    if vorschau and time.time() < _final_sperre_bis:
+        return                      # ein fertiger Satz steht -- nicht ueberschreiben
+    if not vorschau:
+        _final_sperre_bis = time.time() + SPERRE_NACH_FINAL
     try:
         import untertitel
         anzeigen = untertitel.einteilen(voller_text)
@@ -419,9 +446,10 @@ class Assistent:
         ihn, und tat nichts. Wer mitgeschrieben wird, wird auch gehört."""
         if not vorlaeufig:
             return
-        # `offen`: er redet noch. Der Streifen bleibt stehen, egal wie kurz die
-        # Haltezeit eingestellt ist.
-        _ramzi_untertitel(vorlaeufig, offen=True)
+        # `offen`: er redet noch -- der Streifen bleibt stehen, egal wie kurz
+        # die Haltezeit eingestellt ist. `vorschau`: das hier darf einem
+        # fertigen Satz nicht ins Wort fallen (siehe _final_sperre_bis).
+        _ramzi_untertitel(vorlaeufig, offen=True, vorschau=True)
         self.ohr.folge_bis = max(self.ohr.folge_bis,
                                  time.time() + einstellungen.hole('folge_sekunden'))
 
