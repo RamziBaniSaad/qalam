@@ -160,8 +160,21 @@ class Weckwort:
     def __init__(self, beim_wecken, modell='small', geraet=None,
                  aggressivitaet=3, max_sekunden=15.0, stille_ms=None,
                  beim_erkennen=None, beim_mitschreiben=None, flink_modell='small',
-                 spricht_gerade=None):
+                 spricht_gerade=None, ist_kurzbefehl=None):
         self.beim_wecken = beim_wecken
+        # Darf gefragt werden, ob der laufende Satz ein kurzer Befehl ist.
+        #
+        # Damit löst sich der Zielkonflikt, an dem Ramzi am 31.07.2026 hängen
+        # geblieben ist: die vier Sekunden Stille braucht er, um mitten im Satz
+        # denken zu können -- aber bei "Noor, wie spät ist es" kommt nichts
+        # mehr, und dann sind vier Sekunden Warten auf nichts einfach nur
+        # langsam. Seine Worte: "wenn ich erst nach 10 Sekunden eine Antwort
+        # bekomme, kann ich auch selber auf die Uhr gucken."
+        #
+        # Die Auskunft kostet nichts: der Mitlauscher hat den Satz ohnehin
+        # schon gehört, während gesprochen wurde. Er fragt einfach nach.
+        self.ist_kurzbefehl = ist_kurzbefehl
+        self._kurz_erwartet = False
         # Solange ICH spreche, ist das Ohr taub -- sonst hört das Mikrofon
         # meine eigene Stimme aus den Lautsprechern mit, das flinke Modell
         # verhört sich daran zu Zufallstext, und der landet als "Befehl" bei
@@ -352,6 +365,7 @@ class Weckwort:
                     puffer.clear()
                     in_sprache = False
                     sprach = 0
+                    self._kurz_erwartet = False
                     with self._schloss:
                         self._laufend = None
                     continue
@@ -384,17 +398,21 @@ class Weckwort:
                     if stille <= NACHLAUF_FRAMES:
                         with self._schloss:
                             self._laufend = list(puffer)[-BLICK_FRAMES:]
-                    # Kurzer Ruf: kurze Schwelle. Siehe KURZ_SPRACH_FRAMES --
-                    # das ist der Unterschied zwischen "Ton nach acht Sekunden"
-                    # und "Ton nach knapp drei".
-                    schwelle = (self.stille_frames if sprach > KURZ_SPRACH_FRAMES
-                                else min(KURZE_STILLE_FRAMES, self.stille_frames))
+                    # Kurze Schwelle in zwei Fällen: es war ohnehin nur ein
+                    # kurzer Ruf (siehe KURZ_SPRACH_FRAMES), ODER der
+                    # Mitlauscher hat schon einen fertigen kurzen Befehl gehört
+                    # (siehe ist_kurzbefehl). Sonst bleiben es die vollen vier
+                    # Sekunden, damit Ramzi mitten im Satz denken kann.
+                    kurz = sprach <= KURZ_SPRACH_FRAMES or self._kurz_erwartet
+                    schwelle = (min(KURZE_STILLE_FRAMES, self.stille_frames) if kurz
+                                else self.stille_frames)
                     if stille >= schwelle:
                         # echte Stille -- er ist fertig
                         abgeben(endgueltig=True, gesprochene_bilder=sprach)
                         in_sprache = False
                         stille = 0
                         sprach = 0
+                        self._kurz_erwartet = False
 
     def _melde(self, rueckruf, *args):
         """Rückruf aufrufen, ohne dass ein Fehler darin das Ohr umbringt."""
@@ -462,6 +480,14 @@ class Weckwort:
                 self._melde(self.beim_erkennen)
             if erkannt or time.time() < self.folge_bis:
                 self._melde(self.beim_mitschreiben, vorlaeufig)
+                # Steckt in dem, was bisher zu hören war, schon ein kurzer
+                # Befehl? Dann muss auf keine Denkpause gewartet werden.
+                if self.ist_kurzbefehl and not self._kurz_erwartet:
+                    try:
+                        if self.ist_kurzbefehl(vorlaeufig):
+                            self._kurz_erwartet = True
+                    except Exception:
+                        pass
 
     def _hoer_kurz(self, frames):
         """Einen kurzen Ausschnitt mithören, um den Namen zu finden.

@@ -128,10 +128,10 @@ class Assistent:
         # Zwischenstücke einer laufenden, langen Äußerung sammeln sich hier,
         # bis die echte Stille kommt -- siehe _geweckt().
         self._sammelsatz = ''
-        # beim_mitschreiben bewusst NICHT verdrahtet -- siehe _erkannt() fuer
-        # die Begruendung, warum die rohe Vorschau nicht mehr angezeigt wird.
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
+                            beim_mitschreiben=self._mitschreiben,
+                            ist_kurzbefehl=self._ist_kurzbefehl,
                             spricht_gerade=lambda: self.sprecher.spricht_gerade())
         self._laeuft = threading.Event()
 
@@ -241,6 +241,43 @@ class Assistent:
         # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
         # den Namen, wartet auf dieses Zeichen und redet dann erst los.
         self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
+
+    def _mitschreiben(self, vorlaeufig):
+        """Was gerade zu hören ist, sofort auf den Streifen -- noch während
+        Ramzi redet.
+
+        Ramzis Grund dafür, und es ist der bessere Grund als "sieht nett aus":
+        er redet nach dem Ton weiter und braucht ein Zeichen, dass er nicht ins
+        Leere spricht. Am 31.07.2026: "ich habe darauf gehofft, dass der
+        Untertitel gleich kommt, damit ich weiß, dass du immer noch zuhörst.
+        Ist nie passiert."
+
+        Vorher war das abgeschaltet, weil der Streifen wild wechselnden Unsinn
+        zeigte -- das kam aber vom kleinen Modell, das über 3-Sekunden-Fenster
+        stolperte. Der Mitlauscher hört inzwischen mit demselben genauen Modell
+        wie der Rest (siehe wake_word.py, Eigenschaft `flink`), und im
+        Protokoll stehen dort lesbare Sätze.
+
+        Der Text bleibt trotzdem ein Ausschnitt der letzten Sekunden, nicht der
+        ganze Satz -- den vollständigen legt _geweckt() darüber, sobald er
+        fertig ist. Das ist Absicht: hier zählt "sie hört mich", nicht
+        Wortgenauigkeit."""
+        if vorlaeufig:
+            _untertitel(vorlaeufig, 'ramzi')
+
+    def _ist_kurzbefehl(self, text):
+        """Ist das schon ein fertiger Reflex? Dann nicht auf eine Denkpause
+        warten.
+
+        Wird vom Ohr gefragt, WÄHREND Ramzi noch redet, und entscheidet dort
+        über die Stille-Schwelle. Bei "Noor, wie spät ist es" kommt nichts mehr
+        -- vier Sekunden darauf zu warten hat den Reflex langsamer gemacht als
+        selbst auf die Uhr zu sehen, und genau das hat Ramzi bemängelt."""
+        geglaettet = normalisiere(WECKWORT.sub('', text or ''))
+        if not geglaettet:
+            return False
+        return any(b in geglaettet
+                   for bruchstuecke, _ in self.reflexe for b in bruchstuecke)
 
     def _erkannt(self):
         """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
