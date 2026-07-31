@@ -135,12 +135,27 @@ SPERRE = os.path.join(PROJEKT, '.aufnahme.lock')
 # Sperre würde ich mitten in seinem Diktat aufwachen -- genau das soll nicht
 # passieren.
 # --------------------------------------------------------------------------
+def _leiser(an):
+    """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können.
+
+    Hier eingehängt und nicht im Diktat selbst, weil diese beiden Funktionen der
+    eine Punkt sind, durch den JEDE Aufnahme geht -- das Diktat und die
+    Statusanzeige rufen beide hier durch. Ein Ort, an dem es stimmt, statt
+    zweier, die auseinanderlaufen."""
+    try:
+        import lautstaerke
+        lautstaerke.daempfen() if an else lautstaerke.zuruecksetzen()
+    except Exception:
+        pass
+
+
 def aufnahme_beginnt():
     try:
         with open(SPERRE, 'w') as f:
             f.write(str(time.time()))
     except OSError:
         pass
+    _leiser(True)
 
 
 def aufnahme_endet():
@@ -148,6 +163,7 @@ def aufnahme_endet():
         os.remove(SPERRE)
     except OSError:
         pass
+    _leiser(False)
 
 
 def qalam_nimmt_auf():

@@ -237,6 +237,14 @@ class Assistent:
         if time.time() < self.ohr.folge_bis:
             return
         ton('noor_wach.wav')
+        # Musik leiser, solange er redet -- nicht aus. Ramzis Wunsch vom
+        # 31.07.2026; die Begründung und das Zurückstellen auf den Wert von
+        # VORHER stehen in lautstaerke.py. Zurück geht es in _lautstaerke_wache().
+        try:
+            import lautstaerke
+            lautstaerke.daempfen()
+        except Exception:
+            pass
         # Ramzi will SOFORT etwas Sichtbares zum Ton, egal was drinsteht. Das
         # frühere Flacker-Problem lag an der 180-Sekunden-Haltezeit, nicht am
         # Platzhalter selbst -- mit dem einstellbaren Regler (Standard 10 s)
@@ -448,11 +456,40 @@ class Assistent:
         threading.Thread(target=_lauf, daemon=True).start()
 
     # ------------------------------------------------------------------
+    def _lautstaerke_wache(self):
+        """Die Musik wieder laut machen, sobald das Gespräch vorbei ist.
+
+        Ein Wächter und nicht ein Aufruf an jeder Stelle, an der ein Auftrag
+        endet: es gibt viele solche Stellen (Reflex, Brücke, Fenster läuft ab,
+        Fehler unterwegs), und würde eine davon vergessen, bliebe Ramzis Musik
+        für immer leise. Ein Wächter, der auf einen Zustand schaut statt auf ein
+        Ereignis, kann das nicht -- er heilt sich selbst.
+
+        Gedämpft bleibt es auch, solange ich noch antworte: sonst wird die Musik
+        mitten in meinem Satz laut."""
+        while self._laeuft.is_set():
+            time.sleep(0.4)
+            try:
+                import lautstaerke
+                if not lautstaerke.gedaempft():
+                    continue
+                if time.time() < self.ohr.folge_bis:
+                    continue
+                if self.sprecher.spricht_gerade():
+                    continue
+                from wake_word import qalam_nimmt_auf
+                if qalam_nimmt_auf():
+                    continue        # Ramzi diktiert -- das dämpft selbst
+                lautstaerke.zuruecksetzen()
+            except Exception:
+                continue
+
     def starte(self):
         print('[Noor] Lade Modelle …')
         _ = self.sprecher.stimme
         self.ohr.starte()
         self._laeuft.set()
+        threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
         print('[Noor] Ich höre zu. Sag meinen Namen.')
         self.sprecher.sprich('Ich höre zu.')
 
