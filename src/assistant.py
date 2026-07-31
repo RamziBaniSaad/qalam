@@ -134,11 +134,31 @@ class Assistent:
             self.sprecher.sprich_im_hintergrund('Ja?')
             return
 
-        # Alles andere gehört Noor. Bis die Bruecke steht, sage ich wenigstens
-        # ehrlich, dass ich es gehoert habe und noch nicht kann.
-        self.sprecher.sprich_im_hintergrund(
-            'Das gebe ich weiter, sobald die Brücke zu mir steht.'
-        )
+        # Alles andere gehört Noor: über die Brücke in die laufende Sitzung.
+        self._an_noor(auftrag)
+
+    # ------------------------------------------------------------------
+    def _an_noor(self, auftrag):
+        """Auftrag über die Brücke weiterreichen.
+
+        In einem eigenen Thread, weil das Fenster-nach-vorn-Holen und das
+        Einfügen zusammen fast eine Sekunde dauern -- so lange darf das Ohr
+        nicht taub sein, sonst geht das nächste "Noor, stopp" verloren."""
+        def _lauf():
+            try:
+                from bruecke import sende
+            except Exception as e:
+                self.sprecher.sprich_im_hintergrund('Die Brücke lässt sich nicht laden.')
+                print(f'[Noor] Brücke nicht ladbar: {e}')
+                return
+            ok, meldung = sende(auftrag)
+            if not ok:
+                self.sprecher.sprich_im_hintergrund(meldung or 'Das hat nicht geklappt.')
+            # Bei Erfolg sage ich hier NICHTS. Die eigentliche Antwort spricht
+            # der Stop-Hook, sobald sie steht -- eine Zwischenansage wuerde sich
+            # bei kurzen Antworten mit ihr ins Wort fallen.
+
+        threading.Thread(target=_lauf, daemon=True).start()
 
     # ------------------------------------------------------------------
     def starte(self):

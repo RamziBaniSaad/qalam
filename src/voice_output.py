@@ -140,9 +140,20 @@ def main(argv=None):
     p.add_argument('text', nargs='?', default='-', help='Text, oder "-" für stdin')
     p.add_argument('--stimme', default=STANDARD_STIMME)
     p.add_argument('--nach-wav', default=None, help='statt sprechen: WAV schreiben')
+    # Über eine Datei, weil Aufrufer ohne stdin existieren: ein losgelöst
+    # gestarteter Prozess (Start-Process) hat keine Pipe, und der Text enthält
+    # Anführungszeichen, Umlaute und Gedankenstriche, an denen die Kommandozeile
+    # zwischen PowerShell, Windows und argparse zerbricht.
+    p.add_argument('--datei', default=None, help='Text aus dieser UTF-8-Datei lesen')
     args = p.parse_args(argv)
 
-    text = sys.stdin.read() if args.text == '-' else args.text
+    if args.datei:
+        with open(args.datei, encoding='utf-8') as f:
+            text = f.read()
+    elif args.text == '-':
+        text = sys.stdin.read()
+    else:
+        text = args.text
     text = text.strip()
     if not text:
         return 0
