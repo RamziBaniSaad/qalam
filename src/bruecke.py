@@ -204,10 +204,16 @@ CHAT_STATT_FELD = 8000
 # egal was wirklich im Feld stand.
 MARKE = '~~noor-marke-4711~~'
 
-# Das Zeichen, mit dem geprüft wird, ob ein Klick wirklich in einem Eingabefeld
-# gelandet ist. Muss ein ganz gewöhnliches Schriftzeichen sein -- Sonderzeichen
-# lösen in Oberflächen gern Tastenkürzel aus.
-PROBE = 'x'
+# Die Zeichen, mit denen geprüft wird, ob ein Klick wirklich in einem
+# Eingabefeld gelandet ist.
+#
+# Gewöhnliche Schriftzeichen, keine Sonderzeichen -- die lösen in Oberflächen
+# gern Tastenkürzel aus. Aber ZWEI davon, und eine Folge, die in deutschem Text
+# praktisch nicht vorkommt: die Probe muss im ausgeschnittenen Text
+# wiederzufinden sein, auch wenn sie nicht am Ende steht. Ein einzelnes "x"
+# steht irgendwo in "extra" oder "Text" auch, und dann wäre nicht mehr
+# entscheidbar, welches davon die Probe war.
+PROBE = 'xq'
 
 
 ABSTAND_MERKER = os.path.join(tempfile.gettempdir(), 'noor-bruecke-abstand.txt')
@@ -280,8 +286,18 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         """Prüfzeichen tippen und nachsehen, ob es angekommen ist.
 
         Rückgabe: (angekommen, was_vorher_drinstand)"""
-        tastatur.press(PROBE)
-        tastatur.release(PROBE)
+        # Schreibmarke ans Ende, BEVOR die Probe getippt wird.
+        #
+        # Ohne das galt die stille Annahme, Ramzis Schreibmarke stünde schon am
+        # Ende seines Textes. Beim Tippen stimmt das meistens -- aber sobald er
+        # zum Korrigieren mitten in seinen Satz zurückklickt, landet die Probe
+        # dort, und dann fand sich am Ende nichts. Gemessen am 31.07.2026:
+        # aus "Das hier tippe ich" wurde 'xDas hier tippe ich'. Die Prüfung
+        # meldete daraufhin "kein Eingabefeld" -- nachdem sie seinen Text
+        # bereits ausgeschnitten hatte. Sein Text war damit weg.
+        _taste(tastatur, Key.end)
+        time.sleep(0.12)
+        tastatur.type(PROBE)
         time.sleep(0.25)
 
         _zwischenablage_schreiben(MARKE)
@@ -292,10 +308,19 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         time.sleep(0.45)
         inhalt = _zwischenablage_lesen() or ''
 
-        if not inhalt.endswith(PROBE) or len(inhalt) > CHAT_STATT_FELD:
+        # Zu lang heißt: das war der Chatverlauf, nicht das Feld. Ausgeschnitten
+        # wurde dabei nichts (ein Verlauf ist nicht bearbeitbar), also gibt es
+        # auch nichts zurückzulegen.
+        if len(inhalt) > CHAT_STATT_FELD or PROBE not in inhalt:
             _taste(tastatur, Key.end, mit_strg=False)   # Markierung auflösen
             return False, ''
-        return True, inhalt[:-len(PROBE)]
+
+        # Die Probe ist wieder da -- damit ist BEWIESEN, dass hier ein
+        # bearbeitbares Feld ist, und zwar unabhängig davon, wo sie gelandet
+        # ist. Am Ende ist der Normalfall; sonst die eine Fundstelle entfernen.
+        if inhalt.endswith(PROBE):
+            return True, inhalt[:-len(PROBE)]
+        return True, inhalt.replace(PROBE, '', 1)
 
     # --- Erst ganz ohne Maus ------------------------------------------------
     # Chat-Oberflächen lenken einen Tastendruck von selbst ins Eingabefeld --
@@ -342,6 +367,23 @@ def _einfuegen_und_senden(tastatur):
     time.sleep(0.35)
     tastatur.press(Key.enter)
     tastatur.release(Key.enter)
+
+
+def _zurueckschreiben(tastatur, war_leer, seiner):
+    """Ramzis eigenen Text zurück ins Eingabefeld legen -- ohne abzuschicken.
+
+    Tut nichts, wenn das Feld ohnehin leer war. Wartet vorher kurz: nach dem
+    Abschicken braucht die Oberfläche einen Moment, bis sie das Feld geräumt
+    hat, und wer zu früh einfügt, hängt seinen Text an den gerade abgeschickten
+    Auftrag."""
+    if war_leer or not seiner:
+        return
+    time.sleep(0.6)
+    if not _zwischenablage_schreiben(seiner):
+        return
+    time.sleep(0.15)
+    _taste(tastatur, 'v')
+    time.sleep(0.3)
 
 
 def _merker_weg():
@@ -399,22 +441,29 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         if not getroffen:
             _merker_weg()
             return False, 'Ich finde das Eingabefeld nicht. Da schreibe ich nichts blind hinein.'
-        if not leer:
-            # Sein Text hängt jetzt in der Zwischenablage -- zurücklegen, bevor
-            # abgebrochen wird. Sonst hätte die Prüfung genau das zerstört, was
-            # sie schützen sollte.
-            _zwischenablage_schreiben(seiner)
-            time.sleep(0.15)
-            _taste(tastatur, 'v')
-            time.sleep(0.3)
-            _merker_weg()
-            return False, 'Du hast noch etwas im Eingabefeld. Ich warte.'
 
+        # An dieser Stelle ist das Feld IMMER leer: die Fokusprüfung schneidet
+        # aus, was drinstand, und gibt es als `seiner` zurück. Stand dort etwas,
+        # muss es hinterher wieder hinein.
         if not _zwischenablage_schreiben(VORSATZ + auftrag):
+            _zurueckschreiben(tastatur, leer, seiner)
             _merker_weg()
             return False, 'Ich komme an die Zwischenablage nicht heran.'
 
         _einfuegen_und_senden(tastatur)
+        # Und jetzt sein eigener Text zurück ins leere Feld -- ohne Enter.
+        #
+        # Ramzis Wunsch, wortgetreu: er will nicht, dass sein gesprochener
+        # Auftrag liegen bleibt, nur weil er nebenher tippt. Für ihn soll es
+        # aussehen, als wäre nichts passiert -- sein Text steht unverändert im
+        # Feld, und der gesprochene Auftrag ist zusätzlich abgeschickt.
+        #
+        # Er hat es als "zweites Element der Zwischenablage" beschrieben. Das
+        # braucht es nicht: sein Text liegt schon als gewöhnliche Variable
+        # `seiner` vor, also genügt es, zweimal hintereinander das Richtige in
+        # die Zwischenablage zu legen. Kein Windows-Zwischenablage-Verlauf
+        # (Win+V) nötig, der oft gar nicht eingeschaltet ist.
+        _zurueckschreiben(tastatur, leer, seiner)
     finally:
         # Zwischenablage zurückgeben -- Ramzi hat da oft etwas drin, das er
         # gleich braucht. Kurz warten, sonst überhole ich das eigene Einfügen.
