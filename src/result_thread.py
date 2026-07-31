@@ -13,6 +13,21 @@ from transcription import transcribe
 from utils import ConfigManager
 from media_controller import MediaController
 
+# Der Riegel gegen das eigene Ohr: solange hier aufgenommen wird, ist das
+# Weckwort taub. Ohne ihn würde der Assistent mitten in Ramzis Diktat aufwachen,
+# denn er sagt "Noor" ständig, während er mir etwas diktiert.
+#
+# Weich importiert, damit Qalam auch dort startet, wo der Weckwort-Teil fehlt
+# (frische Installation, macOS-Portierung) -- dann passiert schlicht nichts.
+try:
+    from wake_word import aufnahme_beginnt, aufnahme_endet
+except Exception:                                    # pragma: no cover
+    def aufnahme_beginnt():
+        pass
+
+    def aufnahme_endet():
+        pass
+
 
 class ResultThread(QThread):
     """
@@ -103,6 +118,9 @@ class ResultThread(QThread):
             self.is_recording = True
             self.mutex.unlock()
 
+            # Ab hier hört das Weckwort weg -- Ramzi diktiert.
+            aufnahme_beginnt()
+
             self.statusSignal.emit('recording', self.use_llm)
             ConfigManager.console_print('Recording...')
             audio_data = self._record_audio()
@@ -147,6 +165,10 @@ class ResultThread(QThread):
             self.resultSignal.emit('')
         finally:
             self.is_transcribing = False  # Ensure flag is reset
+            # In den finally-Zweig, nicht ans Ende des Erfolgspfads: bricht die
+            # Aufnahme mit einem Fehler ab, bliebe der Riegel sonst liegen und
+            # das Weckwort wäre bis zum Zeitablauf taub.
+            aufnahme_endet()
 
     def _record_audio(self):
         """

@@ -53,6 +53,17 @@ VORSATZ = '(gesprochen) '
 if IS_WINDOWS:
     _user32 = ctypes.WinDLL('user32', use_last_error=True)
     _ENUM = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    # Ohne restype liefert ctypes ein vorzeichenbehaftetes 32-Bit-Ergebnis --
+    # Fenstergriffe oberhalb von 0x7FFFFFFF kämen dann negativ zurück und kein
+    # Vergleich würde je stimmen.
+    _user32.GetForegroundWindow.restype = ctypes.c_void_p
+
+
+def _gleich(a, b):
+    """Zwei Fenstergriffe vergleichen, egal wie ctypes sie gerade verpackt hat."""
+    if a is None or b is None:
+        return False
+    return (int(a) & 0xFFFFFFFFFFFFFFFF) == (int(b) & 0xFFFFFFFFFFFFFFFF)
 
 
 def finde_fenster(titel=FENSTER_TITEL):
@@ -98,20 +109,26 @@ def hole_nach_vorn(hwnd):
         _user32.ShowWindow(hwnd, SW_RESTORE)
 
     vorn = _user32.GetForegroundWindow()
-    if vorn == hwnd:
+    if _gleich(vorn, hwnd):
         return True
 
     mein = _user32.GetWindowThreadProcessId(vorn, None)
     sein = _user32.GetWindowThreadProcessId(hwnd, None)
     if mein and sein and mein != sein:
         _user32.AttachThreadInput(mein, sein, True)
-        ok = bool(_user32.SetForegroundWindow(hwnd))
+        _user32.SetForegroundWindow(hwnd)
         _user32.AttachThreadInput(mein, sein, False)
     else:
-        ok = bool(_user32.SetForegroundWindow(hwnd))
+        _user32.SetForegroundWindow(hwnd)
 
-    time.sleep(0.25)
-    return ok or _user32.GetForegroundWindow() == hwnd
+    time.sleep(0.35)
+
+    # NUR nachmessen, nie dem Rückgabewert glauben. SetForegroundWindow meldet
+    # Erfolg, obwohl Windows den Wechsel verweigert hat -- gemessen am
+    # 31.07.2026: der Aufruf sagte True, vorn stand weiterhin ein anderes
+    # Fenster, und der Text landete in dessen Eingabefeld. Ein falsches "hat
+    # geklappt" ist hier teurer als ein ehrliches "hat nicht geklappt".
+    return _gleich(_user32.GetForegroundWindow(), hwnd)
 
 
 # --------------------------------------------------------------------------
@@ -143,12 +160,47 @@ def _zwischenablage_schreiben(text):
         return False
 
 
-def _einfuegen_und_senden():
-    from pynput.keyboard import Controller, Key
-    tastatur = Controller()
-    with tastatur.pressed(Key.ctrl):
-        tastatur.press('v')
-        tastatur.release('v')
+def _taste(tastatur, buchstabe, mit_strg=True):
+    from pynput.keyboard import Key
+    if mit_strg:
+        with tastatur.pressed(Key.ctrl):
+            tastatur.press(buchstabe)
+            tastatur.release(buchstabe)
+    else:
+        tastatur.press(buchstabe)
+        tastatur.release(buchstabe)
+
+
+def _eingabefeld_ist_leer(tastatur):
+    """Steht schon etwas im Eingabefeld?
+
+    Am 31.07.2026 teuer gelernt: Ramzi hat gerade getippt, als die Brücke
+    einfügte -- mitten in seinen halben Satz. Also vorher nachsehen: alles
+    markieren, kopieren, lesen, Markierung mit Ende wieder auflösen.
+
+    Im Zweifel wird abgebrochen. Kommt beim Kopieren etwas Unerwartetes zurück
+    (weil die Markierung die ganze Seite erwischt hat statt des Feldes), ist
+    "nicht leer" die richtige Antwort -- lieber nichts tun als etwas zerstören.
+    """
+    from pynput.keyboard import Key
+    marke = '\x00noor-leer\x00'
+    _zwischenablage_schreiben(marke)
+    time.sleep(0.15)
+    _taste(tastatur, 'a')
+    time.sleep(0.25)
+    _taste(tastatur, 'c')
+    time.sleep(0.45)
+    inhalt = _zwischenablage_lesen()
+    # Markierung auflösen, sonst überschreibt das folgende Einfügen sie.
+    _taste(tastatur, Key.end, mit_strg=False)
+    time.sleep(0.15)
+    # Unverändert = es war nichts zu kopieren = das Feld ist leer.
+    return inhalt == marke or not (inhalt or '').strip()
+
+
+def _einfuegen_und_senden(tastatur):
+    from pynput.keyboard import Key
+    _taste(tastatur, 'v')
     time.sleep(0.35)
     tastatur.press(Key.enter)
     tastatur.release(Key.enter)
@@ -190,17 +242,30 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
     except OSError:
         pass
 
+    from pynput.keyboard import Controller
+    tastatur = Controller()
+
     vorher = _zwischenablage_lesen()
-    if not _zwischenablage_schreiben(VORSATZ + auftrag):
-        _merker_weg()
-        return False, 'Ich komme an die Zwischenablage nicht heran.'
 
     try:
+        # Reihenfolge mit Absicht: erst nach vorn, dann nachsehen, ob das Feld
+        # frei ist, und ERST DANN den Auftrag in die Zwischenablage legen. Wer
+        # zuerst schreibt und dann merkt, dass er nicht darf, hat Ramzis
+        # Zwischenablage schon überschrieben.
         if not hole_nach_vorn(hwnd):
             _merker_weg()
             return False, 'Ich bekomme das Claude-Fenster nicht nach vorn.'
         time.sleep(0.2)
-        _einfuegen_und_senden()
+
+        if not _eingabefeld_ist_leer(tastatur):
+            _merker_weg()
+            return False, 'Du hast noch etwas im Eingabefeld. Ich warte.'
+
+        if not _zwischenablage_schreiben(VORSATZ + auftrag):
+            _merker_weg()
+            return False, 'Ich komme an die Zwischenablage nicht heran.'
+
+        _einfuegen_und_senden(tastatur)
     finally:
         # Zwischenablage zurückgeben -- Ramzi hat da oft etwas drin, das er
         # gleich braucht. Kurz warten, sonst überhole ich das eigene Einfügen.

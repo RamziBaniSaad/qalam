@@ -84,4 +84,49 @@ set_cuda_paths()
 
 print('Starting Qalam...')
 load_dotenv()
-subprocess.run([sys.executable, os.path.join('src', 'main.py')])
+
+# --------------------------------------------------------------------------
+# Das Ohr gehört dazu.
+#
+# Ramzi hat zwei Wege, mit Noor zu reden: die Tastenkombination (Diktat) und
+# ihren Namen (Weckwort). Beide gehören zu Qalam, also darf nicht der eine
+# starten und der andere nicht -- genau das war bis zum 31.07.2026 der Fall:
+# assistant.py existierte, aber niemand hat es je gestartet. Auf dem Dashboard
+# stand deshalb dauerhaft "Weckwort aus", und "Noor" zu rufen half nicht.
+#
+# Ein eigener Prozess und nicht in main.py hinein: main.py ist die Qt-App mit
+# dem Tray-Symbol; ein zweiter dauerhafter Audiostrom darin würde ihre
+# Ereignisschleife und das Diktat aneinanderbinden. Getrennte Prozesse teilen
+# sich das Mikrofon unter Windows problemlos, und der Riegel .aufnahme.lock
+# sorgt dafür, dass das Ohr während eines Diktats schweigt.
+#
+# Der Umschalter (toggle_tools.vbs) beendet alles, dessen Befehlszeile "qalam"
+# enthält -- das trifft diesen Prozess mit, ohne dass dort etwas zu ändern ist.
+# --------------------------------------------------------------------------
+ohr = None
+ohr_log = None
+try:
+    # Unter pythonw gibt es keine Konsole: ein Fehler beim Laden der Modelle
+    # verschwindet spurlos, der Prozess laeuft weiter und hoert trotzdem nichts.
+    # Genau diese Sorte Fehler ist teuer, also bekommt das Ohr ein Protokoll.
+    ohr_log = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ohr.log'),
+                   'w', encoding='utf-8', buffering=1)
+    ohr = subprocess.Popen([sys.executable, '-u', os.path.join('src', 'assistant.py')],
+                           stdout=ohr_log, stderr=subprocess.STDOUT)
+    print('Weckwort laeuft mit (Protokoll: ohr.log).')
+except Exception as e:
+    print(f'Weckwort nicht gestartet: {e}')
+
+try:
+    subprocess.run([sys.executable, os.path.join('src', 'main.py')])
+finally:
+    # Ohne das bliebe das Ohr allein zurueck, wenn Qalam ueber das Tray-Symbol
+    # beendet wird -- ein unsichtbarer Prozess, der weiter am Mikrofon haengt.
+    if ohr and ohr.poll() is None:
+        ohr.terminate()
+        try:
+            ohr.wait(timeout=5)
+        except Exception:
+            ohr.kill()
+    if ohr_log:
+        ohr_log.close()

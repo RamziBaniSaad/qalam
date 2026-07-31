@@ -143,3 +143,4 @@ config.yaml
 # Laufzeit-Sperre und Stimmmodelle (gross, werden nachgeladen)
 .aufnahme.lock
 stimmen/
+ohr.log
