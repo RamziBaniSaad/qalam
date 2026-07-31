@@ -143,6 +143,99 @@ def _redeplatz(wartezeit=25.0):
         k32.CloseHandle(ctypes.c_void_p(griff))
 
 
+# --- Untertitel für das, was ich selbst sage -------------------------------
+#
+# Ramzis Wunsch vom 01.08.2026: er will meine gesprochene Antwort mitlesen
+# können, ohne im Chat danach zu suchen -- und sehen, welches Wort gerade
+# klingt.
+#
+# Der springende Punkt: bei MIR ist das ein leichtes Problem, im Gegensatz zu
+# seinen eigenen Untertiteln. Ich kenne den Text vorher, und ich erzeuge den Ton
+# selbst -- ich muss die Dauer also nicht aus dem Tempo ausrechnen, ich ZÄHLE
+# die erzeugten Samples. Damit ist auch seine Sorge erledigt, ein verschobener
+# Tempo-Regler könnte die Anzeige aus dem Tritt bringen: das Tempo steckt bereits
+# im fertigen Ton.
+SAETZE_PRO_ANZEIGE = 2
+# Grobe Obergrenze fuer eine Anzeige, in Zeichen. Nur fuer die EINTEILUNG --
+# die angezeigte Dauer kommt danach aus dem echten Ton. Etwa 120 Zeichen sind
+# bei normalem Tempo gut vier Sekunden: lang genug zum Lesen, kurz genug, dass
+# der Streifen keine Wand wird.
+ZEICHEN_PRO_ANZEIGE = 120
+
+
+def _anzeigen_einteilen(saetze):
+    """Sätze zu Anzeigen bündeln -- Ramzis Hybrid aus Sätzen UND Länge.
+
+    Sein Wunsch, wortgetreu: "normalerweise zwei Sätze, aber gleichzeitig
+    abhängig von der Zeit -- wenn du einen langen Satz hast, der so viel Zeit
+    braucht wie zwei, dann nimmst du nur den."
+
+    Die ERSTE Anzeige ist absichtlich kürzer. Grund, nachgemessen: bevor der
+    erste Ton läuft, muss die erste Anzeige fertig erzeugt sein -- nur so steht
+    ihre Dauer fest. Bei voller Länge waren das 0,52 s bis zum ersten Wort statt
+    der gewohnten 0,12 s, und eine Assistentin, die eine halbe Sekunde später
+    anfängt, fühlt sich träger an. Ein einzelner erster Satz halbiert das,
+    danach läuft die Erzeugung ohnehin dem Abspielen davon.
+    """
+    anzeigen, aktuell, zeichen = [], [], 0
+    for satz in saetze:
+        erste = not anzeigen
+        grenze_saetze = 1 if erste else SAETZE_PRO_ANZEIGE
+        grenze_zeichen = 60 if erste else ZEICHEN_PRO_ANZEIGE
+        if aktuell and (len(aktuell) >= grenze_saetze
+                        or zeichen + len(satz) > grenze_zeichen):
+            anzeigen.append(' '.join(aktuell))
+            aktuell, zeichen = [], 0
+        aktuell.append(satz)
+        zeichen += len(satz)
+    if aktuell:
+        anzeigen.append(' '.join(aktuell))
+    return anzeigen
+
+
+def _wortzeiten(text, dauer):
+    """Die gemessene Dauer auf die Wörter verteilen.
+
+    Piper liefert keine echten Wortzeiten -- dafür bräuchte es eine
+    Zwangsausrichtung, ein eigenes Modell und deutlich mehr Rechenzeit. Also
+    wird nach Länge verteilt, mit einem Aufschlag für Satzzeichen, weil an einem
+    Komma oder Punkt hörbar Zeit vergeht.
+
+    Das ist eine Näherung, und ich sage das auch so: auf einem langen Satz kann
+    die Hervorhebung ein paar Zehntel verrutschen. Weil jede Anzeige neu bei
+    null anfängt, sammelt sich der Fehler aber nicht auf.
+    """
+    worte = [w for w in text.split() if w]
+    if not worte or dauer <= 0:
+        return [{'w': w, 'ab': 0.0, 'd': 0.0} for w in worte]
+
+    gewichte = []
+    for w in worte:
+        g = len(w) + 1.0
+        if w[-1] in ',;:':
+            g += 2.0
+        elif w[-1] in '.!?…':
+            g += 3.5
+        gewichte.append(g)
+
+    gesamt = sum(gewichte)
+    ergebnis, laufend = [], 0.0
+    for w, g in zip(worte, gewichte):
+        d = dauer * g / gesamt
+        ergebnis.append({'w': w, 'ab': round(laufend, 3), 'd': round(d, 3)})
+        laufend += d
+    return ergebnis
+
+
+def _untertitel(text, worte, start):
+    """Auf den Streifen legen, ohne daran scheitern zu können."""
+    try:
+        import untertitel
+        untertitel.zeige(text, 'noor', worte, start)
+    except Exception:
+        pass
+
+
 def _er_hat_uebernommen():
     """Hat Ramzi den Platz in der Warteschlange genommen, WÄHREND ich rede?
 
@@ -228,11 +321,60 @@ class Sprecher:
             self._stop.clear()
             klang = _klangvorgaben()
 
+            # Anzeigen bilden und EINE im Voraus erzeugen.
+            #
+            # Warum vorausgeschaut wird: um das gerade gesprochene Wort
+            # hervorheben zu können, muss die Dauer einer Anzeige feststehen,
+            # BEVOR der erste Ton davon läuft -- und die steht erst fest, wenn
+            # der Ton erzeugt ist. Würde ich jede Anzeige erst dann erzeugen,
+            # wenn die vorige zu Ende ist, entstünde zwischen je zwei Anzeigen
+            # eine hörbare Lücke. Also erzeugt ein Faden die nächste, während
+            # die aktuelle noch läuft; Piper ist um ein Vielfaches schneller als
+            # Echtzeit, der Faden bleibt also mühelos vorn.
+            #
+            # Die Warteschlange fasst genau eins: mehr im Voraus zu erzeugen
+            # brächte nichts und würde beim Abbrechen nur weggeworfen.
+            import numpy as np
+
+            anzeigen = _anzeigen_einteilen(saetze)
+            fertig = queue.Queue(maxsize=1)
+            schluss = threading.Event()
+
+            def _erzeuge():
+                for stueck in anzeigen:
+                    if schluss.is_set():
+                        break
+                    try:
+                        teile = [c.audio_int16_array
+                                 for c in stimme.synthesize(stueck, syn_config=klang)]
+                        ton = np.concatenate(teile) if teile else None
+                    except Exception:
+                        ton = None
+                    while not schluss.is_set():
+                        try:
+                            fertig.put((stueck, ton), timeout=0.2)
+                            break
+                        except queue.Full:
+                            continue
+                # Das Schlusszeichen MUSS ankommen, sonst wartet der Abspieler
+                # ewig auf eine Anzeige, die nie kommt. Also so lange anbieten,
+                # bis Platz da ist -- ein einmaliger Versuch mit Zeitausfall hat
+                # genau diesen Hänger erzeugt (gemessen: 62 s statt 18 s).
+                while not schluss.is_set():
+                    try:
+                        fertig.put((None, None), timeout=0.2)
+                        break
+                    except queue.Full:
+                        continue
+
+            erzeuger = threading.Thread(target=_erzeuge, daemon=True)
+            erzeuger.start()
+
             # Ein Strom für alle Sätze: sonst knackt es bei jedem Satzwechsel.
             strom = sd.OutputStream(samplerate=rate, channels=1, dtype='int16')
             strom.start()
             try:
-                for satz in saetze:
+                while True:
                     if self._stop.is_set():
                         break
                     # Und zwischen JEDEM Satz noch einmal nachsehen.
@@ -250,11 +392,26 @@ class Sprecher:
                     # natürlichen Stelle auf, nicht mitten im Wort.
                     if _er_hat_uebernommen():
                         break
-                    for stueck in stimme.synthesize(satz, syn_config=klang):
-                        if self._stop.is_set():
-                            break
-                        strom.write(stueck.audio_int16_array)
+
+                    text, ton = fertig.get()
+                    if text is None:
+                        break
+                    if ton is None or len(ton) == 0:
+                        continue
+
+                    # Die Dauer wird GEMESSEN, nicht geschätzt: so viele Samples
+                    # bei dieser Abtastrate sind genau so viele Sekunden.
+                    dauer = len(ton) / float(rate)
+                    _untertitel(text, _wortzeiten(text, dauer), time.time())
+                    strom.write(ton)
             finally:
+                schluss.set()
+                # Den Platz freimachen, damit der Erzeuger nicht ewig wartend
+                # im Speicher hängt, wenn hier abgebrochen wurde.
+                try:
+                    fertig.get_nowait()
+                except Exception:
+                    pass
                 strom.stop()
                 strom.close()
                 # Das Zurückstellen gehört dem Wächter im Assistenten -- hier

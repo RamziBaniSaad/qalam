@@ -55,12 +55,25 @@ def _haltezeit():
 SAETZE_SICHTBAR = 2
 
 
-def zeige(text, wer='noor'):
-    """Einen Satz auf die Untertitel legen. Kostet nichts und blockiert nicht."""
+def zeige(text, wer='noor', worte=None, start=None):
+    """Einen Satz auf die Untertitel legen. Kostet nichts und blockiert nicht.
+
+    `worte` ist der Zusatz für MEINE eigenen Untertitel (Ramzis Wunsch vom
+    01.08.2026): eine Liste [{'w': Wort, 'ab': Sekunden, 'd': Dauer}, ...],
+    dazu `start` als Zeitpunkt, ab dem gerechnet wird. Damit kann der Streifen
+    das gerade gesprochene Wort hervorheben, ohne dass ihm jemand dauernd
+    zuruft -- er bekommt EIN Paket und läuft dann allein.
+
+    Beides ist optional. Wer nur Text schickt (der Sprech-Hook aus PowerShell,
+    das Ohr für Ramzis eigene Sätze), bekommt genau die Anzeige von vorher.
+    """
+    d = {'text': text, 'wer': wer, 'zeit': time.time()}
+    if worte:
+        d['worte'] = worte
+        d['start'] = start if start is not None else time.time()
     try:
         with open(DATEI, 'w', encoding='utf-8') as f:
-            json.dump({'text': text, 'wer': wer, 'zeit': time.time()},
-                      f, ensure_ascii=False)
+            json.dump(d, f, ensure_ascii=False)
     except OSError:
         pass
 
@@ -77,18 +90,137 @@ def loesche():
 # `zeige()` oben soll importierbar bleiben, ohne dass Qt geladen wird.
 # --------------------------------------------------------------------------
 def main():
+    import math
+
     from PyQt5.QtCore import Qt, QRectF, QTimer
     from PyQt5.QtGui import QFont, QPainter, QBrush, QColor, QPainterPath, QFontMetrics
     from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
 
     HG        = QColor(18, 18, 20, 238)
     RAND      = QColor(255, 255, 255, 26)
-    FARBE_ICH = '#F2F2F2'     # was ich sage
-    FARBE_ER  = '#8FC7FF'     # was Ramzi sagt -- kühler, sofort unterscheidbar
+    FARBE_ICH = QColor('#F2F2F2')     # was ich sage
+    FARBE_ER  = QColor('#8FC7FF')     # was Ramzi sagt -- kühler, sofort unterscheidbar
     FARBE_WER = '#8A8F98'
+
+    # Das gerade gesprochene Wort. Ramzis Wahl vom 01.08.2026 aus drei
+    # Stärken: dezent. 15 Prozent größer und aufgehellt, weich hoch und weich
+    # wieder runter -- genug zum Mitlesen, ohne dass die Zeile bei jedem Wort
+    # hüpft. Bei 860 px Streifenbreite wird mehr sofort unruhig.
+    WACHSTUM = 0.15
+    RUHIG_ANTEIL = 0.78       # so hell sind die übrigen Wörter, damit das
+                              # aktive überhaupt heraussticht
 
     BREITE = 860
     RAND_UNTEN = 90
+
+    class Zeile(QWidget):
+        """Der Textbereich -- zeichnet WÖRTER, nicht einen Block.
+
+        Warum kein QLabel mehr: ein QLabel kann ein einzelnes Wort darin nicht
+        hervorheben. Für den Effekt, den Ramzi wollte (das gesprochene Wort
+        wird kurz größer), muss jedes Wort einzeln gezeichnet werden.
+
+        Der Umbruch wird EINMAL beim Setzen berechnet und danach nur noch
+        gezeichnet. Das ist der Grund, warum die Bewegung nichts kostet: pro
+        Bild werden ~15 fertige Positionen gemalt, es wird nichts neu gemessen.
+
+        Das aktive Wort wird um seinen eigenen Mittelpunkt vergrößert. Dadurch
+        rückt kein Nachbar zur Seite und die Zeile bleibt ruhig -- genau die
+        Eigenschaft, die die dezente Variante ausmacht.
+        """
+
+        def __init__(self, breite):
+            super().__init__()
+            self.setAttribute(Qt.WA_TranslucentBackground)
+            self._breite = breite
+            self._schrift = QFont('Segoe UI', 17)
+            self._farbe = FARBE_ICH
+            self._zeilen = []        # [[(wort, x, ab, dauer)], ...]
+            self._hoehe = 0
+            self._start = None       # None = keine Zeitangaben, nichts leuchtet
+
+        def setze(self, text, farbe, worte=None, start=None):
+            self._farbe = farbe
+            self._start = start
+            mass = QFontMetrics(self._schrift)
+            zeilenhoehe = int(mass.height() * 1.32)
+
+            # Wörter samt Zeiten. Ohne Zeiten (Ramzis eigene Sätze, der
+            # Sprech-Hook) wird derselbe Weg gegangen, nur ohne Hervorhebung --
+            # ein Codeweg statt zwei, damit nicht einer davon verrottet.
+            if worte:
+                stuecke = [(w.get('w', ''), w.get('ab', 0.0), w.get('d', 0.0))
+                           for w in worte if w.get('w')]
+            else:
+                stuecke = [(w, 0.0, 0.0) for w in text.split() if w]
+
+            self._zeilen = []
+            aktuell, x = [], 0
+            leer = mass.horizontalAdvance(' ')
+            for wort, ab, dauer in stuecke:
+                b = mass.horizontalAdvance(wort)
+                if aktuell and x + b > self._breite:
+                    self._zeilen.append(aktuell)
+                    aktuell, x = [], 0
+                aktuell.append((wort, x, ab, dauer))
+                x += b + leer
+            if aktuell:
+                self._zeilen.append(aktuell)
+
+            self._hoehe = max(zeilenhoehe, len(self._zeilen) * zeilenhoehe)
+            self._zeilenhoehe = zeilenhoehe
+            self.setFixedHeight(self._hoehe)
+            self.updateGeometry()
+            self.update()
+
+        def laeuft_noch(self):
+            """Ist gerade Bewegung zu zeichnen? Bestimmt den Takt der Uhr."""
+            if self._start is None:
+                return False
+            vergangen = time.time() - self._start
+            ende = max((ab + d for zeile in self._zeilen for _, _, ab, d in zeile),
+                       default=0.0)
+            return vergangen <= ende + 0.2
+
+        def paintEvent(self, _e):
+            if not self._zeilen:
+                return
+            maler = QPainter(self)
+            maler.setRenderHint(QPainter.Antialiasing)
+            maler.setRenderHint(QPainter.TextAntialiasing)
+            maler.setFont(self._schrift)
+            mass = QFontMetrics(self._schrift)
+
+            vergangen = None if self._start is None else time.time() - self._start
+            ruhig = QColor(self._farbe)
+            ruhig.setAlphaF(RUHIG_ANTEIL)
+
+            for nr, zeile in enumerate(self._zeilen):
+                grund = nr * self._zeilenhoehe + mass.ascent()
+                for wort, x, ab, dauer in zeile:
+                    # Wie weit ist dieses Wort? sin(pi*p) ist genau die Kurve,
+                    # die Ramzi beschrieben hat: weich hoch bis zur Mitte, weich
+                    # wieder runter -- kein Sprung an den Enden.
+                    staerke = 0.0
+                    if vergangen is not None and dauer > 0 and ab <= vergangen < ab + dauer:
+                        staerke = math.sin(math.pi * (vergangen - ab) / dauer)
+
+                    if staerke <= 0.01:
+                        maler.setPen(ruhig)
+                        maler.drawText(x, grund, wort)
+                        continue
+
+                    maler.save()
+                    mitte_x = x + mass.horizontalAdvance(wort) / 2.0
+                    mitte_y = grund - mass.ascent() / 3.0
+                    maler.translate(mitte_x, mitte_y)
+                    maler.scale(1 + WACHSTUM * staerke, 1 + WACHSTUM * staerke)
+                    maler.translate(-mitte_x, -mitte_y)
+                    hell = QColor(self._farbe)
+                    hell.setAlphaF(RUHIG_ANTEIL + (1.0 - RUHIG_ANTEIL) * staerke)
+                    maler.setPen(hell)
+                    maler.drawText(x, grund, wort)
+                    maler.restore()
 
     class Streifen(QWidget):
         def __init__(self):
@@ -109,11 +241,7 @@ def main():
             self.wer.setFont(QFont('Segoe UI Semibold', 9))
             self.wer.setStyleSheet(f'color: {FARBE_WER}; background: transparent; letter-spacing: 1px;')
 
-            self.text = QLabel('')
-            self.text.setFont(QFont('Segoe UI', 17))
-            self.text.setWordWrap(True)
-            self.text.setStyleSheet(f'color: {FARBE_ICH}; background: transparent;')
-            self.text.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.text = Zeile(BREITE - 26 - 26)
 
             aussen.addWidget(self.wer)
             aussen.addWidget(self.text)
@@ -121,9 +249,15 @@ def main():
             self.setFixedWidth(BREITE)
             self._stand = None
 
+            # Zwei Takte, und das ist der ganze Leistungstrick: 150 ms im
+            # Ruhezustand (nur nachsehen, ob sich die Datei geändert hat), 33 ms
+            # nur solange wirklich Bewegung zu zeichnen ist. Der schnelle Takt
+            # läuft also ausschließlich, während ich spreche.
+            self.TAKT_RUHE = 150
+            self.TAKT_BEWEGT = 33
             self.uhr = QTimer(self)
             self.uhr.timeout.connect(self.nachsehen)
-            self.uhr.start(150)
+            self.uhr.start(self.TAKT_RUHE)
 
         def paintEvent(self, _e):
             weg = QPainterPath()
@@ -164,7 +298,19 @@ def main():
                         d = json.load(f)
                 except Exception:
                     return
-                self.setze(d.get('text', ''), d.get('wer', 'noor'), d.get('zeit', 0))
+                self.setze(d.get('text', ''), d.get('wer', 'noor'), d.get('zeit', 0),
+                           d.get('worte'), d.get('start'))
+
+            # Läuft gerade eine Wort-Bewegung? Dann schnell nachzeichnen, sonst
+            # zurück in den Ruhetakt. Ohne das Zurückschalten liefe der Streifen
+            # für immer mit 30 Bildern pro Sekunde weiter, obwohl sich nichts
+            # mehr bewegt -- Last, die niemand sieht, ist die schlechteste Sorte.
+            bewegt = self.isVisible() and self.text.laeuft_noch()
+            gewuenscht = self.TAKT_BEWEGT if bewegt else self.TAKT_RUHE
+            if self.uhr.interval() != gewuenscht:
+                self.uhr.setInterval(gewuenscht)
+            if bewegt:
+                self.text.update()
 
             # Abgelaufen, oder gerade erst ausgeschaltet? Dann weg damit,
             # statt einen alten Satz stehen zu lassen.
@@ -173,22 +319,25 @@ def main():
 
         _zeit = 0
 
-        def setze(self, text, wer, zeit):
+        def setze(self, text, wer, zeit, worte=None, start=None):
             text = ' '.join((text or '').split())
             self._zeit = zeit or time.time()
             if not text:
                 self.hide()
                 return
-            # Nur die letzten Sätze zeigen. Bei einer langen Äußerung käme sonst
-            # der ganze Block auf einmal, und der Streifen wird zur Textwand.
-            saetze = [s for s in re.split(r'(?<=[.!?…])\s+', text) if s.strip()]
-            if len(saetze) > SAETZE_SICHTBAR:
-                text = ' '.join(saetze[-SAETZE_SICHTBAR:])
             ich = (wer or 'noor').lower() != 'ramzi'
+            if not worte:
+                # Nur die letzten Sätze zeigen. Bei einer langen Äußerung käme
+                # sonst der ganze Block auf einmal und der Streifen wird zur
+                # Textwand. Gilt nur für Text OHNE Zeitangaben: was ich selbst
+                # spreche, ist beim Absenden schon passend eingeteilt -- da
+                # nachträglich zu kürzen würde Wörter verschlucken, die gerade
+                # zu hören sind.
+                saetze = [s for s in re.split(r'(?<=[.!?…])\s+', text) if s.strip()]
+                if len(saetze) > SAETZE_SICHTBAR:
+                    text = ' '.join(saetze[-SAETZE_SICHTBAR:])
             self.wer.setText('NOOR' if ich else 'RAMZI')
-            self.text.setStyleSheet(
-                f'color: {FARBE_ICH if ich else FARBE_ER}; background: transparent;')
-            self.text.setText(text)
+            self.text.setze(text, FARBE_ICH if ich else FARBE_ER, worte, start)
             self.platziere()
             if not self.isVisible():
                 self.show()
