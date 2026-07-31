@@ -25,15 +25,30 @@ Von außen beschriften:
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import time
 
 DATEI = os.path.join(tempfile.gettempdir(), 'noor-untertitel.json')
 
-# Wie lange ein Satz stehen bleibt, wenn nichts Neues kommt. Lang genug zum
-# Lesen, kurz genug, um nicht im Weg zu stehen.
-HALTEZEIT = 7.0
+# Wie lange der Streifen stehen bleibt, wenn nichts Neues kommt.
+#
+# Bewusst LANG. Vorher waren es 7 Sekunden, und Ramzi hat sofort gemerkt, wie
+# schlecht das aussieht: "das kommt und geht, das sieht scheiße aus" -- der
+# Streifen verschwand mitten im Reden und tauchte beim nächsten Stück wieder
+# auf. Er soll stehen bleiben, bis der nächste Text ihn ersetzt. Die drei
+# Minuten sind nur ein Sicherheitsnetz, damit nach Feierabend nicht stundenlang
+# ein alter Satz auf dem Bildschirm klebt.
+HALTEZEIT = 180.0
+
+# Wie viele Sätze gleichzeitig zu sehen sind.
+#
+# Ramzis zweiter Einwand: "das sieht sehr voll aus, sehr viel Text auf einmal".
+# Stimmt -- bei einer langen Äußerung kam der ganze Block. Jetzt stehen nur die
+# letzten Sätze da, der Rest rutscht raus. Das ist auch das, was er als
+# "Satz für Satz" beschrieben hat.
+SAETZE_SICHTBAR = 2
 
 
 def zeige(text, wer='noor'):
@@ -153,6 +168,11 @@ def main():
             if not text:
                 self.hide()
                 return
+            # Nur die letzten Sätze zeigen. Bei einer langen Äußerung käme sonst
+            # der ganze Block auf einmal, und der Streifen wird zur Textwand.
+            saetze = [s for s in re.split(r'(?<=[.!?…])\s+', text) if s.strip()]
+            if len(saetze) > SAETZE_SICHTBAR:
+                text = ' '.join(saetze[-SAETZE_SICHTBAR:])
             ich = (wer or 'noor').lower() != 'ramzi'
             self.wer.setText('NOOR' if ich else 'RAMZI')
             self.text.setStyleSheet(

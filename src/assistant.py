@@ -223,7 +223,10 @@ class Assistent:
         des Sprechens jetzt nur noch diesen Platzhalter; den echten,
         zuverlaessigen Text liefert _geweckt() aus dem genauen Modell."""
         ton('noor_wach.wav')
-        _untertitel('… ich höre zu …', 'ramzi')
+        # KEIN Platzhalter im Untertitel mehr. Er wuerde den letzten echten Satz
+        # ueberschreiben und genau das Flackern erzeugen, das Ramzi stoert --
+        # der Streifen soll stehen bleiben, bis echter Text ihn ersetzt. Dass
+        # ich zuhoere, sagt der Ton, und der ist schneller als jede Anzeige.
         # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
         # den Namen, wartet auf dieses Zeichen und redet dann erst los.
         self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
