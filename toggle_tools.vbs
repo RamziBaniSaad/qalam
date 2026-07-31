@@ -54,12 +54,57 @@ Sub NoorSkript(datei, argumente, warten)
     On Error Goto 0
 End Sub
 
+' --- spacedesk: Ramzis dritter Bildschirm (iPad), nur im Arbeitsmodus ---
+'  Sein Wunsch (31.07.2026): "wir machen das, dass diese App fuer das iPad,
+'  Space Desk, auch nur aktivieren in unserem Arbeitsmodus -- wir beenden und
+'  starten das mit der Umschaltung, weil das ist ja nur fuer die Cloud-
+'  Desktop-App gedacht, fuer was anderes brauche ich den Bildschirm gar
+'  nicht." Auf dem iPad selbst bleibt die App installiert; er oeffnet sie von
+'  Hand -- ein Kurzbefehl dafuer war ihm "nicht so wichtig".
+'
+'  Ein Windows-DIENST (spacedeskService), kein gewoehnlicher Prozess -- Start/
+'  Stop darueber, nicht per taskkill. Geprueft am 31.07.2026: geht auch ohne
+'  erhoehte Rechte.
+Sub SpacedeskUmschalten(einschalten)
+    ' StartService()/StopService() geben sofort zurueck, der Dienst ist aber
+    ' oft noch "Stop Pending", nicht "Stopped" -- ein StartService() waehrend
+    ' dieses Zwischenzustands schlaegt mit Fehlercode 10 fehl ("ungueltiger
+    ' Zustand fuer diese Operation"). Bewiesen mit einem isolierten Testlauf
+    ' am 31.07.2026, bevor es in den echten Umschalter kam.
+    On Error Resume Next
+    Set dienst = svc.Get("Win32_Service.Name='spacedeskService'")
+    If IsNull(dienst) Or Err.Number <> 0 Then
+        Err.Clear
+        On Error Goto 0
+        Exit Sub
+    End If
+
+    If einschalten And dienst.State <> "Running" Then
+        For versuch = 1 To 15
+            Set dienst = svc.Get("Win32_Service.Name='spacedeskService'")
+            If dienst.State = "Stopped" Then Exit For
+            WScript.Sleep 300
+        Next
+        dienst.StartService()
+        ' Tray-Icon zeigt den Verbindungsstatus -- ohne Dienst sinnlos, also
+        ' erst NACH dem Dienststart.
+        trayPfad = "C:\Program Files\datronicsoft\spacedesk\spacedeskServiceTray.exe"
+        If fso.FileExists(trayPfad) Then sh.Run """" & trayPfad & """", 0, False
+    ElseIf Not einschalten And dienst.State = "Running" Then
+        dienst.StopService()
+        sh.Run "taskkill /IM spacedeskServiceTray.exe /F", 0, False
+    End If
+    Err.Clear
+    On Error Goto 0
+End Sub
+
 If running Then
     ' --- STOP: Arbeitsmodus komplett herunterfahren ---
     '  Reihenfolge mit Absicht: erst Noors Bildschirm leerraeumen und die Tafel
     '  sauber beenden (samt Sammler im Hintergrund), dann Qalam, dann das VRAM.
     NoorSkript "noor-links-zu.ps1", "", True
     NoorSkript "noor-tafel.ps1", "-Stopp", True
+    SpacedeskUmschalten False
 
     ' /T beendet den ganzen Baum, nicht nur den einen Prozess. Eine venv startet
     ' den echten Interpreter als Kindprozess; ohne /T bleibt der stehen, und beim
@@ -104,6 +149,7 @@ If running Then
     Next
 Else
     ' --- START: Arbeitsmodus hochfahren ---
+    SpacedeskUmschalten True
     sh.CurrentDirectory = proj
     sh.Run """" & pyw & """ run.py", 0, False
     ' Die Tafel gehoert dazu: sie ging beim Ausschalten mit, also kommt sie
