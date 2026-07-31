@@ -211,9 +211,23 @@ class Weckwort:
         stille = 0
         in_sprache = False
 
-        def abgeben():
-            """Fertiges Segment an den Arbeiter geben und neu anfangen."""
-            self._auftraege.put(list(puffer))
+        def abgeben(endgueltig):
+            """Segment an den Arbeiter geben und neu anfangen.
+
+            `endgueltig` unterscheidet ZWEI ganz verschiedene Gründe, warum ein
+            Segment endet:
+
+              * echte Stille (endgueltig=True)  -- Ramzi ist wirklich fertig
+              * die Längenbegrenzung (endgueltig=False) -- er redet noch,
+                das Segment wurde nur aus technischen Gründen zerschnitten
+
+            Der Unterschied ist entscheidend. Ohne ihn wurde am 31.07.2026 eine
+            zwei Minuten lange, durchgehende Äußerung in 15-Sekunden-Stücke
+            gehackt, und JEDES Stück einzeln als fertiger Befehl behandelt --
+            das erste enthielt "Noor" und wurde sofort (unvollständig!) an
+            Noor geschickt, wonach das Fenster wieder zuging und der ganze
+            Rest verloren war."""
+            self._auftraege.put((list(puffer), endgueltig))
             puffer.clear()
             with self._schloss:
                 self._laufend = None
@@ -253,13 +267,13 @@ class Weckwort:
                     with self._schloss:
                         self._laufend = list(puffer)[-BLICK_FRAMES:]
                     if len(puffer) >= self.max_frames:
-                        abgeben()
-                        in_sprache = False
+                        abgeben(endgueltig=False)   # er redet noch -- nur ein Zwischenstück
+                        in_sprache = True            # bleibt in Sprache, es geht ja weiter
                 elif in_sprache:
                     stille += 1
                     puffer.append(frame)
                     if stille >= self.stille_frames:
-                        abgeben()
+                        abgeben(endgueltig=True)      # echte Stille -- er ist fertig
                         in_sprache = False
                         stille = 0
 
@@ -276,11 +290,11 @@ class Weckwort:
         """Fertige Segmente genau transkribieren -- in Ruhe, neben der Aufnahme."""
         while not self._stop.is_set():
             try:
-                frames = self._auftraege.get(timeout=0.4)
+                frames, endgueltig = self._auftraege.get(timeout=0.4)
             except queue.Empty:
                 continue
             try:
-                self._pruefe(frames)
+                self._pruefe(frames, endgueltig)
             except Exception as e:
                 print(f'[Weckwort] Auswertung fehlgeschlagen: {e}')
 
@@ -325,8 +339,13 @@ class Weckwort:
         except Exception:
             return None
 
-    def _pruefe(self, puffer):
-        """Fertiges Segment genau transkribieren und entscheiden."""
+    def _pruefe(self, puffer, endgueltig=True):
+        """Segment genau transkribieren und entscheiden.
+
+        `endgueltig=False` heißt: nur ein Zwischenstück, Ramzi redet noch
+        weiter (siehe abgeben()). `beim_wecken` bekommt das mitgeteilt und
+        entscheidet selbst, ob es sammelt oder ausführt -- hier wird nur
+        gehört und weitergegeben, nicht bewertet."""
         if len(puffer) < 8:      # unter ~0,25 s ist es kein Wort, sondern ein Geräusch
             return
         audio = np.concatenate(list(puffer)).astype(np.float32) / 32768.0
@@ -348,7 +367,7 @@ class Weckwort:
         # wie "sie hört mir nicht mehr zu".
         im_gespraech = time.time() < self.folge_bis
         if WECKWORT.search(text) or im_gespraech:
-            self._melde(self.beim_wecken, text)
+            self._melde(self.beim_wecken, text, endgueltig)
 
 
 # --------------------------------------------------------------------------

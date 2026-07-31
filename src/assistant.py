@@ -125,6 +125,9 @@ class Assistent:
     # Sekunden fällt der Unterschied nicht auf -- ein verhörter Befehl schon.
     def __init__(self, stimme=None, modell='small'):
         self.sprecher = Sprecher(stimme) if stimme else Sprecher()
+        # Zwischenstücke einer laufenden, langen Äußerung sammeln sich hier,
+        # bis die echte Stille kommt -- siehe _geweckt().
+        self._sammelsatz = ''
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
                             beim_mitschreiben=self._mitschreiben,
@@ -223,15 +226,22 @@ class Assistent:
         sich häufiger, und ein Befehl aus einem halben Satz wäre gefährlich."""
         _untertitel(vorlaeufig, 'ramzi')
 
-    def _geweckt(self, text):
-        """Wird gerufen, sobald der Name gefallen ist. `text` ist der ganze Satz."""
-        print(f'[Noor] gehört: {text!r}')
-        # Der fertige Satz ersetzt den vorläufigen im Untertitel.
+    def _geweckt(self, text, endgueltig=True):
+        """Wird gerufen, wenn ein Segment erkannt wurde.
+
+        `endgueltig=False`: nur ein Zwischenstück einer noch laufenden, langen
+        Äußerung (die Längenbegrenzung hat mitten im Reden geschnitten, nicht
+        eine echte Pause). Das darf NICHT als fertiger Befehl behandelt werden
+        -- genau das ist Ramzi am 31.07.2026 passiert: sein erster Satzteil
+        enthielt "Noor" und wurde sofort unvollständig verschickt, danach ging
+        das Fenster zu und der Rest seiner ein bis zwei Minuten war verloren.
+        """
+        print(f'[Noor] gehört ({"fertig" if endgueltig else "Zwischenstück"}): {text!r}')
         _untertitel(text, 'ramzi')
 
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
         if self.ohr.schlaeft:
-            if self.AUFWECKER.search(text):
+            if endgueltig and self.AUFWECKER.search(text):
                 self.ohr.schlaeft = False
                 self._sag('Ich bin wieder da.')
             return
@@ -242,8 +252,18 @@ class Assistent:
         if self.sprecher.spricht_gerade():
             self.sprecher.stoppe()
 
-        # Weckwort aus dem Satz nehmen, damit der Rest der reine Auftrag ist.
-        auftrag = WECKWORT.sub('', text).strip(' ,.!?')
+        # Weckwort aus dem Satz nehmen, damit der Rest der reine Auftrag ist,
+        # und an das bisher Gesammelte anhängen.
+        stueck = WECKWORT.sub('', text).strip(' ,.!?')
+        self._sammelsatz = f'{self._sammelsatz} {stueck}'.strip() if self._sammelsatz else stueck
+
+        if not endgueltig:
+            # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
+            self.ohr.folge_bis = time.time() + 20.0
+            return
+
+        auftrag = self._sammelsatz
+        self._sammelsatz = ''
         geglaettet = normalisiere(auftrag)
 
         for bruchstuecke, handler in self.reflexe:
