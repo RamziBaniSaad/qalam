@@ -90,9 +90,18 @@ class Weckwort:
     """
 
     def __init__(self, beim_wecken, modell='small', geraet=None,
-                 aggressivitaet=2, max_sekunden=15.0, stille_ms=None,
-                 beim_erkennen=None, beim_mitschreiben=None, flink_modell='base'):
+                 aggressivitaet=3, max_sekunden=15.0, stille_ms=None,
+                 beim_erkennen=None, beim_mitschreiben=None, flink_modell='base',
+                 spricht_gerade=None):
         self.beim_wecken = beim_wecken
+        # Solange ICH spreche, ist das Ohr taub -- sonst hört das Mikrofon
+        # meine eigene Stimme aus den Lautsprechern mit, das flinke Modell
+        # verhört sich daran zu Zufallstext, und der landet als "Befehl" bei
+        # mir selbst. Ramzi hat das am 31.07.2026 live erlebt: "du hörst,
+        # was du geschrieben hast, und schickst das rüber". Derselbe
+        # Mechanismus wie qalam_nimmt_auf(), nur für die eigene Stimme statt
+        # für ein laufendes Diktat.
+        self._spricht_gerade = spricht_gerade or (lambda: False)
         # Wird gerufen, SOBALD der Name im laufenden Satz auftaucht -- lange
         # bevor der Satz fertig ist. Dafür ist der Ton da.
         self.beim_erkennen = beim_erkennen
@@ -222,7 +231,7 @@ class Weckwort:
                 # trotzdem geweckt werden koennen. Genau daran ist es beim
                 # ersten Test gescheitert -- ich habe "wach auf" nie gehoert,
                 # weil ich an dieser Stelle schon abgebrochen habe.
-                if qalam_nimmt_auf():
+                if qalam_nimmt_auf() or self._spricht_gerade():
                     puffer.clear()
                     in_sprache = False
                     with self._schloss:

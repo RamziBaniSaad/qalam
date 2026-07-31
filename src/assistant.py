@@ -127,7 +127,8 @@ class Assistent:
         self.sprecher = Sprecher(stimme) if stimme else Sprecher()
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
-                            beim_mitschreiben=self._mitschreiben)
+                            beim_mitschreiben=self._mitschreiben,
+                            spricht_gerade=lambda: self.sprecher.spricht_gerade())
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
@@ -247,6 +248,11 @@ class Assistent:
 
         for bruchstuecke, handler in self.reflexe:
             if any(b in geglaettet for b in bruchstuecke):
+                # Ein Auftrag ist erledigt -- ab jetzt wieder zu, bis der Name
+                # erneut fällt. Ohne das bliebe das Ohr nach jedem "Noor, wie
+                # spät ist es" noch 15 Sekunden offen und würde die nächste
+                # Bemerkung im Raum als weiteren Befehl nehmen.
+                self.ohr.folge_bis = 0.0
                 # Musik bekommt ihr eigenes Zeichen -- Ramzi hört dann schon am
                 # Ton, dass es kein Missverständnis war, bevor Spotify reagiert.
                 ton('noor_musik.wav' if 'musik' in bruchstuecke[0] or 'lied' in bruchstuecke[0]
@@ -256,13 +262,16 @@ class Assistent:
                     self._sag(antwort)
                 return
 
-        # Nur der Name, kein Auftrag: der Wach-Ton oben hat schon alles gesagt.
-        # Ein gesprochenes "Ja?" wäre langsamer und würde ihm ins Wort fallen,
-        # wenn er gerade weiterredet.
+        # Nur der Name, kein Auftrag: das Ohr bleibt bewusst offen (folge_bis
+        # läuft weiter) -- genau das ist Ramzis "ich sage den Namen, warte auf
+        # den Ton, rede dann erst los". Der Wach-Ton oben hat schon alles
+        # gesagt, ein gesprochenes "Ja?" würde ihm nur ins Wort fallen.
         if not auftrag:
             return
 
         # Alles andere gehört Noor: über die Brücke in die laufende Sitzung.
+        # Auch das ist ein erledigter Auftrag -- wieder zu.
+        self.ohr.folge_bis = 0.0
         ton('noor_bruecke.wav')
         self._an_noor(auftrag)
 
