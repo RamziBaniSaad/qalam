@@ -21,8 +21,9 @@ WARUM PRO PROGRAMM UND NICHT DIE HAUPTLAUTSTÄRKE:
 Alleine ausprobieren:
     python src/lautstaerke.py
 """
+import json
 import os
-import sys
+import tempfile
 import threading
 import time
 
@@ -31,12 +32,44 @@ import time
 EIGENE = {'python.exe', 'pythonw.exe', 'claude.exe', 'piper.exe'}
 
 # Auf welchen Anteil des VORHERIGEN Werts gedämpft wird. Nicht auf einen festen
-# Wert: hatte Ramzi die Musik schon auf 30 Prozent, wären 20 Prozent absolut
+# Wert: hätte Ramzi die Musik schon auf 30 Prozent, wären 15 Prozent absolut
 # lauter als vorher.
-ANTEIL = 0.2
+#
+# 15 und nicht 20: Ramzi hat bei 20 Prozent nachgehört und es war ihm "ein
+# bisschen zu riskant" -- das Mikrofon soll die Musik nicht mithören.
+ANTEIL = 0.15
 
-_gemerkt = {}                  # Prozessnummer -> Lautstärke von vorher
+# Was vorher wie laut war -- in einer DATEI, nicht im Speicher.
+#
+# Der Grund ist, dass zwei verschiedene Prozesse dämpfen: das Ohr (wenn Ramzi
+# redet) und der Sprech-Hook (wenn ich antworte -- der läuft als eigener
+# PowerShell-Aufruf). Läge der Merker im Speicher, würde der zweite Prozess den
+# schon gedämpften Wert für "vorher" halten und die Musik danach auf 15 Prozent
+# von 15 Prozent zurückstellen. Nach zwei Runden wäre sie unhörbar, und niemand
+# wüsste warum. Dieselbe Bauart wie Untertitel und Brücke: eine Datei ist das
+# einzige, was mehrere Prozesse ohne Verrenkung erreichen.
+MERKER = os.path.join(tempfile.gettempdir(), 'noor-lautstaerke.json')
+
 _schloss = threading.Lock()
+
+
+def _lies_merker():
+    try:
+        with open(MERKER, encoding='utf-8') as f:
+            return {int(k): float(v) for k, v in json.load(f).items()}
+    except Exception:
+        return {}
+
+
+def _schreib_merker(d):
+    try:
+        if d:
+            with open(MERKER, 'w', encoding='utf-8') as f:
+                json.dump({str(k): v for k, v in d.items()}, f)
+        else:
+            os.remove(MERKER)
+    except OSError:
+        pass
 
 
 def _sitzungen():
@@ -72,6 +105,7 @@ def daempfen(anteil=ANTEIL):
     Rückgabe: wie viele Programme gedämpft wurden."""
     anzahl = 0
     with _schloss:
+        gemerkt = _lies_merker()
         for s in _sitzungen():
             try:
                 if not s.Process:
@@ -86,37 +120,50 @@ def daempfen(anteil=ANTEIL):
                 # Nur beim ERSTEN Dämpfen merken. Sonst würde ein zweiter Ruf
                 # den schon gedämpften Wert als "vorher" festschreiben, und die
                 # Musik käme nie wieder auf ihre Lautstärke zurück.
-                _gemerkt.setdefault(s.Process.pid, jetzt)
-                regler.SetMasterVolume(_gemerkt[s.Process.pid] * anteil, None)
+                gemerkt.setdefault(s.Process.pid, jetzt)
+                regler.SetMasterVolume(gemerkt[s.Process.pid] * anteil, None)
                 anzahl += 1
             except Exception:
                 continue
+        _schreib_merker(gemerkt)
     return anzahl
+
+
+def daempfen_im_hintergrund(anteil=ANTEIL):
+    """Dämpfen, ohne den Aufrufer aufzuhalten.
+
+    Das Aufzählen der Audio-Sitzungen geht über COM und braucht ein paar
+    hundert Millisekunden. Ramzi hat sofort gemerkt, dass die Reaktion dadurch
+    länger dauerte -- kein Wunder: der Aufruf stand im Faden des Mitlauschers,
+    und der sucht dort eigentlich nach dem Weckwort. Nichts, was Ramzi hört,
+    darf hinter einer Lautstärke-Abfrage warten."""
+    threading.Thread(target=daempfen, args=(anteil,), daemon=True).start()
 
 
 def zuruecksetzen():
     """Auf die Lautstärke von vorher zurück -- nicht auf 100 Prozent."""
     anzahl = 0
     with _schloss:
-        if not _gemerkt:
+        gemerkt = _lies_merker()
+        if not gemerkt:
             return 0
         for s in _sitzungen():
             try:
                 if not s.Process:
                     continue
-                alt = _gemerkt.get(s.Process.pid)
+                alt = gemerkt.get(s.Process.pid)
                 if alt is None:
                     continue
                 _regler(s).SetMasterVolume(alt, None)
                 anzahl += 1
             except Exception:
                 continue
-        _gemerkt.clear()
+        _schreib_merker({})
     return anzahl
 
 
 def gedaempft():
-    return bool(_gemerkt)
+    return bool(_lies_merker())
 
 
 # --------------------------------------------------------------------------

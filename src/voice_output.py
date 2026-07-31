@@ -56,6 +56,35 @@ def in_saetze(text):
     return [s for s in _SATZ_ENDE.split(text) if s.strip()]
 
 
+def _leiser(an):
+    """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können."""
+    try:
+        import lautstaerke
+        lautstaerke.daempfen() if an else lautstaerke.zuruecksetzen()
+    except Exception:
+        pass
+
+
+def _notbremse_lautstaerke():
+    """Zurückstellen, falls es sonst niemand tut.
+
+    Normalerweise gehört das Zurückstellen dem Wächter im Assistenten -- der
+    weiß, ob Ramzi noch im Gespräch ist, und nur einer darf entscheiden. Läuft
+    das Ohr aber gar nicht (Qalam allein, oder es ist abgestürzt), gibt es
+    diesen Wächter nicht, und die Musik bliebe für immer leise.
+
+    Deshalb hier ein Netz statt einer zweiten Zuständigkeit: liegt der Merker
+    schon länger als eine Minute, hat ihn niemand abgeholt."""
+    try:
+        import lautstaerke
+        if not os.path.exists(lautstaerke.MERKER):
+            return
+        if time.time() - os.path.getmtime(lautstaerke.MERKER) > 60:
+            lautstaerke.zuruecksetzen()
+    except Exception:
+        pass
+
+
 def _klangvorgaben():
     """Tempo und Lautstärke aus den Einstellungen holen.
 
@@ -144,6 +173,17 @@ class Sprecher:
         # übereinander gehört und nicht mehr auseinanderhalten können, was
         # Antwort auf was war.
         with _redeplatz():
+            # Musik leiser, solange ICH rede -- nicht nur, solange Ramzi redet.
+            #
+            # Sein Einwand vom 31.07.2026, und er ist zwingend: "wenn du redest,
+            # dann soll es auch runtergehen, sonst redest du mit der Musik und
+            # dann höre ich gar nichts."
+            #
+            # Hier und nicht im Assistenten, weil hier JEDES Sprechen durchkommt:
+            # die Reflexe des Ohrs und der Sprech-Hook, der meine Chat-Antwort
+            # vorliest -- und der ist ein eigener Prozess. Deshalb liegt der
+            # Merker der alten Lautstärken in einer Datei, siehe lautstaerke.py.
+            _leiser(True)
             stimme = self.stimme
             rate = stimme.config.sample_rate
             self._stop.clear()
@@ -163,6 +203,9 @@ class Sprecher:
             finally:
                 strom.stop()
                 strom.close()
+                # Das Zurückstellen gehört dem Wächter im Assistenten -- hier
+                # nur das Netz für den Fall, dass es den nicht gibt.
+                _notbremse_lautstaerke()
 
     def sprich_im_hintergrund(self, text):
         """Startet das Sprechen und kehrt sofort zurück."""

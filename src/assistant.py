@@ -240,9 +240,14 @@ class Assistent:
         # Musik leiser, solange er redet -- nicht aus. Ramzis Wunsch vom
         # 31.07.2026; die Begründung und das Zurückstellen auf den Wert von
         # VORHER stehen in lautstaerke.py. Zurück geht es in _lautstaerke_wache().
+        # Im Hintergrund: das Aufzählen der Audio-Sitzungen geht über COM und
+        # kostet ein paar hundert Millisekunden. Diese Zeile läuft im Faden des
+        # Mitlauschers, und Ramzi hat sofort gemerkt, dass die Reaktion dadurch
+        # länger dauerte. Nichts, was er hört, darf hinter einer
+        # Lautstärke-Abfrage warten.
         try:
             import lautstaerke
-            lautstaerke.daempfen()
+            lautstaerke.daempfen_im_hintergrund()
         except Exception:
             pass
         # Ramzi will SOFORT etwas Sichtbares zum Ton, egal was drinsteht. Das
