@@ -456,7 +456,16 @@ class Weckwort:
 
         puffer = collections.deque()
         stille = 0
-        sprach = 0            # wie viele Bilder davon wirklich Sprache waren
+        sprach = 0            # Sprache im AKTUELLEN Stueck -- faengt bei jeder
+                              # Satzpause wieder bei null an (siehe unten)
+        gesamt_sprach = 0     # Sprache in der GANZEN Aeusserung -- laeuft ueber
+                              # Satzpausen hinweg weiter. Braucht `kurz` unten:
+                              # sonst haelt jede Satzpause der neue Rest fuer
+                              # einen frischen "kurzen Ruf" und die Satzpausen-
+                              # Schwelle (0,8 s) gilt ploetzlich statt seiner
+                              # eigenen Redepause. Genau das hat Ramzi am
+                              # 01.08.2026 gefunden: "trotz 10 Sekunden nach
+                              # ca. 2 Sekunden abgeschickt."
         in_sprache = False
 
         def abgeben(endgueltig, gesprochene_bilder=None):
@@ -506,6 +515,7 @@ class Weckwort:
                     puffer.clear()
                     in_sprache = False
                     sprach = 0
+                    gesamt_sprach = 0
                     self._kurz_erwartet = False
                     with self._schloss:
                         self._laufend = None
@@ -520,6 +530,7 @@ class Weckwort:
                     in_sprache = False
                     stille = 0
                     sprach = 0
+                    gesamt_sprach = 0
                     self._kurz_erwartet = False
                     with self._schloss:
                         self._laufend = None
@@ -534,6 +545,7 @@ class Weckwort:
                     in_sprache = True
                     stille = 0
                     sprach += 1
+                    gesamt_sprach += 1
                     puffer.append(frame)
                     # Nur einen Ausschnitt hinlegen, damit der Mitlauscher in
                     # seinem eigenen Faden etwas zu tun hat. Kopieren, nicht
@@ -558,7 +570,15 @@ class Weckwort:
                     # Mitlauscher hat schon einen fertigen kurzen Befehl gehört
                     # (siehe ist_kurzbefehl). Sonst bleiben es die vollen vier
                     # Sekunden, damit Ramzi mitten im Satz denken kann.
-                    kurz = sprach <= KURZ_SPRACH_FRAMES or self._kurz_erwartet
+                    #
+                    # GESAMT_sprach, nicht sprach: `sprach` faengt bei jeder
+                    # Satzpause wieder bei null an (siehe unten). Mit `sprach`
+                    # haette JEDER Rest nach einer Satzpause als "kurzer Ruf"
+                    # gegolten, und die Satzpausen-Schwelle (0,8 s) haette
+                    # ploetzlich statt seiner eigenen Redepause gegriffen. Genau
+                    # das hat Ramzi gefunden: "trotz 10 Sekunden nach ca. 2
+                    # Sekunden abgeschickt."
+                    kurz = gesamt_sprach <= KURZ_SPRACH_FRAMES or self._kurz_erwartet
                     schwelle = (min(KURZE_STILLE_FRAMES, self.stille_frames) if kurz
                                 else self.stille_frames)
 
@@ -598,6 +618,7 @@ class Weckwort:
                         in_sprache = False
                         stille = 0
                         sprach = 0
+                        gesamt_sprach = 0
                         self._kurz_erwartet = False
 
     def _melde(self, rueckruf, *args):
