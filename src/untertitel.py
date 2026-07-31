@@ -54,8 +54,18 @@ def _haltezeit():
 # "Satz für Satz" beschrieben hat.
 SAETZE_SICHTBAR = 2
 
+# Wie lange eine Anzeige noch stehen bleibt, NACHDEM sie zu Ende gesprochen ist.
+#
+# Ramzis Regel dazu, und sie ist richtig herum gedacht: "lieber ein bisschen
+# länger als kürzer." Das letzte Wort ist gerade verklungen, wenn das Auge es
+# erreicht -- ohne Nachlauf verschwände die Zeile im selben Moment.
+#
+# Nur die LETZTE Anzeige lebt davon wirklich: alle anderen werden ohnehin von
+# der nächsten abgelöst, bevor der Nachlauf zählt.
+NACHLAUF = 1.2
 
-def zeige(text, wer='noor', worte=None, start=None):
+
+def zeige(text, wer='noor', worte=None, start=None, dauer=None):
     """Einen Satz auf die Untertitel legen. Kostet nichts und blockiert nicht.
 
     `worte` ist der Zusatz für MEINE eigenen Untertitel (Ramzis Wunsch vom
@@ -71,6 +81,13 @@ def zeige(text, wer='noor', worte=None, start=None):
     if worte:
         d['worte'] = worte
         d['start'] = start if start is not None else time.time()
+    if dauer:
+        # Wie lange DIESE Anzeige zu hören ist. Ramzis Einwand vom 01.08.2026:
+        # "deine Länge, die du einschätzt, ist immer zu kurz." Sie war gar keine
+        # Einschätzung von mir -- sie war SEIN Regler, und der galt bisher auch
+        # für meine Untertitel. Steht die Dauer hier, rechnet der Streifen sie
+        # selbst aus und der Regler bleibt für seine eigenen Sätze zuständig.
+        d['dauer'] = dauer
     try:
         with open(DATEI, 'w', encoding='utf-8') as f:
             json.dump(d, f, ensure_ascii=False)
@@ -339,7 +356,7 @@ def main():
                 except Exception:
                     return
                 self.setze(d.get('text', ''), d.get('wer', 'noor'), d.get('zeit', 0),
-                           d.get('worte'), d.get('start'))
+                           d.get('worte'), d.get('start'), d.get('dauer'))
 
             # Läuft gerade eine Wort-Bewegung? Dann schnell nachzeichnen, sonst
             # zurück in den Ruhetakt. Ohne das Zurückschalten liefe der Streifen
@@ -354,14 +371,37 @@ def main():
 
             # Abgelaufen, oder gerade erst ausgeschaltet? Dann weg damit,
             # statt einen alten Satz stehen zu lassen.
-            if self.isVisible() and (haltezeit <= 0 or time.time() - (self._zeit or 0) > haltezeit):
-                self.hide()
+            #
+            # ZWEI Uhren, und der Unterschied ist Ramzis Einwand vom 01.08.2026.
+            # Bisher galt sein Regler für alles -- auch für meine Untertitel.
+            # Stand er auf vier Sekunden und eine Anzeige war sechs Sekunden zu
+            # hören, verschwand sie mitten im Satz. Für ihn sah das aus, als
+            # schätzte ich die Länge zu kurz; in Wahrheit habe ich sie gar nicht
+            # geschätzt.
+            #
+            # Jetzt gilt: bringt eine Anzeige ihre eigene Dauer mit, steht sie
+            # genau so lange, wie sie zu hören ist, plus Nachlauf. Damit endet
+            # sie von selbst erst, wenn die nächste anfängt -- genau das, was er
+            # vorgeschlagen hat. Sein Regler bleibt für Text ohne Dauer
+            # zuständig, also für seine eigenen Sätze.
+            if self.isVisible():
+                if haltezeit <= 0:
+                    self.hide()                       # Regler auf 0 = ganz aus
+                elif self._dauer:
+                    if time.time() > (self._start or self._zeit) + self._dauer + NACHLAUF:
+                        self.hide()
+                elif time.time() - (self._zeit or 0) > haltezeit:
+                    self.hide()
 
         _zeit = 0
+        _dauer = None
+        _start = None
 
-        def setze(self, text, wer, zeit, worte=None, start=None):
+        def setze(self, text, wer, zeit, worte=None, start=None, dauer=None):
             text = ' '.join((text or '').split())
             self._zeit = zeit or time.time()
+            self._dauer = dauer
+            self._start = start
             if not text:
                 self.hide()
                 return

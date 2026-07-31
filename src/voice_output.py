@@ -227,11 +227,16 @@ def _wortzeiten(text, dauer):
     return ergebnis
 
 
-def _untertitel(text, worte, start):
-    """Auf den Streifen legen, ohne daran scheitern zu können."""
+def _untertitel(text, worte, start, dauer):
+    """Auf den Streifen legen, ohne daran scheitern zu können.
+
+    `dauer` ist der Grund, warum Ramzis Untertitel-Regler für MEINE Sätze nicht
+    mehr gilt: der Streifen weiß damit, wie lange diese Anzeige zu hören ist,
+    und blendet sie nicht mehr mitten im Satz aus.
+    """
     try:
         import untertitel
-        untertitel.zeige(text, 'noor', worte, start)
+        untertitel.zeige(text, 'noor', worte, start, dauer)
     except Exception:
         pass
 
@@ -402,7 +407,7 @@ class Sprecher:
                     # Die Dauer wird GEMESSEN, nicht geschätzt: so viele Samples
                     # bei dieser Abtastrate sind genau so viele Sekunden.
                     dauer = len(ton) / float(rate)
-                    _untertitel(text, _wortzeiten(text, dauer), time.time())
+                    _untertitel(text, _wortzeiten(text, dauer), time.time(), dauer)
                     strom.write(ton)
             finally:
                 schluss.set()
