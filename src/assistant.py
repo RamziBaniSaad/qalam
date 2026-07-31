@@ -261,9 +261,21 @@ class Assistent:
         Der Text bleibt trotzdem ein Ausschnitt der letzten Sekunden, nicht der
         ganze Satz -- den vollständigen legt _geweckt() darüber, sobald er
         fertig ist. Das ist Absicht: hier zählt "sie hört mich", nicht
-        Wortgenauigkeit."""
-        if vorlaeufig:
-            _untertitel(vorlaeufig, 'ramzi')
+        Wortgenauigkeit.
+
+        UND DAS FOLGEFENSTER BLEIBT OFFEN, SOLANGE ER REDET. Das ist kein
+        Nebeneffekt, sondern der Grund, warum Ramzi am 31.07.2026 drei Minuten
+        in den Wind gesprochen hat. Im Protokoll standen seine Sätze
+        vollständig und gut lesbar -- aber ohne Reaktion, weil das genaue
+        Modell den Namen im ersten Stück anders geschrieben hatte als der
+        Mitlauscher. Damit war das Fenster nie aufgegangen, und jedes weitere
+        Stück wurde transkribiert und weggeworfen. Das Ohr hörte ihn, verstand
+        ihn, und tat nichts. Wer mitgeschrieben wird, wird auch gehört."""
+        if not vorlaeufig:
+            return
+        _untertitel(vorlaeufig, 'ramzi')
+        self.ohr.folge_bis = max(self.ohr.folge_bis,
+                                 time.time() + einstellungen.hole('folge_sekunden'))
 
     def _ist_kurzbefehl(self, text):
         """Ist das schon ein fertiger Reflex? Dann nicht auf eine Denkpause
