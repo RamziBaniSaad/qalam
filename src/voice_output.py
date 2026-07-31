@@ -56,6 +56,23 @@ def in_saetze(text):
     return [s for s in _SATZ_ENDE.split(text) if s.strip()]
 
 
+def _klangvorgaben():
+    """Tempo und Lautstärke aus den Einstellungen holen.
+
+    `length_scale` ist die Länge, nicht die Geschwindigkeit -- also der
+    Kehrwert. Tempo 1.25 heisst length_scale 0.8, und Piper spricht schneller.
+    Bei jedem Satz neu gelesen, damit ein verschobener Regler sofort wirkt,
+    ohne dass irgendetwas neu startet."""
+    try:
+        from piper import SynthesisConfig
+        import einstellungen
+        tempo = max(0.5, min(2.0, float(einstellungen.hole('tempo') or 1.0)))
+        laut = max(0.0, min(1.5, float(einstellungen.hole('lautstaerke') or 1.0)))
+        return SynthesisConfig(length_scale=1.0 / tempo, volume=laut)
+    except Exception:
+        return None
+
+
 @contextlib.contextmanager
 def _redeplatz(wartezeit=25.0):
     """Nur einer redet -- über Prozessgrenzen hinweg.
@@ -130,6 +147,7 @@ class Sprecher:
             stimme = self.stimme
             rate = stimme.config.sample_rate
             self._stop.clear()
+            klang = _klangvorgaben()
 
             # Ein Strom für alle Sätze: sonst knackt es bei jedem Satzwechsel.
             strom = sd.OutputStream(samplerate=rate, channels=1, dtype='int16')
@@ -138,7 +156,7 @@ class Sprecher:
                 for satz in saetze:
                     if self._stop.is_set():
                         break
-                    for stueck in stimme.synthesize(satz):
+                    for stueck in stimme.synthesize(satz, syn_config=klang):
                         if self._stop.is_set():
                             break
                         strom.write(stueck.audio_int16_array)
@@ -168,12 +186,13 @@ def nach_wav(text, ziel, stimme=STANDARD_STIMME):
     """Text als WAV-Datei ablegen, statt ihn zu sprechen (zum Vergleichen)."""
     import wave
     s = _lade_stimme(stimme)
+    klang = _klangvorgaben()      # dieselben Vorgaben wie beim Sprechen
     with wave.open(ziel, 'wb') as f:
         f.setnchannels(1)
         f.setsampwidth(2)
         f.setframerate(s.config.sample_rate)
         for satz in in_saetze(text) or [text]:
-            for stueck in s.synthesize(satz):
+            for stueck in s.synthesize(satz, syn_config=klang):
                 f.writeframes(stueck.audio_int16_bytes)
     return ziel
 

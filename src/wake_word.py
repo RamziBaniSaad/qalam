@@ -85,29 +85,74 @@ class Weckwort:
     gerufen wird und dann nochmal reden muss.
     """
 
-    def __init__(self, beim_wecken, modell='base', geraet=None,
-                 aggressivitaet=2, max_sekunden=6.0, stille_ms=600):
+    def __init__(self, beim_wecken, modell='small', geraet=None,
+                 aggressivitaet=2, max_sekunden=25.0, stille_ms=None,
+                 beim_erkennen=None, beim_mitschreiben=None, flink_modell='base'):
         self.beim_wecken = beim_wecken
+        # Wird gerufen, SOBALD der Name im laufenden Satz auftaucht -- lange
+        # bevor der Satz fertig ist. Dafür ist der Ton da.
+        self.beim_erkennen = beim_erkennen
+        # Wird mit dem vorläufigen Text gerufen, während noch gesprochen wird.
+        self.beim_mitschreiben = beim_mitschreiben
+
         self.modell_name = modell
+        self.flink_name = flink_modell
         self.geraet = geraet
         self.vad = webrtcvad.Vad(aggressivitaet)
         self.max_frames = int(max_sekunden * 1000 / FRAME_MS)
-        self.stille_frames = int(stille_ms / FRAME_MS)
+        self._stille_ms = stille_ms
         self._modell = None
+        self._flink = None
         self._stop = threading.Event()
         self._thread = None
         self.schlaeft = False   # per "Noor, schlaf" abschaltbar
+        # Bis wann ein Satz OHNE Weckwort noch als Auftrag gilt. Ramzi sagt oft
+        # erst nur den Namen, wartet auf das Zeichen und redet dann weiter --
+        # dieser zweite Satz enthält den Namen naturgemäß nicht mehr.
+        self.folge_bis = 0.0
+
+    @property
+    def stille_frames(self):
+        """Wie lange Schweigen einen Satz beendet -- aus den Einstellungen.
+
+        Stand bis 31.07.2026 fest auf 600 ms. Ramzi konnte damit keinen Satz zu
+        Ende sprechen: jede Denkpause hat mitten im Satz abgeschickt. Jetzt
+        einstellbar und deutlich länger."""
+        ms = self._stille_ms
+        if ms is None:
+            try:
+                from einstellungen import hole
+                ms = hole('stille_ms')
+            except Exception:
+                ms = 1600
+        return int(ms / FRAME_MS)
 
     @property
     def modell(self):
-        """Kleines Whisper-Modell, bewusst auf der CPU.
-
-        int8 auf der CPU: ~75 MB RAM, kein VRAM. Die Karte bleibt für das
-        eigentliche Diktat und fürs Zocken frei."""
+        """Das genaue Modell für den fertigen Satz. Bewusst auf der CPU:
+        int8, kein VRAM -- die Karte bleibt fürs Diktat und fürs Zocken frei."""
         if self._modell is None:
             from faster_whisper import WhisperModel
             self._modell = WhisperModel(self.modell_name, device='cpu', compute_type='int8')
         return self._modell
+
+    @property
+    def flink(self):
+        """Das schnelle Modell für den Blick MITTENDRIN.
+
+        Der Zielkonflikt, den es auflöst: eine lange Redepause braucht eine
+        lange Stille-Schwelle -- aber dann käme das Zeichen "ich höre dich"
+        erst zwei Sekunden nachdem Ramzi ausgeredet hat, und bis dahin redet er
+        ins Ungewisse.
+
+        Also wird schon WÄHREND des Sprechens mitgehört, mit dem kleinsten
+        Modell und nur auf den letzten Sekunden. Das reicht völlig, um den
+        Namen zu finden und einen vorläufigen Untertitel zu zeigen. Der genaue
+        Satz kommt danach vom großen Modell."""
+        if self._flink is None:
+            from faster_whisper import WhisperModel
+            self._flink = WhisperModel(self.flink_name, device='cpu', compute_type='int8')
+        return self._flink
 
     # ----------------------------------------------------------------------
     def starte(self):
@@ -127,10 +172,13 @@ class Weckwort:
 
     # ----------------------------------------------------------------------
     def _schleife(self):
-        _ = self.modell  # einmal laden, bevor es losgeht
+        _ = self.flink   # das schnelle zuerst -- es wird als Erstes gebraucht
+        _ = self.modell
         puffer = collections.deque()
         stille = 0
         in_sprache = False
+        erkannt = False          # Name im laufenden Satz schon gefunden?
+        letzter_blick = 0.0
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype='int16',
                             blocksize=FRAME_LEN, device=self.geraet) as strom:
@@ -159,10 +207,28 @@ class Weckwort:
                     in_sprache = True
                     stille = 0
                     puffer.append(frame)
+
+                    # Mittendrin hineinhören: alle paar Zehntel, sobald genug
+                    # Ton da ist. Nur mit dem schnellen Modell und nur auf den
+                    # letzten Sekunden -- das kostet wenig und bringt das
+                    # Zeichen "ich höre dich" um Sekunden nach vorn.
+                    jetzt = time.time()
+                    if (len(puffer) >= 25 and jetzt - letzter_blick > 0.7
+                            and not self.schlaeft):
+                        letzter_blick = jetzt
+                        vorlaeufig = self._hoer_kurz(puffer)
+                        if vorlaeufig:
+                            if not erkannt and WECKWORT.search(vorlaeufig):
+                                erkannt = True
+                                self._melde(self.beim_erkennen)
+                            if erkannt or time.time() < self.folge_bis:
+                                self._melde(self.beim_mitschreiben, vorlaeufig)
+
                     if len(puffer) >= self.max_frames:
                         self._pruefe(puffer)
                         puffer.clear()
                         in_sprache = False
+                        erkannt = False
                 elif in_sprache:
                     stille += 1
                     puffer.append(frame)
@@ -170,10 +236,35 @@ class Weckwort:
                         self._pruefe(puffer)
                         puffer.clear()
                         in_sprache = False
+                        erkannt = False
                         stille = 0
 
+    def _melde(self, rueckruf, *args):
+        """Rückruf aufrufen, ohne dass ein Fehler darin das Ohr umbringt."""
+        if not rueckruf:
+            return
+        try:
+            rueckruf(*args)
+        except Exception as e:
+            print(f'[Weckwort] Rückruf fehlgeschlagen: {e}')
+
+    def _hoer_kurz(self, puffer, sekunden=3.0):
+        """Die letzten Sekunden mit dem schnellen Modell mithören.
+
+        Nur ein Ausschnitt, nicht der ganze Puffer: die Rechenzeit soll gleich
+        bleiben, egal wie lange Ramzi schon spricht."""
+        frames = list(puffer)[-int(sekunden * 1000 / FRAME_MS):]
+        if len(frames) < 20:
+            return None
+        audio = np.concatenate(frames).astype(np.float32) / 32768.0
+        try:
+            segmente, _ = self.flink.transcribe(audio, language='de', beam_size=1)
+            return ' '.join(s.text for s in segmente).strip()
+        except Exception:
+            return None
+
     def _pruefe(self, puffer):
-        """Segment transkribieren und auf das Weckwort prüfen."""
+        """Fertiges Segment genau transkribieren und entscheiden."""
         if len(puffer) < 8:      # unter ~0,25 s ist es kein Wort, sondern ein Geräusch
             return
         audio = np.concatenate(list(puffer)).astype(np.float32) / 32768.0
@@ -186,11 +277,16 @@ class Weckwort:
 
         if not text:
             return
-        if WECKWORT.search(text):
-            try:
-                self.beim_wecken(text)
-            except Exception as e:
-                print(f'[Weckwort] Rückruf fehlgeschlagen: {e}')
+
+        # Der Folgesatz braucht den Namen nicht mehr.
+        #
+        # Ramzi sagt oft erst nur "Noor", wartet auf das Zeichen und redet dann
+        # weiter. Dieser zweite Satz enthält den Namen naturgemäß nicht -- ohne
+        # diese Regel wäre er verloren, und genau das hat sich für ihn angefühlt
+        # wie "sie hört mir nicht mehr zu".
+        im_gespraech = time.time() < self.folge_bis
+        if WECKWORT.search(text) or im_gespraech:
+            self._melde(self.beim_wecken, text)
 
 
 # --------------------------------------------------------------------------

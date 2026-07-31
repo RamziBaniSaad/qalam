@@ -20,6 +20,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import einstellungen                        # noqa: E402
 from voice_output import Sprecher          # noqa: E402
 from wake_word import Weckwort, WECKWORT   # noqa: E402
 
@@ -50,6 +51,8 @@ def ton(name):
     winsound und keine Bibliothek: es ist in Windows eingebaut, braucht kein
     Audiogerät zu öffnen und ist damit auch dann noch da, wenn Piper gerade
     spricht."""
+    if not einstellungen.hole('toene'):
+        return
     try:
         import winsound
         pfad = os.path.join(TOENE, name)
@@ -122,7 +125,9 @@ class Assistent:
     # Sekunden fällt der Unterschied nicht auf -- ein verhörter Befehl schon.
     def __init__(self, stimme=None, modell='small'):
         self.sprecher = Sprecher(stimme) if stimme else Sprecher()
-        self.ohr = Weckwort(self._geweckt, modell=modell)
+        self.ohr = Weckwort(self._geweckt, modell=modell,
+                            beim_erkennen=self._erkannt,
+                            beim_mitschreiben=self._mitschreiben)
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
@@ -199,16 +204,28 @@ class Assistent:
             _untertitel(text, wer)
             self.sprecher.sprich_im_hintergrund(text)
 
+    def _erkannt(self):
+        """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
+
+        Das Einzige, was hier passiert, ist der Ton. Genau das hat Ramzi
+        verlangt: er will hören, dass ich zuhöre, BEVOR er weiterredet. Alles
+        andere würde ihn warten lassen."""
+        ton('noor_wach.wav')
+        # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
+        # den Namen, wartet auf dieses Zeichen und redet dann erst los.
+        self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
+
+    def _mitschreiben(self, vorlaeufig):
+        """Vorläufiger Text, während noch gesprochen wird -- als Untertitel.
+
+        Bewusst nur angezeigt und nie ausgeführt: das schnelle Modell verhört
+        sich häufiger, und ein Befehl aus einem halben Satz wäre gefährlich."""
+        _untertitel(vorlaeufig, 'ramzi')
+
     def _geweckt(self, text):
         """Wird gerufen, sobald der Name gefallen ist. `text` ist der ganze Satz."""
         print(f'[Noor] gehört: {text!r}')
-        # Ton ZUERST, noch vor allem anderen. Er ist die Antwort auf Ramzis
-        # "rede ich hier gerade ins Leere?" -- alles, was davor käme, würde ihn
-        # warten lassen.
-        if not self.ohr.schlaeft:
-            ton('noor_wach.wav')
-        # Dann zeigen, was angekommen ist. Geht ein Befehl daneben, ist damit
-        # sofort sichtbar, ob es am Sagen oder am Hören lag.
+        # Der fertige Satz ersetzt den vorläufigen im Untertitel.
         _untertitel(text, 'ramzi')
 
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
