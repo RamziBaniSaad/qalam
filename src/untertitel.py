@@ -32,15 +32,19 @@ import time
 
 DATEI = os.path.join(tempfile.gettempdir(), 'noor-untertitel.json')
 
-# Wie lange der Streifen stehen bleibt, wenn nichts Neues kommt.
+# Wie lange der Streifen stehen bleibt, wenn nichts Neues kommt -- kommt aus
+# den Einstellungen (Tafel-Regler "Untertitel", 0-30 s), Standard 10 s.
 #
-# Bewusst LANG. Vorher waren es 7 Sekunden, und Ramzi hat sofort gemerkt, wie
-# schlecht das aussieht: "das kommt und geht, das sieht scheiße aus" -- der
-# Streifen verschwand mitten im Reden und tauchte beim nächsten Stück wieder
-# auf. Er soll stehen bleiben, bis der nächste Text ihn ersetzt. Die drei
-# Minuten sind nur ein Sicherheitsnetz, damit nach Feierabend nicht stundenlang
-# ein alter Satz auf dem Bildschirm klebt.
-HALTEZEIT = 180.0
+# Erster Versuch war 7 Sekunden fest verdrahtet, und Ramzi hat sofort gemerkt,
+# wie schlecht das aussieht: "das kommt und geht, das sieht scheiße aus" -- der
+# Streifen verschwand mitten im Reden. 0 Sekunden heißt: Untertitel ganz aus,
+# der Regler ist damit gleichzeitig der Schalter.
+def _haltezeit():
+    try:
+        from einstellungen import hole
+        return float(hole('untertitel_sekunden'))
+    except Exception:
+        return 10.0
 
 # Wie viele Sätze gleichzeitig zu sehen sind.
 #
@@ -147,8 +151,14 @@ def main():
                     self.hide()
                 return
 
+            haltezeit = _haltezeit()
+
             if mtime != self._stand:
                 self._stand = mtime
+                if haltezeit <= 0:
+                    # Regler auf 0 = Untertitel aus. Nicht mal anzeigen.
+                    self.hide()
+                    return
                 try:
                     with open(DATEI, encoding='utf-8') as f:
                         d = json.load(f)
@@ -156,8 +166,9 @@ def main():
                     return
                 self.setze(d.get('text', ''), d.get('wer', 'noor'), d.get('zeit', 0))
 
-            # Abgelaufen? Dann weg damit, statt einen alten Satz stehen zu lassen.
-            if self.isVisible() and time.time() - (self._zeit or 0) > HALTEZEIT:
+            # Abgelaufen, oder gerade erst ausgeschaltet? Dann weg damit,
+            # statt einen alten Satz stehen zu lassen.
+            if self.isVisible() and (haltezeit <= 0 or time.time() - (self._zeit or 0) > haltezeit):
                 self.hide()
 
         _zeit = 0

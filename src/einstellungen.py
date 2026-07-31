@@ -27,6 +27,9 @@ STANDARD = {
     'stille_ms': 1600,
     # Wie lange nach einer Antwort ein Folgesatz OHNE Weckwort gilt.
     'folge_sekunden': 15,
+    # Wie lange der Untertitel-Streifen stehen bleibt, in Sekunden.
+    # 0 = Untertitel ganz aus. Damit ist der Regler gleichzeitig der Schalter.
+    'untertitel_sekunden': 10,
 }
 
 _stand = {'zeit': None, 'werte': dict(STANDARD)}

@@ -242,13 +242,26 @@ class Assistent:
         das Fenster zu und der Rest seiner ein bis zwei Minuten war verloren.
         """
         print(f'[Noor] gehört ({"fertig" if endgueltig else "Zwischenstück"}): {text!r}')
-        _untertitel(text, 'ramzi')
+
+        # Weckwort aus dem Satz nehmen und an das bisher Gesammelte anhängen --
+        # VOR dem Untertitel, nicht danach. Ramzi hat einen echten Fehler
+        # gefunden: der Untertitel zeigte bisher nur das JEWEILS NEUE
+        # Zwischenstück, nicht den gewachsenen Satz. Bei einem Stück mit
+        # mehreren Sätzen, von denen der Streifen nur die letzten zwei zeigt,
+        # verschwand der erste Satz dieses Stücks lautlos -- er wurde nie
+        # angezeigt, nicht mal kurz. Jetzt bekommt der Streifen immer den
+        # ganzen bisher gesammelten Text; das Abschneiden auf die letzten
+        # Sätze passiert dort auf der vollständigen, wachsenden Fassung.
+        stueck = WECKWORT.sub('', text).strip(' ,.!?')
+        self._sammelsatz = f'{self._sammelsatz} {stueck}'.strip() if self._sammelsatz else stueck
+        _untertitel(self._sammelsatz, 'ramzi')
 
         # Im Schlaf höre ich weiter, reagiere aber nur aufs Aufwachen.
         if self.ohr.schlaeft:
             if endgueltig and self.AUFWECKER.search(text):
                 self.ohr.schlaeft = False
                 self._sag('Ich bin wieder da.')
+            self._sammelsatz = ''
             return
 
         # Wenn ich gerade rede und angesprochen werde: erst mal Klappe halten.
@@ -256,11 +269,6 @@ class Assistent:
         # mitten im Wort, aber schon "du hast Vorrang".
         if self.sprecher.spricht_gerade():
             self.sprecher.stoppe()
-
-        # Weckwort aus dem Satz nehmen, damit der Rest der reine Auftrag ist,
-        # und an das bisher Gesammelte anhängen.
-        stueck = WECKWORT.sub('', text).strip(' ,.!?')
-        self._sammelsatz = f'{self._sammelsatz} {stueck}'.strip() if self._sammelsatz else stueck
 
         if not endgueltig:
             # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
