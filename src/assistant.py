@@ -128,9 +128,10 @@ class Assistent:
         # Zwischenstücke einer laufenden, langen Äußerung sammeln sich hier,
         # bis die echte Stille kommt -- siehe _geweckt().
         self._sammelsatz = ''
+        # beim_mitschreiben bewusst NICHT verdrahtet -- siehe _erkannt() fuer
+        # die Begruendung, warum die rohe Vorschau nicht mehr angezeigt wird.
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
-                            beim_mitschreiben=self._mitschreiben,
                             spricht_gerade=lambda: self.sprecher.spricht_gerade())
         self._laeuft = threading.Event()
 
@@ -211,20 +212,21 @@ class Assistent:
     def _erkannt(self):
         """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
 
-        Das Einzige, was hier passiert, ist der Ton. Genau das hat Ramzi
-        verlangt: er will hören, dass ich zuhöre, BEVOR er weiterredet. Alles
-        andere würde ihn warten lassen."""
+        Ton, und ein ruhiger Platzhalter im Untertitel. Ramzi hat am
+        31.07.2026 ein Video geschickt: der Untertitel zeigte waehrend des
+        Redens wild wechselnden Unsinn. Ursache war NICHT das Ohr -- die
+        richtigen Saetze im Log waren gut lesbar -- sondern die Anzeige: sie
+        zeigte den rohen Text aus _mitschreiben(), und der kommt aus
+        unabhaengigen 3-Sekunden-Fenstern, die irgendwo mitten im Wort
+        anfangen und aufhoeren. Selbst ein perfektes Modell wuerde daraus
+        etwas Zusammenhangloses machen. Deshalb zeigt der Untertitel waehrend
+        des Sprechens jetzt nur noch diesen Platzhalter; den echten,
+        zuverlaessigen Text liefert _geweckt() aus dem genauen Modell."""
         ton('noor_wach.wav')
+        _untertitel('… ich höre zu …', 'ramzi')
         # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
         # den Namen, wartet auf dieses Zeichen und redet dann erst los.
         self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
-
-    def _mitschreiben(self, vorlaeufig):
-        """Vorläufiger Text, während noch gesprochen wird -- als Untertitel.
-
-        Bewusst nur angezeigt und nie ausgeführt: das schnelle Modell verhört
-        sich häufiger, und ein Befehl aus einem halben Satz wäre gefährlich."""
-        _untertitel(vorlaeufig, 'ramzi')
 
     def _geweckt(self, text, endgueltig=True):
         """Wird gerufen, wenn ein Segment erkannt wurde.

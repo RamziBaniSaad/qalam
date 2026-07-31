@@ -109,9 +109,15 @@ Else
     ' Die Tafel gehoert dazu: sie ging beim Ausschalten mit, also kommt sie
     ' beim Einschalten auch wieder. Alles andere waere eine Einbahnstrasse.
     NoorSkript "noor-tafel.ps1", "", False
-    ' Claude wieder mit hoch. Der Startbefehl steht im Autostart-Eintrag der
-    ' App selbst -- so bleibt er richtig, auch wenn die App sich aktualisiert
-    ' und ihre Versionsnummer im Pfad wechselt.
+    ' Claude wieder mit hoch.
+    '
+    ' ACHTUNG, FUNKTIONIERT NOCH NICHT (Stand 31.07.2026): Der Registry-Wert
+    ' wird korrekt gelesen, aber sh.Run darauf startet die App nicht. Vermutung:
+    ' Claude ist ein WindowsApps-Paket, und solche Pakete lassen sich nicht
+    ' zuverlaessig ueber ihren rohen .exe-Pfad starten -- der Weg waere
+    '   explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!App
+    ' Ungetestet, weil jeder Testlauf das Fenster schliesst, in dem Ramzi
+    ' mitliest. Bis dahin oeffnet er Claude nach dem Einschalten von Hand.
     On Error Resume Next
     claudeBefehl = sh.RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Claude")
     If Err.Number = 0 And Len(claudeBefehl) > 0 Then
