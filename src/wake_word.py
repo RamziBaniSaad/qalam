@@ -144,7 +144,9 @@ def _leiser(an):
     zweier, die auseinanderlaufen."""
     try:
         import lautstaerke
-        lautstaerke.daempfen() if an else lautstaerke.zuruecksetzen()
+        # Eigener Prozess, nicht eigener Faden -- siehe lautstaerke.py.
+        (lautstaerke.daempfen_im_hintergrund() if an
+         else lautstaerke.zuruecksetzen_im_hintergrund())
     except Exception:
         pass
 

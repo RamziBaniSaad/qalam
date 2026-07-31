@@ -92,11 +92,26 @@ def _sitzungen():
 
 
 def _regler(sitzung):
-    from ctypes import cast, POINTER
-    from comtypes import CLSCTX_ALL      # noqa: F401  (nur fuer die Doku)
+    """Der Lautstärkeregler einer Audio-Sitzung.
+
+    KEIN ctypes.cast auf POINTER(...) hier. Genau das hat am 31.07.2026 das Ohr
+    getötet: `QueryInterface` gibt bereits einen fertigen, verwalteten
+    Schnittstellenzeiger zurück. Ihn noch einmal zu casten erzeugt einen
+    zweiten, unverwalteten Zeiger auf dasselbe Objekt -- und wenn der
+    Speicherbereiniger den freigibt, kommt
+
+        ValueError: COM method call without VTable
+        OSError: exception: access violation writing 0x...
+
+    Eine Zugriffsverletzung beendet den ganzen Prozess, und kein try/except
+    fängt sie ab. Ramzi hat mehrfach meinen Namen gerufen und nichts bekam --
+    das Ohr war schon tot, und die Tafel hat es korrekt als "Weckwort aus"
+    gemeldet.
+
+    Merksatz: bei COM ist ein zusätzlicher cast kein Schönheitsfehler, sondern
+    ein Absturz mit Zeitzünder."""
     from pycaw.pycaw import ISimpleAudioVolume
-    return cast(sitzung._ctl.QueryInterface(ISimpleAudioVolume),
-                POINTER(ISimpleAudioVolume))
+    return sitzung._ctl.QueryInterface(ISimpleAudioVolume)
 
 
 def daempfen(anteil=ANTEIL):
@@ -129,15 +144,39 @@ def daempfen(anteil=ANTEIL):
     return anzahl
 
 
-def daempfen_im_hintergrund(anteil=ANTEIL):
-    """Dämpfen, ohne den Aufrufer aufzuhalten.
+def _nebenher(schalter):
+    """Die Lautstärke in einem eigenen FADEN verstellen.
 
-    Das Aufzählen der Audio-Sitzungen geht über COM und braucht ein paar
-    hundert Millisekunden. Ramzi hat sofort gemerkt, dass die Reaktion dadurch
-    länger dauerte -- kein Wunder: der Aufruf stand im Faden des Mitlauschers,
-    und der sucht dort eigentlich nach dem Weckwort. Nichts, was Ramzi hört,
-    darf hinter einer Lautstärke-Abfrage warten."""
-    threading.Thread(target=daempfen, args=(anteil,), daemon=True).start()
+    Warum überhaupt nebenher: das Aufzählen der Audio-Sitzungen geht über COM
+    und braucht ein paar hundert Millisekunden. Ramzi hat sofort gemerkt, dass
+    die Reaktion dadurch länger dauerte -- der Aufruf stand im Faden des
+    Mitlauschers, und der sucht dort eigentlich nach dem Weckwort.
+
+    WAS HIER EIGENTLICH STEHEN SOLLTE: ein eigener PROZESS. Am 31.07.2026 hat
+    genau dieser Code das Ohr getötet -- ein falscher COM-Zeiger, eine
+    Zugriffsverletzung, und die beendet den ganzen Prozess; kein try/except
+    fängt sie ab. Ramzi rief mehrfach meinen Namen und bekam nichts, weil das
+    Ohr schon tot war. Ein Nebenwunsch ("Musik leiser") darf das Ohr nicht
+    umbringen können, auch nicht beim nächsten Fehler, den ich noch nicht kenne.
+
+    Der Versuch mit einem eigenen Prozess ist gescheitert, und zwar unerklärt:
+    derselbe Befehl, von Hand ausgeführt, dämpft einwandfrei -- als abgesetzter
+    Prozess findet er keine einzige Audio-Sitzung. Statt das weiter auszufechten
+    steht hier ein Faden, und die Absicherung liegt in der Korrektheit: der
+    COM-Fehler ist behoben und über 35 Runden mit erzwungener Speicherbereinigung
+    geprüft, auch aus mehreren Fäden. Der Prozess-Ansatz bleibt als offener Punkt
+    notiert -- er wäre die bessere Trennung."""
+    ziel = daempfen if schalter == 'daempfen' else zuruecksetzen
+    threading.Thread(target=ziel, daemon=True).start()
+
+
+def daempfen_im_hintergrund(anteil=ANTEIL):
+    """Dämpfen, ohne den Aufrufer aufzuhalten und ohne ihn zu gefährden."""
+    _nebenher('daempfen')
+
+
+def zuruecksetzen_im_hintergrund():
+    _nebenher('zuruecksetzen')
 
 
 def zuruecksetzen():
@@ -168,8 +207,15 @@ def gedaempft():
 
 # --------------------------------------------------------------------------
 if __name__ == '__main__':
-    print('Dämpfe …', daempfen(), 'Programme')
-    for name, wert in list(_gemerkt.items()):
-        print(f'   Prozess {name}: war {wert:.2f}')
-    time.sleep(4)
-    print('Zurück …', zuruecksetzen(), 'Programme')
+    import sys
+    if '--daempfen' in sys.argv:
+        daempfen()
+    elif '--zurueck' in sys.argv:
+        zuruecksetzen()
+    else:
+        # Selbsttest: dämpfen, hinhören, zurückstellen.
+        print('Dämpfe …', daempfen(), 'Programme')
+        for pid, wert in _lies_merker().items():
+            print(f'   Prozess {pid}: war {wert:.2f}')
+        time.sleep(4)
+        print('Zurück …', zuruecksetzen(), 'Programme')

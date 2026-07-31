@@ -485,7 +485,7 @@ class Assistent:
                 from wake_word import qalam_nimmt_auf
                 if qalam_nimmt_auf():
                     continue        # Ramzi diktiert -- das dämpft selbst
-                lautstaerke.zuruecksetzen()
+                lautstaerke.zuruecksetzen_im_hintergrund()
             except Exception:
                 continue
 

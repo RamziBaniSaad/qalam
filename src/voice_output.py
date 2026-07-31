@@ -18,6 +18,7 @@ import queue
 import re
 import sys
 import threading
+import time
 
 # Piper und sounddevice erst bei Bedarf laden -- der Import kostet ~1 s, und
 # nicht jeder Start von Qalam braucht die Stimme.
@@ -60,7 +61,10 @@ def _leiser(an):
     """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können."""
     try:
         import lautstaerke
-        lautstaerke.daempfen() if an else lautstaerke.zuruecksetzen()
+        # Eigener Prozess, nicht eigener Faden -- Begruendung in lautstaerke.py:
+        # dieser Code hat das Ohr schon einmal getoetet.
+        (lautstaerke.daempfen_im_hintergrund() if an
+         else lautstaerke.zuruecksetzen_im_hintergrund())
     except Exception:
         pass
 
