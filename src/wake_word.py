@@ -125,16 +125,19 @@ WECKWORT = re.compile(
 )
 
 PROJEKT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SPERRE = os.path.join(PROJEKT, '.aufnahme.lock')
 
-
-# --------------------------------------------------------------------------
-# Sperre: solange Qalam selbst aufnimmt, ist das Weckwort taub.
+# Die eigentlichen Sperrdateien und die Warteschlangen-Logik liegen in
+# warteschlange.py -- einer eigenen, winzigen Datei ohne schwere Importe.
+# Grund: der Sprech-Hook startet bei JEDER Antwort neu als eigener Prozess und
+# soll dafür nicht numpy/sounddevice/webrtcvad laden müssen, nur um
+# nachzusehen, ob gerade Stille ist.
 #
-# Ramzi sagt meinen Namen ständig, während er mir etwas diktiert. Ohne diese
-# Sperre würde ich mitten in seinem Diktat aufwachen -- genau das soll nicht
-# passieren.
-# --------------------------------------------------------------------------
+# Hier nur re-exportiert, damit result_thread.py und status_window.py (die
+# `aufnahme_beginnt`/`aufnahme_endet` von hier importieren) unverändert bleiben.
+import warteschlange
+SPERRE = warteschlange.AUFNAHME_SPERRE
+
+
 def _leiser(an):
     """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können.
 
@@ -152,34 +155,17 @@ def _leiser(an):
 
 
 def aufnahme_beginnt():
-    try:
-        with open(SPERRE, 'w') as f:
-            f.write(str(time.time()))
-    except OSError:
-        pass
+    warteschlange.aufnahme_beginnt()
     _leiser(True)
 
 
 def aufnahme_endet():
-    try:
-        os.remove(SPERRE)
-    except OSError:
-        pass
+    warteschlange.aufnahme_endet()
     _leiser(False)
 
 
 def qalam_nimmt_auf():
-    if not os.path.exists(SPERRE):
-        return False
-    # Sicherheitsnetz: bleibt die Sperre nach einem Absturz liegen, taut sie
-    # nach 15 Minuten von selbst auf, statt das Weckwort dauerhaft zu töten.
-    try:
-        if time.time() - os.path.getmtime(SPERRE) > 900:
-            aufnahme_endet()
-            return False
-    except OSError:
-        return False
-    return True
+    return warteschlange.qalam_nimmt_auf()
 
 
 class Weckwort:
@@ -492,6 +478,15 @@ class Weckwort:
                 continue
             if self.schlaeft or len(schnipsel) < MINDEST_FRAMES:
                 continue
+            # Sein Platz in der Warteschlange -- siehe warteschlange.py.
+            #
+            # Sobald der Name erkannt ist oder das Folgefenster offen ist,
+            # redet Ramzi mit mir, und niemand darf ihm dabei ins Wort fallen.
+            # Erneuert jede 0,3 s, solange das gilt; explizit gelöscht wird der
+            # Platz in assistant.py, sobald eine echte Stille eintrifft --
+            # nicht erst, wenn diese Markierung von selbst verfaellt.
+            if erkannt or time.time() < self.folge_bis:
+                warteschlange.redet_merken(True)
             # Vorrang für das genaue Modell -- siehe _arbeiter_rechnet.
             if self._arbeiter_rechnet.is_set():
                 self._streifen_wachhalten(letzter, erkannt)

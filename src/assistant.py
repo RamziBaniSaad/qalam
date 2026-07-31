@@ -387,6 +387,21 @@ class Assistent:
             self.ohr.folge_bis = time.time() + 20.0
             return
 
+        # Echte Stille -- er hat seinen Platz in der Warteschlange abgegeben.
+        #
+        # Ramzis Idee vom 31.07.2026: sein Reden gehört zur selben Warteschlange
+        # wie mein Sprechen, damit ich ihm nie ins Wort falle. EXPLIZIT hier
+        # freigeben, nicht erst warten, bis die Markierung von selbst verfällt
+        # (siehe warteschlange.py) -- sonst bliebe mein eigener Reflex kurz
+        # stumm, obwohl er längst fertig ist. Der Mitlauscher markiert den
+        # Platz laufend, solange `erkannt` oder `folge_bis` gilt; hier, wo
+        # `endgueltig=True` feststeht, ist genau der Moment, ihn abzugeben.
+        try:
+            import warteschlange
+            warteschlange.redet_merken(False)
+        except Exception:
+            pass
+
         auftrag = self._sammelsatz
         self._sammelsatz = ''
         geglaettet = normalisiere(auftrag)

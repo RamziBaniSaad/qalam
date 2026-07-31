@@ -171,9 +171,23 @@ class Sprecher:
         if not saetze:
             return
 
-        # Warten, bis niemand sonst spricht. Ohne das reden zwei Prozesse
-        # gleichzeitig: das Ohr beantwortet einen Reflex, während der Stop-Hook
-        # meine Chat-Antwort vorliest. Ramzi hat am 31.07.2026 beides
+        # ERST sein Platz in der Warteschlange, DANN meiner.
+        #
+        # Ramzis Idee, wortgetreu (31.07.2026): "wenn ich gerade am Sprechen
+        # bin, bin ich in der Warteschlange, und wenn du dann etwas sagen
+        # willst, packst du es in die Warteschlange und bist als nächstes
+        # dran." Ausgelöst dadurch, dass dieser Hook einmal genau mitten in
+        # seiner Beschreibung angefangen hat, meine vorherige Antwort
+        # vorzulesen -- beide Stimmen übereinander.
+        try:
+            import warteschlange
+            warteschlange.warte_bis_er_fertig_ist()
+        except Exception:
+            pass
+
+        # Warten, bis niemand sonst von MIR spricht. Ohne das reden zwei
+        # Prozesse gleichzeitig: das Ohr beantwortet einen Reflex, während der
+        # Stop-Hook meine Chat-Antwort vorliest. Ramzi hat am 31.07.2026 beides
         # übereinander gehört und nicht mehr auseinanderhalten können, was
         # Antwort auf was war.
         with _redeplatz():
