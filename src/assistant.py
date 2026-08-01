@@ -21,6 +21,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import einstellungen                        # noqa: E402
+import oeffnen                              # noqa: E402
 import stellschrauben                       # noqa: E402
 from voice_output import Sprecher          # noqa: E402
 from wake_word import Weckwort, WECKWORT   # noqa: E402
@@ -175,6 +176,22 @@ def normalisiere(text):
     return re.sub(r'\s+', ' ', t).strip()
 
 
+def _laeuft_programm(name):
+    """Läuft dieses Programm gerade? Über die Windows-Prozessliste.
+
+    tasklist statt einer Bibliothek: es ist eingebaut, braucht keine
+    Abhängigkeit und kostet rund hundert Millisekunden -- bei einem Befehl, der
+    ohnehin ein Fenster aufmacht, fällt das nicht auf."""
+    try:
+        aus = subprocess.run(['tasklist', '/FI', f'IMAGENAME eq {name}'],
+                             capture_output=True, text=True, timeout=5,
+                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        return name.lower() in (aus.stdout or '').lower()
+    except Exception:
+        return True      # im Zweifel annehmen, dass es läuft -- dann wird nur
+                         # die Taste geschickt, statt ein Fenster aufzudrängen
+
+
 def _medien(taste):
     """Wiedergabe steuern -- geht ueber die Multimedia-Tasten, also mit jedem
     Player, nicht nur mit Spotify."""
@@ -253,11 +270,15 @@ class Assistent:
             (['hor auf', 'sei mal still', 'ruhe', 'stopp reden', 'nicht weiter reden'],
              lambda: self._still()),
 
-            (['musik an', 'musik aus', 'musik weiter', 'musik pause', 'musik stopp',
-              'spotify an', 'spotify aus', 'spotify pause', 'mach musik', 'mach mal musik',
-              'lied an', 'lied aus', 'song an', 'song aus', 'playlist an', 'pausier die musik',
-              'stell die musik', 'mach die musik'],
-             lambda: 'Okay.' if _medien('play_pause') else 'Das hat nicht geklappt.'),
+            # "musik" allein steht mit drin, seit Ramzi am 01.08.2026 genau das
+            # gesagt hat und es im Chat landete. Sein Wunsch war ausdrücklich,
+            # den Umschalt-Charakter zu behalten: sagt er "Musik aus", während
+            # nichts läuft, geht sie trotzdem an -- und das ist richtig so, denn
+            # Qalam verwechselt "an" und "aus", und der Umschalter tut dann
+            # zufällig das Gewollte.
+            (['musik', 'spotify an', 'spotify aus', 'spotify pause',
+              'lied an', 'lied aus', 'song an', 'song aus', 'playlist an'],
+             lambda: self._musik()),
 
             (['nachstes lied', 'nachster song', 'nachste lied', 'nachsten song', 'nachstes stuck',
               'skip', 'uberspring', 'weiter im lied', 'nachster titel', 'nachstes titel'],
@@ -280,6 +301,19 @@ class Assistent:
     def _still(self):
         self.sprecher.stoppe()
         return None      # nichts sagen -- er will ja gerade Ruhe
+
+    def _musik(self):
+        """Wiedergabe umschalten -- oder Spotify erst mal aufmachen.
+
+        Die Multimedia-Taste wirkt mit jedem Player, aber wenn gar keiner läuft,
+        wirkt sie mit keinem: sie geht ins Leere, und ich hätte trotzdem "Okay"
+        gesagt. Genau die Sorte Antwort, die Ramzi glauben lässt, es sei etwas
+        passiert. Läuft Spotify nicht, mache ich es also auf, statt eine Taste
+        an niemanden zu schicken."""
+        if not _laeuft_programm('Spotify.exe'):
+            oeffnen.oeffne('spotify')
+            return 'Ich mache Spotify auf.'
+        return 'Okay.' if _medien('play_pause') else 'Das hat nicht geklappt.'
 
     # ------------------------------------------------------------------
     def _abbrechen(self, per_taste=True):
@@ -474,7 +508,13 @@ class Assistent:
         # Befehl darf nicht an der alten, langen Redepause hängen -- sonst wartet
         # das Ohr bis zu zehn Sekunden, um zu erfahren, dass es weniger warten
         # soll.
-        return stellschrauben.ist_stellschraube(ohne_namen)
+        if stellschrauben.ist_stellschraube(ohne_namen):
+            return True
+        # „Mach mir YouTube auf" ist genauso fertig -- danach kommt nichts mehr.
+        try:
+            return oeffnen.verstehe(ohne_namen) is not None
+        except Exception:
+            return False
 
     def _erkannt(self):
         """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
@@ -642,6 +682,20 @@ class Assistent:
             self.ohr.folge_bis = 0.0
             ton('noor_reflex.wav')
             self._sag(gestellt)
+            return
+
+        # „Mach mir YouTube auf." Zuletzt in der Kette, weil es das breiteste
+        # Netz hat: ein Stichwort aus dem Katalog kann in vielen Sätzen
+        # vorkommen. Was vorher greift, ist spezieller und hat Vorrang.
+        try:
+            aufgemacht = oeffnen.mach(auftrag)
+        except Exception as e:
+            aufgemacht = None
+            print(f'[Noor] Öffnen fehlgeschlagen: {e}')
+        if aufgemacht:
+            self.ohr.folge_bis = 0.0
+            ton('noor_fenster_auf.wav')
+            self._sag(aufgemacht)
             return
 
         # Nur der Name, kein Auftrag: das Ohr bleibt bewusst offen (folge_bis
