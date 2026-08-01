@@ -58,14 +58,18 @@ def ton(name):
 
     winsound und keine Bibliothek: es ist in Windows eingebaut, braucht kein
     Audiogerät zu öffnen und ist damit auch dann noch da, wenn Piper gerade
-    spricht."""
-    if not einstellungen.hole('toene'):
-        return
+    spricht.
+
+    Wie LAUT, entscheidet ton.py -- dort hängt jeder Klang an seinem eigenen
+    Regler, und dort steht auch, warum die Lautstärke in die Datei gerechnet
+    werden muss (winsound kennt keine). Hier bleibt nur der Aufruf: es soll
+    genau eine Stelle geben, die weiß, wie ein Ton laut wird.
+
+    `import` erst hier und nicht oben: das Modul heißt `ton` wie diese
+    Funktion, und ein Modulname auf Dateiebene würde von ihr verdeckt."""
     try:
-        import winsound
-        pfad = os.path.join(TOENE, name)
-        if os.path.exists(pfad):
-            winsound.PlaySound(pfad, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        import ton as tonmodul
+        tonmodul.spiele(name)
     except Exception:
         pass
 

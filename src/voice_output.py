@@ -156,7 +156,13 @@ def _klangvorgaben():
         from piper import SynthesisConfig
         import einstellungen
         tempo = max(0.5, min(2.0, float(einstellungen.hole('tempo') or 1.0)))
-        laut = max(0.0, min(1.5, float(einstellungen.hole('lautstaerke') or 1.0)))
+        # Zwei Ebenen, wie überall beim Feedback (Ramzi, 01.08.2026 nachts):
+        # `lautstaerke` ist der Hauptregler für alles Hörbare, `laut_stimme` der
+        # Anteil davon, der auf meine Stimme entfällt. Wer die Tafel oben ganz
+        # herunterzieht, macht damit auch mich still -- genau das war der Wunsch.
+        haupt = max(0.0, min(1.5, float(einstellungen.hole('lautstaerke') or 1.0)))
+        anteil = max(0.0, float(einstellungen.hole('laut_stimme') or 100)) / 100.0
+        laut = max(0.0, min(1.5, haupt * anteil))
         return SynthesisConfig(length_scale=1.0 / tempo, volume=laut)
     except Exception:
         return None

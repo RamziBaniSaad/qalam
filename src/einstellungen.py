@@ -30,6 +30,53 @@ STANDARD = {
     # Wie lange der Untertitel-Streifen stehen bleibt, in Sekunden.
     # 0 = Untertitel ganz aus. Damit ist der Regler gleichzeitig der Schalter.
     'untertitel_sekunden': 10,
+
+    # ------------------------------------------------------------------ Feedback
+    # Ramzis Auftrag vom 01.08.2026 nachts: KEIN Schalter plus Skala mehr,
+    # sondern je Sache EIN Regler von 0 bis 100 -- und 0 heißt aus. Zwei
+    # Angaben für dieselbe Sache konnten sich widersprechen ("Ton an" bei
+    # "Lautstärke 0"), eine Angabe kann das nicht. `untertitel_sekunden`
+    # oben macht das seit dem 31.07. schon vor; hier gilt es für alles.
+    #
+    # Aufgebaut in zwei Ebenen, genau wie die Tafel es zeigt: `lautstaerke`
+    # ist der HAUPTREGLER für alles Hörbare (Töne UND Stimme), die Werte hier
+    # sind Anteile davon. Gerechnet wird in ton.py bzw. voice_output.py.
+    #
+    # Flach und nicht verschachtelt, obwohl das erst reizvoller aussieht:
+    # `setze()` und `alle()` unten filtern gegen STANDARD, und bei einem
+    # verschachtelten Wert würde ein unvollständiger Teil-Baum aus der Datei
+    # die Vorgaben darunter mitreißen. Flach kostet ein paar Zeilen mehr und
+    # kann diesen Fehler nicht machen.
+    'laut_stimme':         100,   # meine Stimme (darf über 100, Piper verstärkt)
+    'laut_arbeitet':       100,   # der Ton im Moment einer Aktion
+    'laut_wach':           100,   # Weckwort erkannt
+    'laut_bruecke':        100,   # Auftrag ist abgeschickt
+    'laut_pause_an':       100,   # Denkpause beginnt
+    'laut_pause_aus':      100,   # Denkpause endet
+    'laut_nichts':         100,   # abgebrochen / nichts verstanden
+    'laut_reflex':         100,   # ein lokaler Reflex hat gegriffen
+    'laut_fenster_auf':    100,   # ein Fenster ist aufgegangen
+    'laut_fenster_zu':     100,   # ein Fenster ist zugegangen
+    'laut_aufnahme_start': 100,   # Qalam beginnt aufzunehmen
+    'laut_aufnahme_ende':  100,   # Qalam ist fertig
+    'laut_countdown':      100,   # die Countdown-Klänge
+
+    # Das Sichtbare. Ramzi hielt hier nur an/aus für möglich -- Glanz und Blitz
+    # haben aber je einen Helligkeitswert, also sind auch sie Regler mit
+    # 0 = aus. Dieselbe Bauform wie beim Ton, kein Sonderfall.
+    'bild_glanz':           30,   # der leise Dauerglanz, solange ich arbeite
+    'bild_blitz':          100,   # der kräftige Blitz im Moment einer Aktion
+
+    # Wann Blitz und Ton überhaupt kommen:
+    #   'alle'     -- bei JEDEM Werkzeugaufruf, auch bei unsichtbaren
+    #   'sichtbar' -- nur wenn dabei etwas auf dem Bildschirm passiert
+    #                 (eine Datei geändert, ein Fenster aufgemacht)
+    'feedback_modus': 'alle',
+
+    # Das Aufnahme-Fenster während der Aufnahme gar nicht zeigen. Ramzi hält
+    # das selbst für eine Einstellung, die niemand braucht -- sie ist drin,
+    # weil sie fast nichts kostet und in einem verkauften Produkt fehlen würde.
+    'bild_fenster_aus': False,
 }
 
 _stand = {'zeit': None, 'werte': dict(STANDARD)}

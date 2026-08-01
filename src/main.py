@@ -45,6 +45,24 @@ except Exception:
     pass
 
 
+def _ton_fertig():
+    """Der Beep, wenn ein Diktat fertig getippt ist.
+
+    Auf Windows über ton.py: dort hängt der Klang an Ramzis Regler
+    `laut_aufnahme_ende` und kommt bei 0 % gar nicht mehr (Feedback-Auftrag vom
+    01.08.2026). Auf Mac und Linux bleibt es beim AudioPlayer -- ton.py steht auf
+    `winsound` auf und kann dort nichts abspielen.
+    """
+    if IS_WINDOWS:
+        try:
+            import ton
+            ton.spiele('beep.wav')
+            return
+        except Exception:
+            pass
+    AudioPlayer(os.path.join('assets', 'beep.wav')).play(block=True)
+
+
 # --- macOS/pynput-Workaround --------------------------------------------------
 # pynput löst HIServices.AXIsProcessTrusted() erst im Listener-Hintergrundthread
 # auf. pyobjcs Lazy-Import ist dabei nicht thread-sicher und wirft sporadisch
@@ -438,7 +456,7 @@ class QalamApp(QObject):
             self.input_simulator.typewrite(result)
             
             if ConfigManager.get_config_value('misc', 'noise_on_completion'):
-                AudioPlayer(os.path.join('assets', 'beep.wav')).play(block=True)
+                _ton_fertig()
 
             if ConfigManager.get_config_value('recording_options', 'recording_mode') == 'continuous':
                 self.start_result_thread()
@@ -543,7 +561,7 @@ class QalamApp(QObject):
                             keyboard.release('v')
                         
                         if ConfigManager.get_config_value('misc', 'noise_on_completion'):
-                            AudioPlayer(os.path.join('assets', 'beep.wav')).play(block=True)
+                            _ton_fertig()
                             
                     finally:
                         # Ensure all keys are released
@@ -628,7 +646,7 @@ class QalamApp(QObject):
                     time.sleep(0.1)
                     clipboard_utils.send_paste(keyboard)
                     if ConfigManager.get_config_value('misc', 'noise_on_completion'):
-                        AudioPlayer(os.path.join('assets', 'beep.wav')).play(block=True)
+                        _ton_fertig()
                 finally:
                     time.sleep(0.1)  # Wait for paste to complete
                     clipboard_utils.set_text(saved)

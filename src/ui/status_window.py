@@ -156,7 +156,21 @@ class StatusWindow(BaseWindow):
         painter.drawPath(path)
 
     def show(self):
-        """Fenster unten-mittig positionieren und anzeigen."""
+        """Fenster unten-mittig positionieren und anzeigen.
+
+        Ausser Ramzi hat `bild_fenster_aus` gesetzt -- dann bleibt es weg. Er
+        hält die Einstellung selbst für eine, die niemand braucht; sie ist da,
+        weil sie fast nichts kostet und in einem verkauften Produkt fehlen
+        würde. Der Countdown-Ton kommt weiterhin, nur eben ohne Bild -- wer das
+        Fenster nicht sehen will, will nicht zwangsläufig auch nichts hören.
+        """
+        try:
+            import einstellungen
+            if einstellungen.hole('bild_fenster_aus'):
+                return
+        except Exception:
+            pass
+
         screen = QApplication.primaryScreen()
         geo = screen.geometry()
         x = (geo.width() - self.width()) // 2
@@ -238,6 +252,22 @@ class StatusWindow(BaseWindow):
     def _play_sound(self, filename):
         """Eine WAV-Datei aus assets/ abspielen. Plattformübergreifend:
         Windows -> winsound, macOS -> afplay, Linux -> aplay/paplay."""
+        # Auf Windows über ton.py: dort hängt jeder Klang an seinem eigenen
+        # Regler (Ramzis Feedback-Auftrag vom 01.08.2026), und dort wird die
+        # Lautstärke in die Datei gerechnet, weil winsound keine kennt. Bei
+        # 0 % kommt gar nichts -- deshalb `return` und nicht weiterfallen.
+        #
+        # Nur Windows: ton.py steht auf winsound auf. Mac und Linux behalten den
+        # Weg von vorher, dort gibt es die Sprachschicht ohnehin nicht (siehe
+        # project_noor_windows_macos im Gedächtnis).
+        if winsound:
+            try:
+                import ton as tonmodul
+                tonmodul.spiele(filename)
+                return
+            except Exception as e:
+                print(f"[Qalam] ton.py nicht erreichbar ({filename}): {e}")
+
         path = os.path.join('assets', filename)
         if not os.path.exists(path):
             return
