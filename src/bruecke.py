@@ -128,7 +128,53 @@ def hole_nach_vorn(hwnd):
     # 31.07.2026: der Aufruf sagte True, vorn stand weiterhin ein anderes
     # Fenster, und der Text landete in dessen Eingabefeld. Ein falsches "hat
     # geklappt" ist hier teurer als ein ehrliches "hat nicht geklappt".
-    return _gleich(_user32.GetForegroundWindow(), hwnd)
+    if _gleich(_user32.GetForegroundWindow(), hwnd):
+        return True
+
+    # --- Die Vordergrundsperre ---------------------------------------------
+    #
+    # DAS war Ramzis "in 15--20 Prozent kommt mein Satz nicht an". Gefunden am
+    # 02.08.2026 um 01:41, im Protokoll wörtlich:
+    #
+    #   [Brücke] gebe weiter: 754 Zeichen, vorn liegt 'Minecraft 1.8.9'
+    #   [Brücke] FEHLSCHLAG -- Ich bekomme das Claude-Fenster nicht nach vorn.
+    #
+    # Windows lässt einen Hintergrundprozess nicht an den Vordergrund, solange
+    # eine Vollbildanwendung ihn hält -- ein Spiel ist genau das. Der Rest der
+    # Kette war immer in Ordnung; deshalb ließ sich das mit einem Probelauf
+    # ohne Spiel auch nicht reproduzieren (16 von 16 durch).
+    #
+    # Zwei Stufen, die sanfte zuerst.
+    for stufe in ('alt', 'minimieren'):
+        try:
+            if stufe == 'alt':
+                # Ein kurzer ALT-Tipp. Windows gibt die Sperre für einen
+                # Prozess frei, der gerade selbst eine Eingabe erzeugt hat.
+                # ALT allein löst in keiner Anwendung etwas aus, kostet also
+                # nichts, wenn es nicht hilft.
+                VK_MENU, KEYEVENTF_KEYUP = 0x12, 0x0002
+                _user32.keybd_event(VK_MENU, 0, 0, 0)
+                _user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+                time.sleep(0.06)
+            else:
+                # Die harte Stufe: das Vollbildfenster selbst zuklappen. Ramzi
+                # nimmt das ausdrücklich in Kauf ("das ist dann ja auch
+                # gewollt, weil ich das mit einem Reflex gesagt habe"), und
+                # sende() gibt ihm den Fokus am Ende wieder zurück.
+                vorn = _user32.GetForegroundWindow()
+                if vorn and not _gleich(vorn, hwnd):
+                    SW_MINIMIZE = 6
+                    _user32.ShowWindow(ctypes.c_void_p(int(vorn)), SW_MINIMIZE)
+                    time.sleep(0.25)
+
+            _user32.SetForegroundWindow(hwnd)
+            time.sleep(0.3)
+            if _gleich(_user32.GetForegroundWindow(), hwnd):
+                return True
+        except Exception:
+            pass
+
+    return False
 
 
 # --------------------------------------------------------------------------
