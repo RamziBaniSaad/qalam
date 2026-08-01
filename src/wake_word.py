@@ -538,6 +538,9 @@ class Weckwort:
 
         puffer = collections.deque()
         stille = 0
+        war_pausiert = False  # merkt den Wechsel aus der Denkpause heraus,
+                              # damit die Redepause danach von vorn zaehlt
+
         sprach = 0            # Sprache im AKTUELLEN Stueck -- faengt bei jeder
                               # Satzpause wieder bei null an (siehe unten)
         gesamt_sprach = 0     # Sprache in der GANZEN Aeusserung -- laeuft ueber
@@ -648,16 +651,29 @@ class Weckwort:
 
                 # Denkpause -- Ramzi hält gerade inne (siehe pausieren()).
                 #
-                # Hier steht bewusst NUR ein `continue`: der Puffer bleibt, wie
-                # er ist, und vor allem läuft `stille` nicht weiter. Genau
-                # daran hängt der ganze Sinn -- zählte die Stille weiter, wäre
-                # sein halber Satz nach ein paar Sekunden von selbst
-                # abgeschickt, also exakt das, was die Pause verhindern soll.
-                # Aus demselben Grund wird `in_sprache` nicht angefasst: nach
-                # dem Fortsetzen soll es weitergehen, wo es aufgehört hat, und
-                # nicht wie ein neuer Satz aussehen.
+                # Der Puffer bleibt, wie er ist, und `stille` läuft nicht
+                # weiter. Genau daran hängt der ganze Sinn -- zählte die Stille
+                # weiter, wäre sein halber Satz nach ein paar Sekunden von
+                # selbst abgeschickt, also exakt das, was die Pause verhindern
+                # soll. Aus demselben Grund bleibt `in_sprache` unangetastet:
+                # nach dem Fortsetzen soll es weitergehen, wo es aufgehört hat,
+                # und nicht wie ein neuer Satz aussehen.
                 if self._pausiert.is_set():
+                    war_pausiert = True
                     continue
+
+                # Nach dem Fortsetzen zählt die Redepause wieder VON VORN.
+                #
+                # Ramzis Testbefund am 01.08.2026, und er hatte recht: er hatte
+                # vor der Pause schon vier von fünf Sekunden geschwiegen, also
+                # wurde eine Sekunde nach dem Fortsetzen abgeschickt -- „hat
+                # also keine fünf Sekunden gewartet". Das macht die Pause
+                # wertlos: wer sie aufhebt, will weiterreden und braucht dafür
+                # dieselbe Bedenkzeit wie beim ersten Mal, nicht den Rest von
+                # vorher.
+                if war_pausiert:
+                    war_pausiert = False
+                    stille = 0
 
                 try:
                     ist_sprache = self.vad.is_speech(frame.tobytes(), RATE)
