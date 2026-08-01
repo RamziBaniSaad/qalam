@@ -287,6 +287,25 @@ def main():
             if punkte:
                 self._schrift = QFont('Segoe UI', punkte)
             self.setFixedWidth(breite)
+            self.neu_umbrechen()
+
+        def neu_umbrechen(self):
+            """Den letzten Text noch einmal umbrechen -- mit den Maßen, die JETZT
+            gelten.
+
+            Der Grund ist Ramzis Bild vom 02.08.2026: auf dem iPad klebten die
+            Wörter aneinander, jedes fing fast dort an, wo das vorige begann.
+            Nicht die Schrift war zu groß -- die Abstände waren zu klein.
+
+            Ursache: das Fenster wird auf einem Bildschirm ausgemessen und auf
+            einem anderen gemalt. Der iPad läuft mit 175 Prozent, also zeichnet
+            Qt jeden Buchstaben 1,75-mal breiter, als `QFontMetrics` beim Setzen
+            gemessen hat -- die gemerkten x-Werte gelten dann für eine Schrift,
+            die es auf diesem Schirm nicht gibt. Das Ergebnis ist genau eine
+            Überlappung von rund 43 Prozent.
+
+            Deshalb wird nach jedem Umzug neu ausgemessen, nicht nur neu gemalt.
+            """
             if self._letztes:
                 self.setze(*self._letztes[0], **self._letztes[1])
 
@@ -500,6 +519,18 @@ def main():
             x = geo.x() + (geo.width() - self.width()) // 2
             y = geo.y() + geo.height() - self.height() - rand
             self.move(x, y)
+
+            # ERST umziehen, DANN neu ausmessen -- in dieser Reihenfolge, und das
+            # ist der ganze Punkt. Qt kennt die Schriftmaße eines Fensters erst,
+            # wenn es auf dem Bildschirm liegt, dessen Skalierung gilt. Wer
+            # vorher umbricht, rechnet mit den Maßen des alten Schirms.
+            name = geo.x(), geo.y(), geo.width(), geo.height()
+            if getattr(self, '_letzter_platz', None) != name:
+                self._letzter_platz = name
+                self.text.neu_umbrechen()
+                self.adjustSize()
+                self.setFixedWidth(breite)
+                self.move(x, geo.y() + geo.height() - self.height() - rand)
 
         def nachsehen(self):
             try:
