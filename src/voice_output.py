@@ -474,8 +474,22 @@ def main(argv=None):
 
     if args.nach_wav:
         print(nach_wav(text, args.nach_wav, args.stimme))
-    else:
-        Sprecher(args.stimme).sprich(text)
+        return 0
+
+    # Erst anstellen, dann reden -- auch von aussen.
+    #
+    # Ramzis Regel von Anfang an: wer redet, haelt den Platz. Der Assistent
+    # haelt sich daran, dieser Weg hier bisher nicht -- und das sind genau die
+    # Aufrufe, die aus dem Nichts kommen: der Probe-Knopf auf der Tafel, meine
+    # eigenen Skripte. Am 01.08.2026 bin ich damit mitten in einen langen Satz
+    # von ihm gefahren, den er nicht wiederholen wollte. Ein Aufruf, der nicht
+    # wartet, ist kein Werkzeug, sondern ein Dazwischenreden.
+    try:
+        import warteschlange
+        warteschlange.warte_bis_er_fertig_ist()
+    except Exception:
+        pass
+    Sprecher(args.stimme).sprich(text)
     return 0
 
 

@@ -216,7 +216,28 @@ class Weckwort:
         # was du geschrieben hast, und schickst das rüber". Derselbe
         # Mechanismus wie qalam_nimmt_auf(), nur für die eigene Stimme statt
         # für ein laufendes Diktat.
-        self._spricht_gerade = spricht_gerade or (lambda: False)
+        #
+        # Wichtig: das gilt fuer JEDEN Prozess, der mit meiner Stimme spricht,
+        # nicht nur fuer diesen hier. Der Probe-Knopf auf der Tafel und meine
+        # eigenen Skripte starten `voice_output.py` als eigenen Prozess -- der
+        # laufende Sprecher hier weiss davon nichts. Am 01.08.2026 habe ich
+        # deshalb das ganze Ohr abgeschossen, nur um zwei Stimmproben zu
+        # sprechen, und mitten in Ramzis Satz gefahren: "du hast mich wieder
+        # unterbrochen ... dafuer hast du das Ohr einmal komplett beendet."
+        # Der gemeinsame Merker steht in warteschlange (die Untertitel-Datei,
+        # die JEDER Sprecher schreibt) -- damit reicht ein ODER.
+        _eigener = spricht_gerade or (lambda: False)
+
+        def _spricht_irgendwer():
+            if _eigener():
+                return True
+            try:
+                import warteschlange
+                return warteschlange.noor_spricht_gerade()
+            except Exception:
+                return False
+
+        self._spricht_gerade = _spricht_irgendwer
         # Wird gerufen, SOBALD der Name im laufenden Satz auftaucht -- lange
         # bevor der Satz fertig ist. Dafür ist der Ton da.
         self.beim_erkennen = beim_erkennen
