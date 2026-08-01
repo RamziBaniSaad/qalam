@@ -497,6 +497,16 @@ class Assistent:
         # Privat/Ideen/Noor-Ueberall/STAND-Sprachschicht.md, Abschnitt 1.
         print(f'[{time.strftime("%H:%M:%S")}] [Noor] gehört ({"fertig" if endgueltig else "Zwischenstück"}): {text!r}')
 
+        # Ein "fertig" ohne Text ist seit dem 01.08.2026 ein gueltiger Fall: das
+        # Ohr meldet damit "er ist fertig", wenn nach der letzten Satzpause nur
+        # noch Stille kam (siehe wake_word.abgeben -- der Freeze-Bug). Ist dann
+        # aber auch nichts gesammelt, gaebe es einen leeren Auftrag. Das darf
+        # nicht lautlos passieren, deshalb steht es im Protokoll.
+        if endgueltig and not text and not self._sammelsatz:
+            print(f'[{time.strftime("%H:%M:%S")}] [Noor] fertig, aber nichts '
+                  f'gesammelt -- nichts abzuschicken')
+            return
+
         # Weckwort aus dem Satz nehmen und an das bisher Gesammelte anhängen --
         # VOR dem Untertitel, nicht danach. Ramzi hat einen echten Fehler
         # gefunden: der Untertitel zeigte bisher nur das JEWEILS NEUE

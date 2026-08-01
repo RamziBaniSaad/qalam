@@ -467,6 +467,10 @@ class Weckwort:
                               # 01.08.2026 gefunden: "trotz 10 Sekunden nach
                               # ca. 2 Sekunden abgeschickt."
         in_sprache = False
+        stueck_offen = False  # In dieser Aeusserung wurde schon ein Zwischenstueck
+                              # abgegeben -- der Assistent sammelt also gerade einen
+                              # Satz und wartet auf ein "fertig". Solange das gilt,
+                              # DARF kein "fertig" verlorengehen (siehe abgeben()).
 
         def abgeben(endgueltig, gesprochene_bilder=None):
             """Segment an den Arbeiter geben und neu anfangen.
@@ -486,14 +490,36 @@ class Weckwort:
             Rest verloren war.
 
             War zu wenig Sprache dabei, um ein Wort zu sein, wird gar nichts
-            abgegeben -- siehe MINDEST_SPRACH_FRAMES."""
+            abgegeben -- siehe MINDEST_SPRACH_FRAMES. Mit EINER Ausnahme, und
+            die ist der Freeze-Bug vom 01.08.2026:
+
+            Nach einer Satzpause faengt `sprach` wieder bei null an. Hoert
+            Ramzi danach einfach auf zu reden, kommt bis zum Ablauf seiner
+            Redepause kein einziges Sprachbild mehr dazu -- das "fertig" hatte
+            also IMMER zu wenig Ton und wurde lautlos verworfen. Fuer ihn sah
+            das so aus: "nachdem ich gesprochen habe, schickt das nicht ab, das
+            bleibt eingefroren stehen. Sage ich deinen Namen nochmal, schickt
+            es ab -- aber ohne dass es was Neues aufgenommen hat, wie ein
+            Trick." Der Trick war genau das: sein naechstes Sprechen lieferte
+            das Signal nach, das hier verlorengegangen war.
+
+            Deshalb: zu wenig Ton beendet ein ZWISCHENSTUECK, aber niemals ein
+            FERTIG, solange ein Satz gesammelt wird. Dann geht statt Ton ein
+            reines Signal raus."""
+            nonlocal stueck_offen
             if (gesprochene_bilder is not None
                     and gesprochene_bilder < MINDEST_SPRACH_FRAMES):
+                if endgueltig and stueck_offen:
+                    print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig ohne '
+                          f'neuen Ton -- gesammelter Satz wird abgeschickt')
+                    self._auftraege.put((None, True))
+                    stueck_offen = False
                 puffer.clear()
                 with self._schloss:
                     self._laufend = None
                 return
             self._auftraege.put((list(puffer), endgueltig))
+            stueck_offen = not endgueltig
             puffer.clear()
             with self._schloss:
                 self._laufend = None
@@ -516,6 +542,7 @@ class Weckwort:
                     in_sprache = False
                     sprach = 0
                     gesamt_sprach = 0
+                    stueck_offen = False
                     self._kurz_erwartet = False
                     with self._schloss:
                         self._laufend = None
@@ -531,6 +558,7 @@ class Weckwort:
                     stille = 0
                     sprach = 0
                     gesamt_sprach = 0
+                    stueck_offen = False
                     self._kurz_erwartet = False
                     with self._schloss:
                         self._laufend = None
@@ -777,6 +805,14 @@ class Weckwort:
         weiter (siehe abgeben()). `beim_wecken` bekommt das mitgeteilt und
         entscheidet selbst, ob es sammelt oder ausführt -- hier wird nur
         gehört und weitergegeben, nicht bewertet."""
+        # Ein reines "fertig"-Signal ohne Ton -- siehe abgeben(). Es gibt nichts
+        # zu rechnen, aber der Assistent wartet auf genau diesen Anruf, um den
+        # gesammelten Satz abzuschicken. Kommt nur vor, wenn vorher schon ein
+        # Zwischenstueck geliefert wurde; wir sind also sicher im Gespraech und
+        # brauchen die Weckwort-Pruefung unten nicht.
+        if puffer is None:
+            self._melde(self.beim_wecken, '', True)
+            return
         if len(puffer) < 8:      # unter ~0,25 s ist es kein Wort, sondern ein Geräusch
             return
         audio = np.concatenate(list(puffer)).astype(np.float32) / 32768.0
@@ -801,9 +837,6 @@ class Weckwort:
               f'{dauer_rechnen:.2f}s Rechenzeit '
               f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")})')
 
-        if not text:
-            return
-
         # Der Folgesatz braucht den Namen nicht mehr.
         #
         # Ramzi sagt oft erst nur "Noor", wartet auf das Zeichen und redet dann
@@ -811,6 +844,18 @@ class Weckwort:
         # diese Regel wäre er verloren, und genau das hat sich für ihn angefühlt
         # wie "sie hört mir nicht mehr zu".
         im_gespraech = time.time() < self.folge_bis
+
+        # Nichts verstanden. Bei einem Zwischenstueck ist das folgenlos -- bei
+        # einem FERTIG mitten im Gespraech nicht: dann haengt der gesammelte
+        # Satz im Assistenten fest und wartet auf genau dieses Signal. Das ist
+        # dieselbe Falle wie in abgeben(), nur eine Etage weiter unten.
+        if not text:
+            if endgueltig and im_gespraech:
+                print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig ohne '
+                      f'erkannten Text -- gesammelter Satz wird abgeschickt')
+                self._melde(self.beim_wecken, '', True)
+            return
+
         if WECKWORT.search(text) or im_gespraech:
             self._melde(self.beim_wecken, text, endgueltig)
 
