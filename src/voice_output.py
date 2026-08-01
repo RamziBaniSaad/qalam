@@ -8,9 +8,14 @@ Satz wenige Millisekunden — wird also schon gesprochen, während der Rest noch
 entsteht, wartet der Zuhörer nie auf den ganzen Text.
 
 Aufruf von außen (das ist der Weg, den Skripte nehmen):
-    python -m src.voice_output "Hallo Ramzi."
-    python -m src.voice_output --stimme de_DE-ramona-low "Hallo."
-    echo "Text" | python -m src.voice_output -
+    python src/voice_output.py "Hallo Ramzi."
+    python src/voice_output.py --stimme de_DE-ramona-low "Hallo."
+    echo "Text" | python src/voice_output.py -
+
+Als Datei aufrufen, nicht als `-m src.voice_output`: bei `-m` liegt der
+Repo-Ordner im Suchpfad, nicht `src/` — und die Untertitel-Einteilung holt sich
+`untertitel` als Nachbarn. Der Modul-Aufruf bricht deshalb erst mitten im
+Sprechen ab, mit `ModuleNotFoundError: untertitel`.
 """
 import contextlib
 import os
