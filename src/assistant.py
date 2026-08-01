@@ -24,6 +24,7 @@ import einstellungen                        # noqa: E402
 import oeffnen                              # noqa: E402
 import schliessen                           # noqa: E402
 import stellschrauben                       # noqa: E402
+import verhoerer                            # noqa: E402
 from voice_output import Sprecher          # noqa: E402
 from wake_word import Weckwort, WECKWORT   # noqa: E402
 
@@ -168,13 +169,18 @@ def normalisiere(text):
 
     Umlaute auflösen, klein schreiben, Satzzeichen und Mehrfach-Leerzeichen
     weg. Damit ist es egal, ob Whisper "spät", "spaet" oder "Spät!" schreibt --
-    und die Reflexe unten brauchen jede Schreibweise nur einmal."""
+    und die Reflexe unten brauchen jede Schreibweise nur einmal.
+
+    Zuletzt: bekannte Verhörer korrigieren (verhoerer.py), damit "efnes" schon
+    hier zu "oeffne" wird und jede Reflex-Prüfung danach die Korrektur
+    geschenkt bekommt, statt sie selbst nachzubauen."""
     t = (text or '').lower()
     for a, b in (('ä', 'a'), ('ö', 'o'), ('ü', 'u'), ('ß', 'ss'),
                  ('ae', 'a'), ('oe', 'o'), ('ue', 'u')):
         t = t.replace(a, b)
     t = re.sub(r'[^\wäöüß ]+', ' ', t)
-    return re.sub(r'\s+', ' ', t).strip()
+    t = re.sub(r'\s+', ' ', t).strip()
+    return verhoerer.korrigiere(t)
 
 
 def _laeuft_programm(name):

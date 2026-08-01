@@ -44,6 +44,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import einstellungen                              # noqa: E402
+import verhoerer                                   # noqa: E402
 
 SRC = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(SRC, 'config.yaml')
@@ -174,7 +175,9 @@ def _glaette(text):
     t = re.sub(r'(\d)[.,](\d)', r'\1.\2', t)
     t = re.sub(r'[^\w. ]+', ' ', t)
     t = re.sub(r'(?<!\d)\.|\.(?!\d)', ' ', t)      # Punkte, die keine Zahl sind
-    return re.sub(r'\s+', ' ', t).strip()
+    t = re.sub(r'\s+', ' ', t).strip()
+    # Bekannte Verhörer korrigieren -- siehe verhoerer.py.
+    return verhoerer.korrigiere(t)
 
 
 # -------------------------------------------------------------- Einheiten
@@ -457,13 +460,13 @@ def _stand():
 # "schnell" auch "schneller". Ramzi hat am 01.08.2026 "reden wir langsam"
 # gesagt -- ohne -er -- und der Befehl fiel durch.
 # „langzamer" mit Z ist kein Tippfehler, sondern was Qalam am 01.08.2026 aus
-# Ramzis „langsamer" gemacht hat -- der Befehl landete deshalb im Chat. Gleiches
-# gilt für „schnel" mit einem L. Ein Spracherkenner verhört sich; die Liste muss
-# das aushalten, nicht er.
+# Ramzis „langsamer" gemacht hat -- der Befehl landete deshalb im Chat. Dafür
+# gibt es jetzt EINE zentrale Korrektur (verhoerer.py, in _glaette()
+# eingehängt) statt eigener Verhör-Varianten in jeder Wortliste hier.
 SCHRITTE = {
     'lauter': ('lautstaerke', +0.15), 'leiser': ('lautstaerke', -0.15),
-    'schnell': ('tempo', +0.1), 'schnel': ('tempo', +0.1),
-    'langsam': ('tempo', -0.1), 'langzam': ('tempo', -0.1),
+    'schnell': ('tempo', +0.1),
+    'langsam': ('tempo', -0.1),
 }
 
 # Wörter, die aus einer Beobachtung eine Bitte machen.

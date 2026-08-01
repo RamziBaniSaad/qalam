@@ -142,7 +142,11 @@ config.yaml
 /keyring/*
 # Laufzeit-Sperre und Stimmmodelle (gross, werden nachgeladen)
 .aufnahme.lock
+.schlaeft.lock
+.ramzi-redet.lock
 stimmen/
 ohr.log
 ohr-fehler.log
+ohr-neu.log
+waechter.log
 noor-einstellungen.json

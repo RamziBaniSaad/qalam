@@ -30,6 +30,8 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import verhoerer  # noqa: E402
+
 WERKZEUGE = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge')
 KATALOG = os.path.join(WERKZEUGE, 'noor-katalog.json')
 SKRIPT = os.path.join(WERKZEUGE, 'noor-auf.ps1')
@@ -49,10 +51,12 @@ OEFFNEN_MAX_WOERTER = 14
 #
 # „efne", „efnes", „ofne" sind keine Wörter — so schreibt Qalam Ramzis
 # gesprochenes „öffne". Am 01.08.2026 ging „öffne Spotify" deshalb in den Chat
-# statt zu greifen. Ein Spracherkenner verhört sich, und die Liste muss das
-# aushalten, nicht er.
+# statt zu greifen. Ein Spracherkenner verhört sich, und dafür gibt es jetzt
+# EINE zentrale Korrektur (verhoerer.py, in _glaette() eingehängt) statt
+# eigener Verhör-Varianten in jeder Wortliste -- "efne" kommt hier also
+# bereits als "oeffne" an.
 ABSICHT = (
-    'mach', 'machs', 'offne', 'oeffne', 'efne', 'efnes', 'ofne', 'oefne',
+    'mach', 'machs', 'offne', 'oeffne',
     'zeig', 'zeige', 'starte', 'start',
     'hol', 'gehe auf', 'geh auf', 'ruf', 'bring', 'ich will', 'ich mochte',
     'lass uns', 'wechsel', 'aufmachen', 'anmachen',
@@ -71,7 +75,10 @@ def _glaette(text):
     for a, b in (('ä', 'a'), ('ö', 'o'), ('ü', 'u'), ('ß', 'ss')):
         t = t.replace(a, b)
     t = re.sub(r'[^\w ]+', ' ', t)
-    return re.sub(r'\s+', ' ', t).strip()
+    t = re.sub(r'\s+', ' ', t).strip()
+    # Bekannte Verhörer korrigieren -- siehe verhoerer.py. Damit brauchen
+    # ABSICHT & Co. keine eigenen Verhör-Varianten mehr aufzulisten.
+    return verhoerer.korrigiere(t)
 
 
 _stand = {'zeit': None, 'katalog': {}}
