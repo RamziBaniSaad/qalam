@@ -37,6 +37,50 @@ STANDARD_STIMME = 'de_DE-thorsten-medium'
 _SATZ_ENDE = re.compile(r'(?<=[.!?…])\s+(?=[A-ZÄÖÜ„"(])')
 
 
+def _zusammengezogen(phoneme):
+    """Zerlegte Zeichen zusammenziehen: 'c' + kombinierende Cedille -> 'ç'.
+
+    DER ICH-LAUT. Gefunden am 01.08.2026, als beim Erzeugen von Stimmproben
+    zwanzigmal "Missing phoneme from id map: ̧" im Protokoll stand.
+
+    espeak-ng liefert den deutschen ich-Laut als ZWEI Zeichen (c + U+0327).
+    Fünf der neun deutschen Piper-Stimmen -- eva_k, karlsson, kerstin, pavoque,
+    ramona, alle aus der älteren "low"-Reihe -- kennen in ihrer Phonem-Karte nur
+    die zusammengesetzte Form ç (U+00E7). Die Cedille fällt dort also heraus,
+    und übrig bleibt ein nacktes "c": aus "ich" wird ein Laut, den es im
+    Deutschen nicht gibt. Bei "ich", "nicht", "mich", "möchte" -- also in jedem
+    zweiten Satz.
+
+    Warum das hier steht und nicht in der Bibliothek: `synthesize()` ruft
+    `self.phonemize()` auf, und diese Funktion wird beim Laden davorgesetzt.
+    Damit gilt die Reparatur für JEDEN Weg (Sprechen, WAV schreiben, Probe-Knopf)
+    und die Bibliothek bleibt unangetastet.
+
+    Angefasst wird ausschliesslich ein kombinierendes Zeichen, und nur wenn es
+    sich wirklich zusammenziehen lässt -- ein Phonem, das aus mehreren echten
+    Zeichen besteht, bleibt unberührt."""
+    import unicodedata
+    aus = []
+    for p in phoneme:
+        if aus and len(p) == 1 and unicodedata.combining(p):
+            zusammen = unicodedata.normalize('NFC', aus[-1] + p)
+            if len(zusammen) == 1:
+                aus[-1] = zusammen
+                continue
+        aus.append(p)
+    return aus
+
+
+def _braucht_reparatur(stimme):
+    """Kennt das Modell nur die zusammengesetzte Cedille? Dann fehlt ihm der
+    ich-Laut, sobald espeak ihn zerlegt liefert."""
+    try:
+        karte = stimme.config.phoneme_id_map or {}
+    except Exception:
+        return False
+    return '̧' not in karte and 'ç' in karte
+
+
 def _lade_stimme(name):
     """Stimme laden und merken. Das Laden kostet ~0,5 s, das Sprechen danach kaum."""
     if name in _voice_cache:
@@ -50,6 +94,13 @@ def _lade_stimme(name):
             f'  python -m piper.download_voices --download-dir stimmen {name}'
         )
     stimme = PiperVoice.load(pfad)
+    if _braucht_reparatur(stimme):
+        # Nur für die betroffenen Modelle. Die aktuelle Stimme
+        # (thorsten-medium) kennt beide Schreibweisen und läuft unverändert
+        # durch -- an einer Stimme, die funktioniert, wird nichts geändert.
+        _urspruenglich = stimme.phonemize
+        stimme.phonemize = lambda text: [_zusammengezogen(p)
+                                         for p in _urspruenglich(text)]
     _voice_cache[name] = stimme
     return stimme
 
@@ -433,11 +484,26 @@ class Sprecher:
         return bool(self._thread and self._thread.is_alive())
 
 
-def nach_wav(text, ziel, stimme=STANDARD_STIMME):
-    """Text als WAV-Datei ablegen, statt ihn zu sprechen (zum Vergleichen)."""
+def nach_wav(text, ziel, stimme=STANDARD_STIMME, sprecher=None, klang=None):
+    """Text als WAV-Datei ablegen, statt ihn zu sprechen (zum Vergleichen).
+
+    `sprecher` ist die Nummer bei Mehrsprecher-Modellen -- die Gefühls-Stimme
+    hat acht (neutral, belustigt, geflüstert ...), das MLS-Modell 236. Ohne
+    Angabe gilt die Vorgabe des Modells.
+
+    `klang` überschreibt Tempo und Lautstärke. Das ist kein Beiwerk, sondern
+    Voraussetzung für einen fairen Vergleich: ohne diesen Weg holt sich jede
+    einzelne Probe die Werte FRISCH aus den Einstellungen -- verschiebt Ramzi
+    währenddessen einen Regler, sind die Kandidaten unterschiedlich laut, und
+    die lautere Stimme gewinnt jeden Blindtest. Am 01.08.2026 genau so passiert,
+    während er die neuen Sprachbefehle ausprobierte."""
     import wave
     s = _lade_stimme(stimme)
-    klang = _klangvorgaben()      # dieselben Vorgaben wie beim Sprechen
+    if klang is None:
+        klang = _klangvorgaben()      # dieselben Vorgaben wie beim Sprechen
+    if sprecher is not None and klang is not None:
+        import dataclasses
+        klang = dataclasses.replace(klang, speaker_id=sprecher)
     with wave.open(ziel, 'wb') as f:
         f.setnchannels(1)
         f.setsampwidth(2)
