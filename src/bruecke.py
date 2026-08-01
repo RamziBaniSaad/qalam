@@ -457,6 +457,26 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
     if not hwnd:
         return False, 'Ich finde das Claude-Fenster nicht. Ist es offen?'
 
+    # WAS LAG VORHER VORN? Wird am Ende zurückgeholt.
+    #
+    # Ramzis Frage vom 02.08.2026: "wenn der das Eingabefeld findet, fokussiert
+    # er darauf und schickt ab -- und dadurch geht mein Minecraft-Vollbild zu.
+    # Gibt es da eine Lösung?" Ja, und es ist nicht die naheliegende: den Fokus
+    # gar nicht zu nehmen geht NICHT, weil ohne Fokus kein Zeichen im Feld
+    # landet (drei Fehlschläge am 31.07.2026, siehe fokussiere_eingabefeld).
+    #
+    # Also nehmen wir ihn -- und geben ihn danach zurück. Aus einem
+    # "Vollbild ist zu" wird damit ein kurzes Flackern. Der Weg ist in
+    # derselben Nacht schon bewiesen worden: noor-bruecke-probe.py stellt
+    # zwischen zwanzig Messungen genau so die Ausgangslage wieder her.
+    vorheriges_fenster = 0
+    try:
+        vorheriges_fenster = int(_user32.GetForegroundWindow() or 0)
+        if vorheriges_fenster == int(hwnd):
+            vorheriges_fenster = 0      # Claude lag schon vorn, nichts zu tun
+    except Exception:
+        pass
+
     # Die Merkdatei ZUERST: sie ist das Signal für den Stop-Hook. Läge sie erst
     # nach dem Absenden, könnte eine sehr kurze Antwort schneller fertig sein
     # als das Schreiben hier -- dann bliebe die Antwort stumm.
@@ -556,6 +576,24 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         time.sleep(0.4)
         if vorher is not None and not behalten:
             _zwischenablage_schreiben(vorher)
+
+        # Und den Fokus zurück, wo er war -- damit Ramzis Vollbildspiel nicht
+        # zubleibt. Ganz am Ende und im `finally`: auch ein Fehlschlag soll ihn
+        # nicht aus dem Spiel werfen.
+        #
+        # Nur wenn das Fenster noch existiert. Zwischen dem Merken und hier
+        # liegen ein paar Sekunden, in denen es geschlossen worden sein kann --
+        # ein Griff auf ein totes Fenster würde den Fokus auf den Desktop
+        # legen, und das ist schlechter als ihn zu lassen, wo er ist.
+        if vorheriges_fenster and _user32.IsWindow(ctypes.c_void_p(vorheriges_fenster)):
+            try:
+                # Als c_void_p und nicht als int: ctypes macht aus einem nackten
+                # int ein 32-Bit-Argument, und ein Fenstergriff oberhalb von
+                # 0x7FFFFFFF wuerde dabei abgeschnitten. Genau dafuer gibt es
+                # oben `_gleich`.
+                hole_nach_vorn(ctypes.c_void_p(vorheriges_fenster))
+            except Exception:
+                pass
 
     return True, None
 

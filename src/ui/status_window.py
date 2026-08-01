@@ -179,8 +179,15 @@ class StatusWindow(BaseWindow):
         except Exception:
             screen = QApplication.primaryScreen()
         geo = screen.geometry()
-        x = (geo.width() - self.width()) // 2
-        y = geo.height() - self.height() - 120
+        # geo.x()/geo.y() MITRECHNEN. Windows legt alle Bildschirme in EIN
+        # Koordinatensystem: nur der primäre beginnt bei 0/0, ein zweiter kann
+        # bei x=-1512 anfangen. Ohne den Ursprung landet das Fenster deshalb
+        # rechnerisch auf dem richtigen Schirm und tatsächlich irgendwo mitten
+        # auf dem primären -- genau das hat Ramzi am 02.08.2026 gesehen ("so in
+        # der Mitte, so richtig random"). Vorher fiel es nie auf, weil es immer
+        # der primäre war und 0 zu addieren nichts ändert.
+        x = geo.x() + (geo.width() - self.width()) // 2
+        y = geo.y() + geo.height() - self.height() - 120
         self.move(x, y)
         # Ohne Fokus-Klau anzeigen (der Text soll im aktiven Fenster landen)
         # und über andere Fenster heben.
