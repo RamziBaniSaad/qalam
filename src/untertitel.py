@@ -267,10 +267,33 @@ def main():
             self._schrift = QFont('Segoe UI', 17)
             self._farbe = FARBE_ICH
             self._zeilen = []        # [[(wort, x, ab, dauer)], ...]
+            self._letztes = None     # letzter setze()-Aufruf, für setze_breite()
             self._hoehe = 0
             self._start = None       # None = keine Zeitangaben, nichts leuchtet
 
+        def setze_breite(self, breite, punkte=None):
+            """Breite und Schriftgröße nachträglich ändern -- für den iPad.
+
+            Nötig, weil die Zeile ihre Wörter beim Setzen einmal ausmisst und
+            die x-Werte merkt. Ändert sich die Schrift danach, passen die
+            gemerkten Abstände nicht mehr zur gezeichneten Breite -- und genau
+            so sehen zwei Wörter aus, die aufeinanderliegen. Deshalb wird der
+            letzte Text hier neu umgebrochen und nicht bloß breiter gemalt.
+            """
+            if breite == self._breite and (
+                    punkte is None or punkte == self._schrift.pointSize()):
+                return
+            self._breite = breite
+            if punkte:
+                self._schrift = QFont('Segoe UI', punkte)
+            self.setFixedWidth(breite)
+            if self._letztes:
+                self.setze(*self._letztes[0], **self._letztes[1])
+
         def setze(self, text, farbe, worte=None, start=None):
+            # Für setze_breite() merken: ohne den letzten Text ließe sich nach
+            # einer Schriftänderung nicht neu umbrechen.
+            self._letztes = ((text, farbe), {'worte': worte, 'start': start})
             self._farbe = farbe
             self._start = start
             mass = QFontMetrics(self._schrift)
@@ -450,10 +473,32 @@ def main():
                 geo = schirme.gewaehlter(QApplication).geometry()
             except Exception:
                 geo = QApplication.primaryScreen().geometry()
+
+            # Auf dem iPad ist alles anders, und Ramzi hat es sofort gesehen:
+            # "zu klein und so weit unten, und die Wörter sind aufeinander
+            # geklackt." Der Grund sind die festen Pixelwerte oben -- 860 breit,
+            # 90 vom Rand, Schrift 17. Das passt auf einen 1920er Querschirm und
+            # auf nichts anderes: der iPad ist 1640x2360 bei 175 Prozent, also
+            # hochkant, hoch aufgelöst und stark skaliert.
+            #
+            # Erkannt wird er am Hochformat (wie in schirme.py) -- damit ändert
+            # sich für Ramzis und meinen Schirm NICHTS, und ein Fehler hier kann
+            # dort nichts kaputt machen.
+            hochkant = geo.height() > geo.width()
+            breite = int(geo.width() * 0.92) if hochkant else BREITE
+            rand = int(geo.height() * 0.10) if hochkant else RAND_UNTEN
+            if hochkant:
+                # Breiter, größer, höher -- gegen alle drei Beobachtungen auf
+                # einmal. Mehr Breite ist dabei das Mittel gegen das
+                # Übereinanderliegen: die Wörter werden nach ihrer gemessenen
+                # Breite gesetzt, und je enger die Zeile, desto eher drängen
+                # sie sich.
+                self.text.setze_breite(breite - 26 - 26, punkte=24)
+                self.setFixedWidth(breite)
             self.adjustSize()
-            self.setFixedWidth(BREITE)
+            self.setFixedWidth(breite)
             x = geo.x() + (geo.width() - self.width()) // 2
-            y = geo.y() + geo.height() - self.height() - RAND_UNTEN
+            y = geo.y() + geo.height() - self.height() - rand
             self.move(x, y)
 
         def nachsehen(self):
