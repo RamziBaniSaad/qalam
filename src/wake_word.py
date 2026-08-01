@@ -270,6 +270,11 @@ class Weckwort:
         # Aufnahmeschleife selbst wieder geloescht -- ein einmaliges Signal,
         # keine dauerhafte Sperre wie qalam_nimmt_auf().
         self._abbrechen_jetzt = threading.Event()
+        # Denkpause. Anders als die Notbremse eine DAUERHAFTE Sperre: sie gilt,
+        # bis Ramzi sie selbst wieder aufhebt. Der Unterschied zum Abbrechen
+        # ist der ganze Zweck -- der bereits gesammelte Satz bleibt erhalten,
+        # er will ja weiterreden, nur eben nicht sofort.
+        self._pausiert = threading.Event()
         # Per "Noor, schlaf" abschaltbar. Die Zuweisung hier ist kein Beiwerk:
         # sie geht durch den Setter unten und raeumt damit einen Merker weg,
         # der von einem abgestuerzten Lauf uebriggeblieben sein koennte. Ein
@@ -475,11 +480,40 @@ class Weckwort:
         zurückholen -- das wäre ein zweites, viel größeres Stück Arbeit für
         einen sehr schmalen Zeitraum und ist bewusst nicht gelöst."""
         self._abbrechen_jetzt.set()
+        # Eine Pause ueberlebt den Abbruch nicht. Wer abbricht, will Ruhe --
+        # bliebe die Sperre stehen, waere das Ohr danach stumm, ohne dass
+        # irgendetwas darauf hindeutet.
+        self._pausiert.clear()
         try:
             while True:
                 self._auftraege.get_nowait()
         except queue.Empty:
             pass
+
+    def pausieren(self, an=None):
+        """Denkpause an, aus, oder umschalten. Gibt den neuen Zustand zurück.
+
+        Ramzis Anlass (01.08.2026): er redet über den Sprachchat und will
+        mitten im Satz nachdenken oder etwas trinken, ohne dass der halbe Satz
+        abgeschickt wird. Bisher blieb ihm nur, die Redepause auf der Tafel
+        hochzuziehen -- was voraussetzt, dass er eine Hand frei und die Maus
+        in Reichweite hat. „Falls meine Hände dreckig sind", sagt er, und das
+        ist genau der Fall, für den eine Taste da ist.
+
+        Warum das nicht dasselbe ist wie abbrechen(): dort wird verworfen,
+        hier wird nur angehalten. Der Puffer bleibt vollständig stehen und
+        wird beim Fortsetzen weitergefüllt, als wäre nichts gewesen."""
+        if an is None:
+            an = not self._pausiert.is_set()
+        if an:
+            self._pausiert.set()
+        else:
+            self._pausiert.clear()
+        return an
+
+    @property
+    def pausiert(self):
+        return self._pausiert.is_set()
 
     # ----------------------------------------------------------------------
     def _schleife(self):
@@ -610,6 +644,19 @@ class Weckwort:
                     self._kurz_erwartet = False
                     with self._schloss:
                         self._laufend = None
+                    continue
+
+                # Denkpause -- Ramzi hält gerade inne (siehe pausieren()).
+                #
+                # Hier steht bewusst NUR ein `continue`: der Puffer bleibt, wie
+                # er ist, und vor allem läuft `stille` nicht weiter. Genau
+                # daran hängt der ganze Sinn -- zählte die Stille weiter, wäre
+                # sein halber Satz nach ein paar Sekunden von selbst
+                # abgeschickt, also exakt das, was die Pause verhindern soll.
+                # Aus demselben Grund wird `in_sprache` nicht angefasst: nach
+                # dem Fortsetzen soll es weitergehen, wo es aufgehört hat, und
+                # nicht wie ein neuer Satz aussehen.
+                if self._pausiert.is_set():
                     continue
 
                 try:

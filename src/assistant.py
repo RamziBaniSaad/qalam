@@ -361,27 +361,79 @@ class Assistent:
         # teilweise als "schon dagewesen" und wuerde nicht aufleuchten.
         _ramzi_untertitel('', offen=False)
 
+    def _pause_umschalten(self):
+        """Denkpause an oder aus -- mit Ton UND Anzeige.
+
+        Beides, nicht eines davon: bei einem Umschalter muss er wissen, in
+        welchem Zustand er gelandet ist, und ein einzelner Blick auf den
+        Bildschirm ist genau das, was er in dem Moment nicht hat (deshalb ja
+        die Taste). Der Ton sagt ihm sofort, was passiert ist; die Anzeige
+        beantwortet die Frage "bin ich eigentlich noch pausiert?", die zehn
+        Sekunden später kommt.
+
+        ZWEI verschiedene Töne, nicht zweimal derselbe. Bei einem Umschalter
+        wäre ein identisches Zeichen für beide Richtungen wertlos -- er müsste
+        mitzählen, um zu wissen, wo er steht. Absteigend heißt angehalten,
+        aufsteigend heißt es geht weiter; das versteht man ohne Erklärung."""
+        an = self.ohr.pausieren()
+        if an:
+            ton('noor_pause_an.wav')
+            _ramzi_untertitel('Denkpause – ich warte.', offen=True)
+            print('[Noor] Denkpause -- der Satz bleibt stehen.')
+        else:
+            ton('noor_pause_aus.wav')
+            _ramzi_untertitel('', offen=False)
+            print('[Noor] Denkpause beendet.')
+        return an
+
     def _abbruch_taste_starten(self):
-        """Globale Tastenkombination für _abbrechen().
+        """Die rechte Strg-Taste: einmal pausieren, zweimal abbrechen.
 
         Die RECHTE Strg-Taste, allein. Ramzis Wahl vom 31.07.2026 aus vier
         Vorschlägen: "ich benutze immer die linke für alles, was es braucht --
         die rechte ist für mich wie eine leere Taste."
 
         Sie ist gleichzeitig ein Modifikator, also könnte ein Strg+C mit der
-        rechten Hand hier fälschlich abbrechen. Bewusst NICHT abgesichert, auf
+        rechten Hand hier fälschlich auslösen. Bewusst NICHT abgesichert, auf
         seine ausdrückliche Ansage: "viel zu kompliziert und viel zu
         unwahrscheinlich -- und jetzt, wo ich es weiß, mache ich es sowieso
         nicht." Eine Sonderbehandlung für einen Fall, den es nicht gibt, wäre
         Code, den niemand je wieder versteht.
 
+        DIE DOPPELBELEGUNG (01.08.2026, seine Idee und sein erster Vorschlag):
+        einmal drücken hält an, zweimal schnell hintereinander bricht ab.
+        Dieselbe Taste für beides, weil beides zur selben Sache gehört -- und
+        weil eine zweite Sondertaste eine zweite Sache zum Merken wäre.
+
+        WARUM DER ERSTE DRUCK SOFORT PAUSIERT, statt erst eine Sekunde auf
+        einen möglichen zweiten zu warten: in genau dieser Wartesekunde liefe
+        die Stille weiter, und sein halber Satz könnte dabei abgeschickt
+        werden -- also exakt das, was die Pause verhindern soll. Ein
+        Doppeldruck *eskaliert* deshalb: erst hält es an, dann wird verworfen.
+        Das ist auch von der Bedeutung her richtig herum, denn Abbrechen aus
+        einer Pause heraus ergibt Sinn, umgekehrt nicht.
+
         Ändern reicht weiterhin eine Zeile: `keyboard.Key.ctrl_r` unten."""
+        # Wie schnell ist "zweimal"? Ramzis Vorschlag, und er passt: unter
+        # einer Sekunde macht das niemand versehentlich, und wer wirklich
+        # abbrechen will, haemmert ohnehin schneller.
+        DOPPEL_FENSTER = 1.0
+        self._letzter_tastendruck = 0.0
         try:
             from pynput import keyboard
 
             def _gedrueckt(taste):
-                if taste == keyboard.Key.ctrl_r:
+                if taste != keyboard.Key.ctrl_r:
+                    return
+                jetzt = time.time()
+                if jetzt - self._letzter_tastendruck <= DOPPEL_FENSTER:
+                    # Zurücksetzen, damit ein DRITTER Druck wieder normal
+                    # pausiert und nicht als Teil einer Kette gilt.
+                    self._letzter_tastendruck = 0.0
                     self._abbrechen()
+                else:
+                    self._letzter_tastendruck = jetzt
+                    self._pause_umschalten()
 
             self._abbruch_listener = keyboard.Listener(on_press=_gedrueckt)
             self._abbruch_listener.start()
