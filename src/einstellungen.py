@@ -73,6 +73,26 @@ STANDARD = {
     #                 (eine Datei geändert, ein Fenster aufgemacht)
     'feedback_modus': 'alle',
 
+    # Auf welchem Bildschirm Untertitel und Aufnahme-Fenster erscheinen:
+    # 'ich' (mein Schirm, links -- Vorgabe), 'ramzi' (seiner) oder 'ipad'.
+    #
+    # Vorgabe ist MEIN Schirm und nicht seiner, obwohl es seine Anzeigen sind.
+    # Ramzis Entscheidung vom 02.08.2026: sitzt er im Vollbildspiel, sieht er
+    # seinen eigenen Schirm nicht -- meiner ist der einzige, auf den er
+    # nebenbei schauen kann.
+    'anzeige_schirm': 'ich',
+
+    # Darf ich Fenster anfassen und den Fokus nehmen?
+    #
+    # False heißt: kein Sprung in VS Code, nichts ungefragt aufmachen. Es geht
+    # NUR um den Fokus -- Töne und Leuchten hängen an ihren eigenen Reglern.
+    #
+    # Die Regel dahinter, und sie ist der ganze Sinn: **ungefragt nein,
+    # befohlen ja.** Was Ramzi ausdrücklich sagt ("mach Spotify auf"), darf ihn
+    # auch aus dem Vollbild holen -- er hat ja darum gebeten. Gebunden wird
+    # meine eigene Initiative, nicht sein Befehl.
+    'haende': True,
+
     # Das Aufnahme-Fenster während der Aufnahme gar nicht zeigen. Ramzi hält
     # das selbst für eine Einstellung, die niemand braucht -- sie ist drin,
     # weil sie fast nichts kostet und in einem verkauften Produkt fehlen würde.

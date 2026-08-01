@@ -435,9 +435,21 @@ def main():
             maler.strokePath(weg, RAND)
 
         def platziere(self):
-            """Unten mittig auf dem Hauptbildschirm -- dort schaut man ohnehin
-            hin, wenn man gerade spricht."""
-            geo = QApplication.primaryScreen().geometry()
+            """Unten mittig auf dem eingestellten Bildschirm.
+
+            Welcher das ist, entscheidet `anzeige_schirm` (Vorgabe: mein
+            Schirm). Ramzis Grund vom 02.08.2026: sitzt er im Vollbildspiel,
+            ist sein eigener Schirm der EINZIGE, den er nicht sehen kann --
+            eine Anzeige, die dort erscheint, ist dann wertlos.
+
+            Bei jedem Platzieren neu gefragt, nicht einmal beim Start: sonst
+            müsste er den Untertitel neu starten, um den Schirm zu wechseln.
+            """
+            try:
+                import schirme
+                geo = schirme.gewaehlter(QApplication).geometry()
+            except Exception:
+                geo = QApplication.primaryScreen().geometry()
             self.adjustSize()
             self.setFixedWidth(BREITE)
             x = geo.x() + (geo.width() - self.width()) // 2

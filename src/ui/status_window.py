@@ -171,7 +171,13 @@ class StatusWindow(BaseWindow):
         except Exception:
             pass
 
-        screen = QApplication.primaryScreen()
+        # Derselbe Schirm wie die Untertitel (`anzeige_schirm`, Vorgabe: Noors).
+        # Bei jedem Anzeigen neu gefragt, damit ein Wechsel sofort greift.
+        try:
+            import schirme
+            screen = schirme.gewaehlter(QApplication)
+        except Exception:
+            screen = QApplication.primaryScreen()
         geo = screen.geometry()
         x = (geo.width() - self.width()) // 2
         y = geo.height() - self.height() - 120
