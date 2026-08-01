@@ -503,17 +503,27 @@ def main():
             # Erkannt wird er am Hochformat (wie in schirme.py) -- damit ändert
             # sich für Ramzis und meinen Schirm NICHTS, und ein Fehler hier kann
             # dort nichts kaputt machen.
-            hochkant = geo.height() > geo.width()
-            breite = int(geo.width() * 0.92) if hochkant else BREITE
-            rand = int(geo.height() * 0.10) if hochkant else RAND_UNTEN
-            if hochkant:
-                # Breiter, größer, höher -- gegen alle drei Beobachtungen auf
-                # einmal. Mehr Breite ist dabei das Mittel gegen das
-                # Übereinanderliegen: die Wörter werden nach ihrer gemessenen
-                # Breite gesetzt, und je enger die Zeile, desto eher drängen
-                # sie sich.
-                self.text.setze_breite(breite - 26 - 26, punkte=24)
-                self.setFixedWidth(breite)
+            # ZWEI VERMUTUNGEN, BEIDE FALSCH -- und beide wieder ausgebaut.
+            #
+            # Erst hielt ich die Schrift für zu klein und habe sie auf dem iPad
+            # auf 24 Punkt gesetzt, dazu 92 Prozent Breite. Ramzi: "die extrem
+            # große Schrift hilft auch nicht wirklich weiter, ist nicht besser
+            # geworden". Dann hielt ich eine DPI-Verwechslung für die Ursache
+            # und habe nach dem Umzug neu ausmessen lassen -- auch das änderte
+            # nichts.
+            #
+            # Was BLEIBT, weil es unabhängig davon richtig ist: der Ursprung
+            # des Bildschirms wird mitgerechnet (geo.x()/geo.y()), und nach
+            # einem Umzug wird neu umgebrochen. Beides kostet nichts und ist
+            # auf den anderen Schirmen bewiesen.
+            #
+            # Was FEHLT, ist eine Messung statt einer dritten Vermutung: der
+            # Untertitel muss selbst ausgeben, welche Breite er misst und
+            # welche er malt. Steht als Aufgabe. Bis dahin bekommt der iPad
+            # dieselben Werte wie die anderen Schirme -- unschön, aber
+            # wenigstens nicht schlimmer als vorher.
+            breite = BREITE
+            rand = RAND_UNTEN
             self.adjustSize()
             self.setFixedWidth(breite)
             x = geo.x() + (geo.width() - self.width()) // 2
