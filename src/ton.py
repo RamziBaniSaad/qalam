@@ -185,8 +185,20 @@ def _skaliert(quelle, prozent):
 
 
 # ------------------------------------------------------------------- Abspielen
-def spiele(datei):
-    """Ton abspielen, ohne auf das Ende zu warten. Bei 0 % gar nichts tun."""
+def spiele(datei, warten=False):
+    """Ton abspielen. Bei 0 % gar nichts tun.
+
+    `warten` ist keine Geschmacksfrage, sondern der Unterschied zwischen hörbar
+    und stumm. `SND_ASYNC` gibt sofort zurück, und Windows spielt weiter --
+    solange der Prozess lebt. Ein kurzlebiger Aufruf (`python ton.py ...`, so
+    kommt PowerShell an seine Töne) ist danach in wenigen Millisekunden fertig
+    und beendet den Ton mit sich. Gemessen am 02.08.2026 um 00:17: die skalierte
+    Datei entstand, aber zu hören war nichts.
+
+    Also: im laufenden Prozess (Ohr, Aufnahme-Fenster) asynchron -- dort darf
+    nichts auf einen Klang warten. Von außen aufgerufen synchron, denn dort ist
+    das Warten die einzige Möglichkeit, den Ton überhaupt zu Ende zu bringen.
+    """
     laut = anteil(datei)
     if laut <= 0.0:
         return False
@@ -198,8 +210,10 @@ def spiele(datei):
     prozent = max(STUFE, int(round(laut * 100 / STUFE)) * STUFE)
     try:
         import winsound
-        winsound.PlaySound(_skaliert(pfad, prozent),
-                           winsound.SND_FILENAME | winsound.SND_ASYNC)
+        marken = winsound.SND_FILENAME
+        if not warten:
+            marken |= winsound.SND_ASYNC
+        winsound.PlaySound(_skaliert(pfad, prozent), marken)
         return True
     except Exception:
         return False
@@ -211,7 +225,7 @@ if __name__ == '__main__':
     # lässt, ohne im Code zu suchen.
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
-            spiele(arg)
+            spiele(arg, warten=True)
     else:
         w = einstellungen.alle()
         print(f'Hauptregler {w.get("lautstaerke")}   toene={w.get("toene")}')
