@@ -662,15 +662,24 @@ class Weckwort:
                     war_pausiert = True
                     continue
 
-                # Nach dem Fortsetzen zählt die Redepause wieder VON VORN.
+                # Nach dem Fortsetzen SOLL die Redepause wieder von vorn
+                # zählen -- wer die Pause aufhebt, will weiterreden und braucht
+                # dieselbe Bedenkzeit wie beim ersten Mal.
                 #
-                # Ramzis Testbefund am 01.08.2026, und er hatte recht: er hatte
-                # vor der Pause schon vier von fünf Sekunden geschwiegen, also
-                # wurde eine Sekunde nach dem Fortsetzen abgeschickt -- „hat
-                # also keine fünf Sekunden gewartet". Das macht die Pause
-                # wertlos: wer sie aufhebt, will weiterreden und braucht dafür
-                # dieselbe Bedenkzeit wie beim ersten Mal, nicht den Rest von
-                # vorher.
+                # ACHTUNG, HIER STIMMT ETWAS NICHT (Stand 01.08.2026, 22:15):
+                # Ramzi hat nach diesem Einbau erneut getestet und es wird
+                # weiterhin sofort abgeschickt. Der Zähler wird hier also
+                # entweder gar nicht erreicht, oder das Abschicken hängt an
+                # einer anderen Stelle als an `stille` -- Verdacht: der
+                # Mitlauscher hält es für einen fertigen Kurzbefehl, oder der
+                # Assistent schickt seinen Sammelsatz eigenständig ab.
+                #
+                # Ramzis Entscheidung dazu: "das ist gar kein Fehler, das kann
+                # auch so bleiben, das ist einfach nur eine Designentscheidung."
+                # Also bleibt es vorerst so und wird NICHT weiterverfolgt. Der
+                # Block steht trotzdem hier, weil er semantisch richtig ist --
+                # aber er ist unbewiesen, und das gehört dazugeschrieben statt
+                # als erledigt zu gelten.
                 if war_pausiert:
                     war_pausiert = False
                     stille = 0

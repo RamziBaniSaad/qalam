@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import einstellungen                        # noqa: E402
 import oeffnen                              # noqa: E402
+import schliessen                           # noqa: E402
 import stellschrauben                       # noqa: E402
 from voice_output import Sprecher          # noqa: E402
 from wake_word import Weckwort, WECKWORT   # noqa: E402
@@ -563,7 +564,12 @@ class Assistent:
         if stellschrauben.ist_stellschraube(ohne_namen):
             return True
         # „Mach mir YouTube auf" ist genauso fertig -- danach kommt nichts mehr.
+        # „Mach das wieder zu" ebenso: beide sind mit dem letzten Wort zu Ende,
+        # und wer darauf noch die volle Redepause wartet, lässt Ramzi ohne
+        # Grund vor einem Fenster stehen, das längst zugehen könnte.
         try:
+            if schliessen.verstehe(ohne_namen) is not None:
+                return True
             return oeffnen.verstehe(ohne_namen) is not None
         except Exception:
             return False
@@ -734,6 +740,26 @@ class Assistent:
             self.ohr.folge_bis = 0.0
             ton('noor_reflex.wav')
             self._sag(gestellt)
+            return
+
+        # „Mach das wieder zu." VOR dem Öffnen, obwohl beide dasselbe Netz
+        # benutzen: oeffnen.verstehe() weist Schließ-Sätze zwar über GEGENTEIL
+        # ab, aber diese Reihenfolge macht die Absicht im Code sichtbar --
+        # wer „zu" sagt, meint nicht „auf", und das soll man nicht erst aus
+        # einer Ausschlussliste im anderen Modul erschließen müssen.
+        try:
+            zugemacht = schliessen.mach(auftrag)
+        except Exception as e:
+            zugemacht = None
+            print(f'[Noor] Schließen fehlgeschlagen: {e}')
+        if zugemacht:
+            self.ohr.folge_bis = 0.0
+            # Kein eigener Ton hier: noor-links-zu.ps1 und noor-zu.ps1 spielen
+            # den Abwärts-Ton selbst, sobald sie wirklich etwas geschlossen
+            # haben. Ein Ton von hier käme auch dann, wenn gar nichts zu
+            # schließen war -- und ein Zeichen für nichts ist schlimmer als
+            # keins.
+            self._sag(zugemacht)
             return
 
         # „Mach mir YouTube auf." Zuletzt in der Kette, weil es das breiteste
