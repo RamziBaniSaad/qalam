@@ -312,8 +312,14 @@ TABELLE = [
       'langsamer reden', 'schneller sprech', 'langsamer sprech', 'wie schnell du'],
      'zahl', STIMME, 'tempo'),
 
-    (['lautstarke', 'lauter', 'leiser', 'volume', 'wie laut', 'stimme laut',
-      'stimme leise', 'zu laut', 'zu leise', 'stumm'],
+    # "laut starker" ist kein Tippfehler, sondern was Whisper am 01.08.2026 aus
+    # Ramzis gesprochenem "Lautstärke" gemacht hat: zwei Wörter. Der Befehl fiel
+    # deshalb durch und landete im Chat -- also genau da, wo er nichts kosten
+    # sollte. Ein Spracherkenner trennt zusammengesetzte Wörter, wo er will; die
+    # Liste muss das aushalten, nicht er.
+    (['lautstarke', 'laut starke', 'laut starker', 'lautstarker', 'lauter',
+      'leiser', 'volume', 'volumen', 'wie laut', 'stimme laut', 'stimme leise',
+      'zu laut', 'zu leise', 'stumm'],
      'zahl', STIMME, 'lautstaerke'),
 
     (['tonzeichen', 'signalton', 'signaltone', 'piep', 'gerausche', 'tone ',
@@ -446,15 +452,36 @@ def _stand():
 #
 # "mach mal lauter" ohne Zahl. Kostet fast nichts und ist die Formulierung, die
 # ihm zuerst über die Lippen geht.
+#
+# Die Stämme stehen hier ohne Endung: "langsam" trifft auch "langsamer",
+# "schnell" auch "schneller". Ramzi hat am 01.08.2026 "reden wir langsam"
+# gesagt -- ohne -er -- und der Befehl fiel durch.
 SCHRITTE = {
     'lauter': ('lautstaerke', +0.15), 'leiser': ('lautstaerke', -0.15),
-    'schneller': ('tempo', +0.1), 'langsamer': ('tempo', -0.1),
+    'schnell': ('tempo', +0.1), 'langsam': ('tempo', -0.1),
 }
+
+# Wörter, die aus einer Beobachtung eine Bitte machen.
+#
+# Ohne diese Prüfung würde "das ging aber schnell" mein Sprechtempo erhöhen --
+# ein Satz über die Welt, den ich als Befehl missverstehe. Genau die Sorte
+# Fehlgriff, die schlimmer ist als ein verpasster Befehl: einen verpassten
+# beantworte ich richtig, ein falscher verstellt still einen Wert.
+AUFFORDERUNG = ('mach', 'stell', 'setz', 'red', 'sprich', 'sprech', 'bitte',
+                'mal', 'etwas', 'bisschen', 'kannst du', 'wir', 'geh', 'werd')
 
 
 def _richtung(text):
-    """Steckt eine Richtung ohne Zahl darin? ("lauter", "langsamer")"""
-    return any(wort in text for wort in SCHRITTE)
+    """Steckt eine Richtung ohne Zahl darin -- und ist sie auch gemeint?
+
+    Bei drei Wörtern oder weniger ("lauter bitte", "langsamer") reicht die
+    Richtung allein; da redet niemand über die Welt. Darüber braucht es ein
+    Wort, das die Äußerung zu einer Bitte macht."""
+    if not any(wort in text for wort in SCHRITTE):
+        return False
+    if len(text.split()) <= 3:
+        return True
+    return any(w in text for w in AUFFORDERUNG)
 
 
 def _relativ(text):
@@ -488,6 +515,21 @@ def verstehe(rohtext, ausfuehren=True):
         return None
     worte = text.split()
     if len(worte) > STELL_MAX_WOERTER:
+        return None
+
+    # Geht es um seine Musik, geht es NICHT um meine Stimme.
+    #
+    # "mach die Musik leiser" hätte hier bis zum 01.08.2026 meine eigene
+    # Lautstärke gesenkt und seine Musik in Ruhe gelassen -- zwei Dinge auf
+    # einmal falsch, und beide leise. Die Musik-Reflexe in assistant.py laufen
+    # zwar vorher, kennen aber nur an/aus/weiter/zurück; für "leiser" gibt es
+    # dort nichts, also fiele der Satz hierher.
+    #
+    # Ich lasse ihn stattdessen an mich durchgehen: dann kann ich die
+    # Lautstärke der Musik wirklich ändern, statt so zu tun. Ein ehrliches
+    # "verstehe ich noch nicht" ist besser als eine falsche Tat.
+    if any(w in text for w in ('musik', 'spotify', 'lied', 'song', 'playlist',
+                               'titel', 'video')):
         return None
 
     # Ein Eintrag, der nur mit dem Stichwort trifft aber keine Zahl und kein
@@ -596,9 +638,15 @@ PROBEN = [
     'wie sind die Einstellungen gerade',
     'sag mal was',
     'Probe hören',
+    # Ramzis echte Sätze vom 01.08.2026, die im Chat gelandet sind statt zu greifen:
+    'reden wir langsam',
+    'laut stärker auf 15%',
+    'Lautstärke auf 15 Prozent',
     # Diese hier dürfen NICHT greifen:
     'wie spät ist es',
     'mach mal die Musik an',
+    'mach die Musik leiser',
+    'das ging aber schnell',
     'ich brauche gleich mal einen Timer für den Kuchen im Ofen und zwar zwanzig '
     'Minuten lang, kannst du mir das einstellen',
 ]
