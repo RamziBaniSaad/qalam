@@ -476,6 +476,26 @@ def main(argv=None):
         print(nach_wav(text, args.nach_wav, args.stimme))
         return 0
 
+    # Schlafe ich? Dann kommt hier gar nichts raus.
+    #
+    # Ramzi am 01.08.2026: "jedes Mal, wenn du das Dashboard neu startest, du
+    # schlaefst zwar, aber du sagst trotzdem, wie du dich gerade anhoerst. Dass
+    # du dich kurz vorstellst, ist ja richtig -- aber das sollst du nur machen,
+    # wenn du wach bist."
+    #
+    # Der Vorsteller ist der Probe-Knopf der Tafel, der beim Start einmal
+    # ausloest. Die Sperre gehoert trotzdem NICHT dorthin, sondern hierher:
+    # das hier ist die eine Tuer, durch die jeder fremde Sprecher geht -- die
+    # Tafel, die Sprech-Hooks, meine eigenen Skripte. Eine Regel an der Tuer
+    # ist eine Regel; dieselbe Regel in jedem Aufrufer ist eine Verabredung,
+    # die der naechste Aufrufer nicht kennt.
+    try:
+        import warteschlange
+        if not warteschlange.darf_sprechen():
+            return 0
+    except Exception:
+        pass
+
     # Erst anstellen, dann reden -- auch von aussen.
     #
     # Ramzis Regel von Anfang an: wer redet, haelt den Platz. Der Assistent
