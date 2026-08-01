@@ -21,6 +21,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import einstellungen                        # noqa: E402
+import stellschrauben                       # noqa: E402
 from voice_output import Sprecher          # noqa: E402
 from wake_word import Weckwort, WECKWORT   # noqa: E402
 
@@ -461,11 +462,19 @@ class Assistent:
         über die Stille-Schwelle. Bei "Noor, wie spät ist es" kommt nichts mehr
         -- vier Sekunden darauf zu warten hat den Reflex langsamer gemacht als
         selbst auf die Uhr zu sehen, und genau das hat Ramzi bemängelt."""
-        geglaettet = normalisiere(WECKWORT.sub('', text or ''))
+        ohne_namen = WECKWORT.sub('', text or '')
+        geglaettet = normalisiere(ohne_namen)
         if not geglaettet:
             return False
-        return any(b in geglaettet
-                   for bruchstuecke, _ in self.reflexe for b in bruchstuecke)
+        if any(b in geglaettet
+               for bruchstuecke, _ in self.reflexe for b in bruchstuecke):
+            return True
+        # Eine Stellschraube ist genauso fertig wie "wie spät ist es": nach
+        # "mach die Redepause auf 2 Sekunden" kommt nichts mehr. Gerade DIESER
+        # Befehl darf nicht an der alten, langen Redepause hängen -- sonst wartet
+        # das Ohr bis zu zehn Sekunden, um zu erfahren, dass es weniger warten
+        # soll.
+        return stellschrauben.ist_stellschraube(ohne_namen)
 
     def _erkannt(self):
         """Der Name ist gefallen -- mitten im Satz, nicht erst danach.
@@ -610,6 +619,30 @@ class Assistent:
                 if antwort:
                     self._sag(antwort)
                 return
+
+        # Die Stellschrauben -- NACH den Reflexen oben, und das ist wichtig.
+        #
+        # "mach die Musik lauter" enthält "lauter", und das ist auch das Wort,
+        # mit dem Ramzi MEINE Stimme lauter macht. Stünde die Prüfung vor den
+        # Reflexen, würde ich seine Musik in Ruhe lassen und stattdessen mich
+        # selbst lauter stellen -- ein falsch verstandener Befehl, der zwei
+        # Dinge auf einmal verkehrt macht. Die Musik-Reflexe sind die
+        # spezielleren, also kommen sie zuerst.
+        #
+        # Absichtlich der ROHE Auftrag und nicht `geglaettet`: normalisiere()
+        # macht aus "1,4" ein "1 4", und damit wäre jede Kommazahl kaputt, bevor
+        # sie ankommt. stellschrauben glättet selbst und lässt den Dezimalpunkt
+        # dabei stehen.
+        try:
+            gestellt = stellschrauben.verstehe(auftrag)
+        except Exception as e:
+            gestellt = None
+            print(f'[Noor] Stellschraube fehlgeschlagen: {e}')
+        if gestellt:
+            self.ohr.folge_bis = 0.0
+            ton('noor_reflex.wav')
+            self._sag(gestellt)
+            return
 
         # Nur der Name, kein Auftrag: das Ohr bleibt bewusst offen (folge_bis
         # läuft weiter) -- genau das ist Ramzis "ich sage den Namen, warte auf

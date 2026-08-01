@@ -44,7 +44,15 @@ def alle():
 
     if zeit != _stand['zeit']:
         try:
-            with open(DATEI, encoding='utf-8') as f:
+            # utf-8-sig und nicht utf-8: eine BOM am Dateianfang laesst json
+            # scheitern, und dieses `except` unten wuerde den Fehler still
+            # schlucken -- Qalam spraeche dann mit den Vorgabewerten weiter,
+            # obwohl Ramzis echte Werte in der Datei stehen. Am 01.08.2026
+            # genau so passiert, als ein PowerShell-Aufruf die Datei mit
+            # `Set-Content -Encoding utf8` geschrieben hat (das setzt unter
+            # PowerShell 5.1 immer eine BOM). Eine BOM zu lesen kostet nichts;
+            # sie nicht zu lesen kostet eine unsichtbare Fehlfunktion.
+            with open(DATEI, encoding='utf-8-sig') as f:
                 gelesen = json.load(f)
             werte = dict(STANDARD)
             werte.update({k: v for k, v in gelesen.items() if k in STANDARD})

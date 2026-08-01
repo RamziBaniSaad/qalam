@@ -45,6 +45,45 @@ COUNTDOWN_SOUNDS = {10: 'cd_10.wav', 5: 'cd_5.wav', 4: 'cd_4.wav',
                     3: 'cd_3.wav', 2: 'cd_2.wav', 1: 'cd_1.wav'}
 
 
+# --- Die Timer-Werte frisch von der Platte --------------------------------
+#
+# Warum das hier stehen muss (01.08.2026): Ramzi kann diese Werte jetzt SPRECHEN
+# -- "mach das automatische Abschicken auf 5 Minuten". Das erledigt
+# src/stellschrauben.py im Prozess des Assistenten, und der ist ein ANDERER
+# Prozess als Qalam. Ein set_config_value() dort käme hier also nie an;
+# ConfigManager hält seine Werte pro Prozess im Speicher und liest die Datei nur
+# beim Start. Ohne dieses Nachlesen müsste Ramzi Qalam neu starten, damit ein
+# gesprochener Wert gilt -- und damit wäre der ganze Sinn weg.
+#
+# Bewusst NUR dieser Abschnitt und bewusst NICHT ConfigManager.reload_config():
+# ein voller Neuaufbau würde auch alles andere ersetzen, unter anderem
+# Änderungen, die im Einstellungsfenster noch nicht gespeichert sind. Was hier
+# nachgelesen wird, ist genau das, was von außen gesprochen werden kann.
+_CONFIG_DATEI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             'config.yaml')
+_timer_stand = {'zeit': None, 'werte': {}}
+
+
+def _timer_von_platte():
+    """recording_timer aus config.yaml, neu gelesen nur wenn die Datei sich
+    geändert hat. Der Aufruf passiert einmal pro Sekunde während einer Aufnahme
+    -- ein Blick auf den Zeitstempel kostet dabei nichts."""
+    try:
+        zeit = os.path.getmtime(_CONFIG_DATEI)
+    except OSError:
+        return _timer_stand['werte']
+    if zeit != _timer_stand['zeit']:
+        try:
+            import yaml
+            with open(_CONFIG_DATEI, encoding='utf-8') as f:
+                daten = yaml.safe_load(f) or {}
+            _timer_stand['werte'] = daten.get('recording_timer') or {}
+            _timer_stand['zeit'] = zeit
+        except Exception:
+            pass        # kaputte oder halb geschriebene Datei: beim alten Wert bleiben
+    return _timer_stand['werte']
+
+
 class StatusWindow(BaseWindow):
     statusSignal = pyqtSignal(str, bool)
     closeSignal = pyqtSignal()
@@ -137,8 +176,14 @@ class StatusWindow(BaseWindow):
 
     # ---- Aufnahme-Timer + Countdown --------------------------------------
     def _timer_cfg(self, key, default):
-        """Config-Wert aus dem Abschnitt recording_timer holen, mit Fallback."""
-        val = ConfigManager.get_config_value('recording_timer', key)
+        """Config-Wert aus dem Abschnitt recording_timer holen, mit Fallback.
+
+        Erst die Datei, dann der Speicher: die Datei ist die einzige Stelle, die
+        ein anderer Prozess erreichen kann (siehe _timer_von_platte). Steht der
+        Wert dort nicht, gilt weiter, was ConfigManager beim Start geladen hat."""
+        val = _timer_von_platte().get(key)
+        if val is None:
+            val = ConfigManager.get_config_value('recording_timer', key)
         return default if val is None else val
 
     def _set_dot(self, color):
