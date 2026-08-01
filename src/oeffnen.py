@@ -222,9 +222,16 @@ def oeffne(name):
     verloren. Dieselbe Begründung wie bei _an_noor() in assistant.py."""
     def _lauf():
         try:
+            # CREATE_NO_WINDOW ist hier kein Detail, sondern der Unterschied
+            # zwischen Werkzeug und Stoerung. Das Ohr laeuft unter pythonw, also
+            # ohne Konsole -- jeder PowerShell-Aufruf macht sich deshalb ein
+            # EIGENES Fenster auf, und das stand bei Ramzi mitten auf dem
+            # Bildschirm, ein paar Sekunden lang, bei jedem Befehl. Sein Wort
+            # dazu: "dann kann ich auf einmal nichts mehr sehen."
             subprocess.run(['powershell', '-NoProfile', '-NonInteractive',
                             '-ExecutionPolicy', 'Bypass', '-File', SKRIPT, name],
-                           capture_output=True, timeout=60)
+                           capture_output=True, timeout=60,
+                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         except Exception as e:
             print(f'[Noor] Öffnen fehlgeschlagen: {e}')
     threading.Thread(target=_lauf, daemon=True).start()
