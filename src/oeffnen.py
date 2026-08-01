@@ -46,8 +46,14 @@ OEFFNEN_MAX_WOERTER = 14
 # Unterschied ist nicht das Stichwort, sondern die Absicht -- und die steht in
 # genau diesen Wörtern. Lieber ein verpasster Befehl (der landet bei Noor und
 # wird beantwortet) als ein Fenster, das niemand wollte.
+#
+# „efne", „efnes", „ofne" sind keine Wörter — so schreibt Qalam Ramzis
+# gesprochenes „öffne". Am 01.08.2026 ging „öffne Spotify" deshalb in den Chat
+# statt zu greifen. Ein Spracherkenner verhört sich, und die Liste muss das
+# aushalten, nicht er.
 ABSICHT = (
-    'mach', 'machs', 'offne', 'oeffne', 'zeig', 'zeige', 'starte', 'start',
+    'mach', 'machs', 'offne', 'oeffne', 'efne', 'efnes', 'ofne', 'oefne',
+    'zeig', 'zeige', 'starte', 'start',
     'hol', 'gehe auf', 'geh auf', 'ruf', 'bring', 'ich will', 'ich mochte',
     'lass uns', 'wechsel', 'aufmachen', 'anmachen',
 )
