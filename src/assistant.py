@@ -813,7 +813,38 @@ class Assistent:
                 self._sag('Die Brücke lässt sich nicht laden.')
                 print(f'[Noor] Brücke nicht ladbar: {e}')
                 return
+
+            # Die Übergabe MITSCHREIBEN -- der Grund ist teuer bezahlt.
+            #
+            # Ramzis Befund "in 15--20 % der Fälle kommt mein Satz nicht an" war
+            # aus dem Protokoll nicht einzukreisen, weil hier weder Erfolg noch
+            # Fehlschlag eine Zeile hinterließ: bei Erfolg absichtlich nichts,
+            # bei Fehlschlag nur ein gesprochener Satz, der nirgends landet.
+            # Am 02.08.2026 blieben nach der Auswertung von 269 Sätzen 14 Fälle
+            # übrig, über die sich schlicht NICHTS sagen ließ -- nicht, weil sie
+            # rätselhaft waren, sondern weil niemand hingesehen hatte.
+            #
+            # Mitgeschrieben wird auch, WAS vorn lag. Das ist die Größe, die
+            # Ramzi selbst im Verdacht hat ("beim Zocken im Vollbild geht es
+            # nicht"), und sie lässt sich hinterher nicht mehr rekonstruieren.
+            vorn = ''
+            try:
+                import ctypes
+                u = ctypes.windll.user32
+                h = u.GetForegroundWindow()
+                n = u.GetWindowTextLengthW(h)
+                b = ctypes.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(h, b, n + 1)
+                vorn = b.value[:40]
+            except Exception:
+                pass
+            zeit = time.strftime('%H:%M:%S')
+            print(f'[{zeit}] [Brücke] gebe weiter: {len(auftrag)} Zeichen, '
+                  f'vorn liegt {vorn!r}')
+
             ok, meldung = sende(auftrag)
+            print(f'[{time.strftime("%H:%M:%S")}] [Brücke] '
+                  + ('angekommen' if ok else f'FEHLSCHLAG -- {meldung}'))
             if not ok:
                 self._sag(meldung or 'Das hat nicht geklappt.')
             # Bei Erfolg sage ich hier NICHTS. Die eigentliche Antwort spricht
