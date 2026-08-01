@@ -270,11 +270,38 @@ class Weckwort:
         # Aufnahmeschleife selbst wieder geloescht -- ein einmaliges Signal,
         # keine dauerhafte Sperre wie qalam_nimmt_auf().
         self._abbrechen_jetzt = threading.Event()
-        self.schlaeft = False   # per "Noor, schlaf" abschaltbar
+        # Per "Noor, schlaf" abschaltbar. Die Zuweisung hier ist kein Beiwerk:
+        # sie geht durch den Setter unten und raeumt damit einen Merker weg,
+        # der von einem abgestuerzten Lauf uebriggeblieben sein koennte. Ein
+        # frischer Start ist wach.
+        self.schlaeft = False
         # Bis wann ein Satz OHNE Weckwort noch als Auftrag gilt. Ramzi sagt oft
         # erst nur den Namen, wartet auf das Zeichen und redet dann weiter --
         # dieser zweite Satz enthält den Namen naturgemäß nicht mehr.
         self.folge_bis = 0.0
+
+    # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
+    # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
+    # laufen ausserhalb von hier (siehe warteschlange.schlaeft).
+    #
+    # Bewusst eine Eigenschaft und kein `schlaf_merken()`-Aufruf an drei
+    # Stellen: `self.ohr.schlaeft = False` steht auch mitten in assistant.py,
+    # wo das Aufwachen aus dem Schlaf heraus erkannt wird. Jede solche Zuweisung
+    # muss die Datei mitziehen, sonst laufen Innen- und Aussensicht
+    # auseinander -- und genau das faellt erst auf, wenn ich stumm bleibe,
+    # obwohl ich wach bin.
+    @property
+    def schlaeft(self):
+        return self._schlaeft
+
+    @schlaeft.setter
+    def schlaeft(self, an):
+        self._schlaeft = bool(an)
+        try:
+            import warteschlange
+            warteschlange.schlaf_merken(self._schlaeft)
+        except Exception:
+            pass
 
     @property
     def stille_frames(self):

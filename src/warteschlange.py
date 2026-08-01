@@ -28,6 +28,7 @@ import time
 PROJEKT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUFNAHME_SPERRE = os.path.join(PROJEKT, '.aufnahme.lock')
 REDET_SPERRE = os.path.join(PROJEKT, '.ramzi-redet.lock')
+SCHLAF_MERKER = os.path.join(PROJEKT, '.schlaeft.lock')
 
 # Sicherheitsnetze, keine normalen Ablaufwerte -- der normale Ablauf räumt
 # explizit auf (siehe aufnahme_endet() und assistant.py::_geweckt()). Diese
@@ -61,6 +62,48 @@ def aufnahme_endet():
         os.remove(AUFNAHME_SPERRE)
     except OSError:
         pass
+
+
+# --- Schlafe ich gerade? ---------------------------------------------------
+#
+# RAMZIS AUFBAU (01.08.2026, sein Wort: "wie ein Tony-Stark-Setup"): bin ich
+# wach, spreche ich IMMER -- Rueckfragen, Zusammenfassungen, egal ob sein
+# Auftrag gesprochen, diktiert oder getippt kam. Schlafe ich, ist alles still:
+# keine Frage wird vorgelesen, keine Zusammenfassung, und das Ohr hoert nur
+# noch auf das Aufwachen.
+#
+# Damit haengt das Reden nicht mehr daran, WIE er mich erreicht hat, sondern
+# nur noch an einem einzigen Schalter. Der muss deshalb dort liegen, wo ihn
+# jeder sehen kann: die Sprech-Hooks sind eigene PowerShell-Prozesse und der
+# Tafel-Sammler auch -- kein einziger von ihnen kann in den Speicher des
+# Assistenten schauen, wo `schlaeft` bisher allein stand.
+#
+# Fehlt die Datei, bin ich WACH. Das ist die richtige Vorgabe: weiss niemand
+# etwas, soll ich ansprechbar sein und nicht stumm. Aufgeraeumt wird beim
+# Start des Assistenten -- ein frischer Start ist wach, damit ein Absturz im
+# Schlaf mich nicht dauerhaft verstummen laesst.
+
+
+def schlaeft():
+    """Schlafe ich gerade? Für JEDEN Prozess lesbar."""
+    return os.path.exists(SCHLAF_MERKER)
+
+
+def schlaf_merken(an):
+    """Einschlafen oder aufwachen -- geht durch wake_word.schlaeft (Property)."""
+    try:
+        if an:
+            with open(SCHLAF_MERKER, 'w') as f:
+                f.write(str(time.time()))
+        else:
+            os.remove(SCHLAF_MERKER)
+    except OSError:
+        pass
+
+
+def darf_sprechen():
+    """Darf ich jetzt den Mund aufmachen? Die eine Frage, die die Hooks stellen."""
+    return not schlaeft()
 
 
 def ramzi_redet():
