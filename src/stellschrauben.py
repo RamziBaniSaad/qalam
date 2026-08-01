@@ -456,9 +456,14 @@ def _stand():
 # Die Stämme stehen hier ohne Endung: "langsam" trifft auch "langsamer",
 # "schnell" auch "schneller". Ramzi hat am 01.08.2026 "reden wir langsam"
 # gesagt -- ohne -er -- und der Befehl fiel durch.
+# „langzamer" mit Z ist kein Tippfehler, sondern was Qalam am 01.08.2026 aus
+# Ramzis „langsamer" gemacht hat -- der Befehl landete deshalb im Chat. Gleiches
+# gilt für „schnel" mit einem L. Ein Spracherkenner verhört sich; die Liste muss
+# das aushalten, nicht er.
 SCHRITTE = {
     'lauter': ('lautstaerke', +0.15), 'leiser': ('lautstaerke', -0.15),
-    'schnell': ('tempo', +0.1), 'langsam': ('tempo', -0.1),
+    'schnell': ('tempo', +0.1), 'schnel': ('tempo', +0.1),
+    'langsam': ('tempo', -0.1), 'langzam': ('tempo', -0.1),
 }
 
 # Wörter, die aus einer Beobachtung eine Bitte machen.
