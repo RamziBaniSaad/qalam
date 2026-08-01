@@ -121,6 +121,93 @@ def verstehe(rohtext):
     return treffer
 
 
+# --- Seiten, die noch nicht im Katalog stehen -------------------------------
+#
+# Ramzis Frage vom 01.08.2026: „Kann ich dir sagen, öffne die
+# Kleinanzeigen-Seite auf Chrome, und funktioniert das als Reflex — oder muss
+# das über den Chat gehen?"
+#
+# Über den Chat wäre die einfache Antwort und die schlechtere: es kostet Tokens
+# und dauert. Also rät der Reflex die Adresse und PRÜFT sie, bevor er etwas
+# aufmacht — und schreibt sie bei Erfolg in den Katalog. Beim zweiten Mal ist
+# dieselbe Seite dann sofort da, ohne Raten und ohne Netzanfrage.
+#
+# GERATEN WIRD NUR MIT ANSAGE. „Öffne das Fenster" darf nicht auf fenster.de
+# führen. Deshalb braucht es ein Wort, das eindeutig eine Webseite meint —
+# genau so, wie Ramzi es von selbst gesagt hat („die Kleinanzeigen-SEITE auf
+# CHROME").
+WEB_MARKER = ('seite', 'webseite', 'website', 'internetseite', 'homepage',
+              'im browser', 'auf chrome', 'in chrome', 'im netz', 'im internet')
+
+# Wörter, die zum Befehl gehören und nicht zum Namen der Seite.
+FUELLER = {
+    'mach', 'machs', 'mir', 'mal', 'bitte', 'auf', 'aufmachen', 'offne', 'oeffne',
+    'zeig', 'zeige', 'starte', 'start', 'hol', 'bring', 'die', 'der', 'das', 'den',
+    'ein', 'eine', 'einen', 'seite', 'webseite', 'website', 'internetseite',
+    'homepage', 'chrome', 'browser', 'im', 'in', 'netz', 'internet', 'von', 'zu',
+    'ich', 'will', 'mochte', 'du', 'kannst', 'noor', 'und', 'dann', 'jetzt', 'sonst',
+}
+
+ENDUNGEN = ('.de', '.com', '.net', '.org')
+
+
+def _antwortet(url):
+    """Gibt es diese Seite überhaupt? Kopfanfrage, kein Herunterladen.
+
+    Vor dem Öffnen, nicht danach -- dieselbe Regel wie in noor-zeigen.ps1: ein
+    Fenster mit „Seite nicht gefunden" ist schlimmer als keins."""
+    import urllib.request
+    try:
+        anfrage = urllib.request.Request(url, method='HEAD',
+                                         headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(anfrage, timeout=4) as a:
+            return 200 <= a.status < 400
+    except Exception:
+        return False
+
+
+def _name_aus_satz(text):
+    """Was bleibt übrig, wenn man den Befehl abzieht? Das ist die Seite."""
+    rest = [w for w in text.split() if w not in FUELLER and len(w) > 2]
+    return ''.join(rest) if rest else None
+
+
+def _merke_im_katalog(name, url):
+    """Gefundene Seite in die Liste schreiben -- beim nächsten Mal ohne Raten.
+
+    Angehängt, nicht ersetzt: die Datei gehört Ramzi, er pflegt sie mit. Und
+    `_hinweis` bleibt oben stehen, damit die Erklärung nicht wegrutscht."""
+    try:
+        with open(KATALOG, encoding='utf-8-sig') as f:
+            roh = json.load(f)
+        if name in roh:
+            return
+        roh[name] = {'worte': [name], 'art': 'web', 'ziel': url,
+                     'fenster': name, 'wo': 'ramzi', 'gelernt': True}
+        with open(KATALOG, 'w', encoding='utf-8', newline='\n') as f:
+            json.dump(roh, f, ensure_ascii=False, indent=2)
+        _stand['zeit'] = None          # beim nächsten Lesen frisch holen
+    except Exception as e:
+        print(f'[Noor] Katalog nicht ergänzt: {e}')
+
+
+def rate_seite(rohtext):
+    """Eine Webseite aus dem Satz raten. (Name, Adresse) oder None."""
+    text = _glaette(rohtext)
+    if not any(m in text for m in WEB_MARKER):
+        return None
+    if not any(a in text for a in ABSICHT):
+        return None
+    name = _name_aus_satz(text)
+    if not name or len(name) < 3:
+        return None
+    for endung in ENDUNGEN:
+        url = f'https://www.{name}{endung}'
+        if _antwortet(url):
+            return name, url
+    return None
+
+
 def oeffne(name):
     """Das Skript rufen, im eigenen Faden.
 
@@ -140,12 +227,21 @@ def oeffne(name):
 def mach(rohtext):
     """Erkennen und tun. Gibt den Antwortsatz zurück oder None."""
     treffer = verstehe(rohtext)
-    if not treffer:
-        return None
-    name, eintrag = treffer
-    oeffne(name)
-    wo = 'auf deinem Bildschirm' if eintrag.get('wo') == 'ramzi' else 'bei mir'
-    return f'{name.replace("-", " ")} {wo}.'
+    if treffer:
+        name, eintrag = treffer
+        oeffne(name)
+        wo = 'auf deinem Bildschirm' if eintrag.get('wo') == 'ramzi' else 'bei mir'
+        return f'{name.replace("-", " ")} {wo}.'
+
+    # Nicht im Katalog, aber eindeutig eine Webseite gemeint? Dann raten,
+    # prüfen, öffnen -- und merken, damit es beim nächsten Mal sofort geht.
+    geraten = rate_seite(rohtext)
+    if geraten:
+        name, url = geraten
+        _merke_im_katalog(name, url)
+        oeffne(name)
+        return f'{name} auf deinem Bildschirm. Merke ich mir.'
+    return None
 
 
 PROBEN = [
