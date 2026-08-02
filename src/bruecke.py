@@ -32,6 +32,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 
 IS_WINDOWS = sys.platform == 'win32'
@@ -57,6 +58,15 @@ if IS_WINDOWS:
     # Fenstergriffe oberhalb von 0x7FFFFFFF kämen dann negativ zurück und kein
     # Vergleich würde je stimmen.
     _user32.GetForegroundWindow.restype = ctypes.c_void_p
+    _kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    # SwitchToThisWindow ist nicht dokumentiert, aber vorhanden -- Windows
+    # benutzt sie selbst für ALT+TAB. Fehlt sie einmal, soll das kein
+    # Ladefehler sein, sondern nur eine Stufe weniger in zurueck_zu().
+    try:
+        _user32.SwitchToThisWindow.argtypes = [ctypes.c_void_p, ctypes.c_bool]
+    except Exception:
+        pass
+    _user32.GetWindow.restype = ctypes.c_void_p
 
 
 def _gleich(a, b):
@@ -96,6 +106,121 @@ def finde_fenster(titel=FENSTER_TITEL):
     if enthaelt:
         return enthaelt[0]
     return None
+
+
+def _titel(hwnd):
+    """Fenstertitel, gekürzt -- nur fürs Protokoll."""
+    try:
+        h = ctypes.c_void_p(int(hwnd))
+        n = _user32.GetWindowTextLengthW(h)
+        if n <= 0:
+            return ''
+        puffer = ctypes.create_unicode_buffer(n + 1)
+        _user32.GetWindowTextW(h, puffer, n + 1)
+        return puffer.value[:60]
+    except Exception:
+        return ''
+
+
+def _ist_meins(hwnd):
+    """Gehört dieses Fenster unserem eigenen Prozess?
+
+    Untertitel, Aufnahme-Fenster und Tafel sind unsere. Sie als „da war Ramzi
+    vorher" zu merken wäre falsch: dorthin zurückzugeben ist kein Zurückgeben.
+    """
+    try:
+        pid = ctypes.c_ulong()
+        _user32.GetWindowThreadProcessId(ctypes.c_void_p(int(hwnd)),
+                                         ctypes.byref(pid))
+        return pid.value == os.getpid()
+    except Exception:
+        return False
+
+
+def _naechstes_fremdes(start, ausser):
+    """Das nächste sichtbare Fenster unter `start`, das weder uns noch Claude gehört.
+
+    Windows führt die obersten Fenster in einer Reihenfolge (Z-Order); GW_HWNDNEXT
+    geht darin nach hinten. Das erste fremde mit Titel ist das, vor dem Ramzi
+    tatsächlich saß.
+    """
+    GW_HWNDNEXT = 2
+    try:
+        h = ctypes.c_void_p(int(start))
+        for _ in range(40):                      # Deckel gegen Endlosschleifen
+            h = _user32.GetWindow(h, GW_HWNDNEXT)
+            if not h:
+                break
+            h = ctypes.c_void_p(int(h))
+            if not _user32.IsWindowVisible(h):
+                continue
+            if _gleich(h, ausser) or _ist_meins(h):
+                continue
+            if not _titel(h):
+                continue
+            return int(h)
+    except Exception:
+        pass
+    return 0
+
+
+def zurueck_zu(hwnd):
+    """Den Fokus dorthin zurückgeben, wo er vor mir war.
+
+    Das ist NICHT dasselbe wie hole_nach_vorn, auch wenn es so aussieht.
+
+    Beim Hinweg haben wir gerade selbst getippt -- Windows gesteht dem Prozess,
+    der zuletzt Eingabe erzeugt hat, den Vordergrundwechsel zu. Beim Rückweg
+    ist dieses Fenster zu: Claude liegt vorn, wir haben seit Sekunden nichts
+    mehr getippt, und `SetForegroundWindow` wird stillschweigend verweigert.
+
+    Gemessen am 02.08.2026, 12:20:56, im Protokoll wörtlich:
+
+        [Brücke] Fokus kommt von '(22) 10 PROVEN Claude AI Side Hustles...'
+        [Brücke] Fokus zurück: NEIN, vorn liegt jetzt 'Claude'
+
+    Das Merken war also richtig, nur das Zurückholen scheiterte. Der Fehler in
+    hole_nach_vorn: es hängt den Eingabe-Faden des VORDERGRUNDFENSTERS an den
+    des Ziels -- unser eigener Faden kommt darin nicht vor, obwohl genau der
+    das Recht braucht.
+
+    Drei Stufen, die sanfteste zuerst:
+      1. SwitchToThisWindow -- die API, die Windows für ALT+TAB selbst benutzt.
+         Nicht dokumentiert, aber seit Jahrzehnten stabil, und sie unterliegt
+         der Vordergrundsperre nicht.
+      2. Unseren EIGENEN Faden an den des Vordergrunds hängen, dann wechseln.
+      3. Claude zuklappen. Dann rutscht das Fenster darunter von selbst nach
+         vorn -- ohne dass jemand ein Recht dafür braucht.
+    """
+    ziel = ctypes.c_void_p(int(hwnd))
+    if _user32.IsIconic(ziel):
+        _user32.ShowWindow(ziel, 9)          # SW_RESTORE
+
+    for stufe in ('switch', 'anhaengen', 'zuklappen'):
+        try:
+            if stufe == 'switch':
+                _user32.SwitchToThisWindow(ziel, True)
+            elif stufe == 'anhaengen':
+                vorn = _user32.GetForegroundWindow()
+                fremd = _user32.GetWindowThreadProcessId(vorn, None)
+                meiner = _kernel32.GetCurrentThreadId()
+                if fremd and meiner and fremd != meiner:
+                    _user32.AttachThreadInput(meiner, fremd, True)
+                    _user32.BringWindowToTop(ziel)
+                    _user32.SetForegroundWindow(ziel)
+                    _user32.AttachThreadInput(meiner, fremd, False)
+                else:
+                    _user32.SetForegroundWindow(ziel)
+            else:
+                vorn = _user32.GetForegroundWindow()
+                if vorn and not _gleich(vorn, ziel):
+                    _user32.ShowWindow(ctypes.c_void_p(int(vorn)), 6)   # SW_MINIMIZE
+            time.sleep(0.25)
+            if _gleich(_user32.GetForegroundWindow(), ziel):
+                return stufe
+        except Exception:
+            continue
+    return ''
 
 
 def hole_nach_vorn(hwnd):
@@ -520,8 +645,22 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         vorheriges_fenster = int(_user32.GetForegroundWindow() or 0)
         if vorheriges_fenster == int(hwnd):
             vorheriges_fenster = 0      # Claude lag schon vorn, nichts zu tun
+        elif _ist_meins(vorheriges_fenster):
+            # Vorn lag ein Fenster von UNS -- das Untertitel-Band, das
+            # Aufnahme-Fenster, die Tafel. Ramzi hat davor nicht gearbeitet,
+            # und ein Teil dieser Fenster ist Sekunden später wieder weg.
+            # Dorthin zurückzugeben hieße: nirgendwohin zurückgeben, und der
+            # Fokus bliebe bei Claude hängen. Also den ECHTEN Vorgänger suchen.
+            echt = _naechstes_fremdes(vorheriges_fenster, hwnd)
+            print(f'[{time.strftime("%H:%M:%S")}] [Brücke] vorn lag ein eigenes '
+                  f'Fenster ({_titel(vorheriges_fenster)!r}) -- nehme statt dessen '
+                  f'{_titel(echt)!r}', flush=True)
+            vorheriges_fenster = echt
     except Exception:
         pass
+    if vorheriges_fenster:
+        print(f'[{time.strftime("%H:%M:%S")}] [Brücke] Fokus kommt von '
+              f'{_titel(vorheriges_fenster)!r}', flush=True)
 
     # Die Merkdatei ZUERST: sie ist das Signal für den Stop-Hook. Läge sie erst
     # nach dem Absenden, könnte eine sehr kurze Antwort schneller fertig sein
@@ -633,11 +772,40 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         # legen, und das ist schlechter als ihn zu lassen, wo er ist.
         if vorheriges_fenster and _user32.IsWindow(ctypes.c_void_p(vorheriges_fenster)):
             try:
+                _zurueck_ok = False
                 # Als c_void_p und nicht als int: ctypes macht aus einem nackten
                 # int ein 32-Bit-Argument, und ein Fenstergriff oberhalb von
                 # 0x7FFFFFFF wuerde dabei abgeschnitten. Genau dafuer gibt es
                 # oben `_gleich`.
-                hole_nach_vorn(ctypes.c_void_p(vorheriges_fenster))
+                _zurueck_ok = zurueck_zu(vorheriges_fenster)
+            except Exception:
+                pass
+            # Nachmessen statt glauben -- dieselbe Lehre wie beim Vornholen.
+            #
+            # UND ZWAR MEHRFACH. Am 02.08.2026 um 12:34:44 stand im Protokoll
+            # "Fokus zurück: NEIN" -- und im selben Atemzug lag das YouTube-
+            # Fenster vorn. Beides stimmte: der Wechsel ging durch, nur später
+            # als meine Prüfung 0,25 s nach jeder Stufe. Ramzi hat trotzdem
+            # "geht nicht" gemeldet, also holt sich danach jemand den Fokus
+            # zurück. Ein einziger Blick kann das nicht unterscheiden --
+            # deshalb schauen wir noch zweimal nach.
+            def _nachsehen():
+                for wartezeit in (0.0, 2.0, 5.0):
+                    if wartezeit:
+                        time.sleep(wartezeit)
+                    try:
+                        jetzt = int(_user32.GetForegroundWindow() or 0)
+                        passt = _gleich(jetzt, vorheriges_fenster)
+                        print(f'[{time.strftime("%H:%M:%S")}] [Brücke] Fokus nach '
+                              f'{wartezeit:.0f}s: {"ZIEL" if passt else "woanders"} '
+                              f'-- {_titel(jetzt)!r}', flush=True)
+                    except Exception:
+                        return
+
+            try:
+                print(f'[{time.strftime("%H:%M:%S")}] [Brücke] Rückgabe über '
+                      f'Stufe {_zurueck_ok!r}', flush=True)
+                threading.Thread(target=_nachsehen, daemon=True).start()
             except Exception:
                 pass
 
