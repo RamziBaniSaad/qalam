@@ -375,6 +375,8 @@ class Sprecher:
         self._stimme = None
         self._stop = threading.Event()
         self._thread = None
+        # Wie viele Aufrufer gerade in sprich() stehen -- siehe spricht_gerade().
+        self._reden = 0
 
     @property
     def stimme(self):
@@ -385,6 +387,16 @@ class Sprecher:
     def sprich(self, text):
         """Spricht den Text, Satz für Satz. Blockiert bis zum Ende."""
         import sounddevice as sd
+        # Ein Zähler und kein Schalter: es kann mehr als einen Aufrufer geben
+        # (Briefkasten, Reflex, Stop-Hook), und ein Schalter waere beim Ende des
+        # ersten schon wieder aus, obwohl der zweite noch redet.
+        self._reden += 1
+        try:
+            return self._sprich(text, sd)
+        finally:
+            self._reden -= 1
+
+    def _sprich(self, text, sd):
 
         saetze = in_saetze(text)
         if not saetze:
@@ -691,7 +703,22 @@ class Sprecher:
         self._stop.clear()
 
     def spricht_gerade(self):
-        return bool(self._thread and self._thread.is_alive())
+        """Rede ich gerade -- egal aus welchem Faden.
+
+        Vorher stand hier nur `self._thread.is_alive()`, also der Faden von
+        `sprich_im_hintergrund()`. Das ging, solange jeder Satz so anfing.
+        Seit dem Briefkasten (sprechpost.py) spricht der Assistent aber aus
+        SEINEM eigenen Faden -- und dann war die Antwort falsch: nein.
+
+        Was Ramzi davon merkte (02.08.2026): "du dämpfst Spotify kurz ab und
+        machst es dann wieder laut, obwohl du noch redest." Die Wächterin im
+        Assistenten fragt genau hier nach, sieht "spricht nicht" und stellt
+        die Lautstärke 0,4 s später zurück -- mitten in meinem Satz.
+
+        Deshalb zählt jetzt ein Zähler statt eines Fadens: er steigt am Anfang
+        jedes `sprich()` und fällt am Ende, egal wer es aufgerufen hat.
+        """
+        return self._reden > 0 or bool(self._thread and self._thread.is_alive())
 
 
 def nach_wav(text, ziel, stimme=STANDARD_STIMME, sprecher=None, klang=None):
