@@ -351,6 +351,36 @@ def stuecke(text, anzeigen=None, tempo=None):
     _aufraeumen()
 
 
+def entladen():
+    """Die Karte wieder freigeben -- fuer Ramzis Zocken-Schalter.
+
+    Sein Auftrag vom 02.08.2026: umschalten zwischen Ludvig und Thorsten ohne
+    Neustart, weil beim Spielen genau die 1,8 GB fehlen, die dieses Modell
+    dauerhaft haelt (plus kurzzeitig mehr, waehrend ich rede -- er hat es auf
+    5,5 GB steigen sehen). "Wenn ich im Fortnite am Kaempfen bin, waere meine
+    Taste auf einmal weg." Also: Haken raus, Karte frei, sofort.
+
+    Danach spricht Thorsten weiter -- der laeuft auf der CPU und kostet nichts
+    davon.
+    """
+    global _modell, _sprecher_daten, _geraet, _ohr
+    with _sperre:
+        if _modell is None and _ohr is None:
+            return False
+        _modell = None
+        _sprecher_daten = None
+        _ohr = None
+        _geraet = None
+    try:
+        import gc
+        import torch
+        gc.collect()
+        torch.cuda.empty_cache()
+    except Exception:
+        pass
+    return True
+
+
 def _aufraeumen():
     try:
         import torch

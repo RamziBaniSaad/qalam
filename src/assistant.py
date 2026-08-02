@@ -888,6 +888,7 @@ class Assistent:
         self._laeuft.set()
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
         threading.Thread(target=self._sprechpost_wache, daemon=True).start()
+        threading.Thread(target=self._stimmen_wache, daemon=True).start()
         self._abbruch_taste_starten()
         # XTTS im Hintergrund warmlaufen lassen, damit nicht der erste Satz
         # 16 Sekunden auf das Modell wartet. Bis es da ist, spricht Piper.
@@ -932,6 +933,30 @@ class Assistent:
         # 2 von 12 sauber). "Ich bin jetzt da." allein sind 17 Zeichen -- und
         # genau das ist passiert, Ramzi hoerte danach fuenf Sekunden Unsinn.
         self.sprecher.sprich('Ich bin jetzt da, du kannst mich ansprechen.')
+
+    def _stimmen_wache(self):
+        """Den Umschalter auf der Tafel befolgen -- ohne Neustart.
+
+        Ramzi will beim Zocken die Karte frei haben, aber sonst Ludvig hoeren.
+        Ein Neustart dafuer waere in einem Spiel unbrauchbar. Also sieht dieser
+        Faden auf den Wert und handelt: Haken raus -> Modell entladen und die
+        Karte hergeben; Haken rein -> im Hintergrund wieder laden.
+
+        Welche Stimme SPRICHT, entscheidet voice_output ohnehin bei jedem Satz
+        neu am selben Wert. Hier geht es allein um den Speicher.
+        """
+        import stimme_xtts
+        while self._laeuft.is_set():
+            try:
+                gewuenscht = (einstellungen.hole('stimme_motor') or 'xtts')
+                if gewuenscht == 'piper':
+                    if stimme_xtts.entladen():
+                        print('[Stimme] Ludvig entladen, Karte frei.', flush=True)
+                elif not stimme_xtts.bereit():
+                    stimme_xtts.vorwaermen()
+            except Exception:
+                pass
+            time.sleep(2.0)
 
     def _sprechpost_wache(self):
         """Saetze aussprechen, die andere Prozesse eingeworfen haben.
