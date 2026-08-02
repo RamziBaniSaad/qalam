@@ -101,6 +101,38 @@ if sys.platform == 'darwin':
         pass
 
 
+# --- macOS: der Name links oben in der Menüleiste ------------------------------
+# Ramzi am 02.08.2026: "oben steht Python, ich hätte da gerne Qalam."
+#
+# Der Grund ist nicht der Fehler, den man vermutet. Unser Bundle heißt korrekt
+# Qalam (CFBundleName in Qalam.app/Contents/Info.plist) -- nur läuft darin gar
+# nicht unsere ausführbare Datei: der Starter ist ein Shell-Skript, das per
+# `exec` Homebrews Python holt, und das liegt in einem EIGENEN Bundle
+# (.../Python.framework/.../Python.app). macOS fragt aber immer den Prozess,
+# nicht den Ordner, aus dem er gestartet wurde -- also antwortet Pythons
+# Bundle, und in dessen Info.plist steht "Python".
+#
+# Statt den Interpreter ins Bundle zu kopieren (bricht die venv-Erkennung, weil
+# Python sein Zuhause relativ zur ausführbaren Datei sucht), korrigieren wir den
+# EINEN Eintrag, den Qt liest -- im Speicher, bevor QApplication existiert.
+# Danach ist es zu spät: Qt baut das Programm-Menü genau einmal beim Start.
+#
+# pyobjc liegt ohnehin im venv (pynput braucht es auf macOS).
+def _macos_app_name_setzen():
+    if sys.platform != 'darwin':
+        return
+    try:
+        from Foundation import NSBundle
+        bundle = NSBundle.mainBundle()
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info is not None:
+            info['CFBundleName'] = 'Qalam'
+            info['CFBundleDisplayName'] = 'Qalam'
+    except Exception:
+        # Kosmetik. Ein fehlender Name ist kein Grund, die App nicht zu starten.
+        pass
+
+
 # --- Einmal-Instanz-Sperre (macOS/Linux) --------------------------------------
 # Verhindert, dass mehrere qalam-Instanzen laufen (mehrfache Menüleisten-Icons +
 # konkurrierende Hotkey-Listener). Über einen exklusiven Datei-Lock. Auf Windows
@@ -142,7 +174,10 @@ class QalamApp(QObject):
         Initialize the application, opening settings window if no configuration file is found.
         """
         super().__init__()
+        _macos_app_name_setzen()
         self.app = QApplication(sys.argv)
+        self.app.setApplicationName('Qalam')
+        self.app.setApplicationDisplayName('Qalam')
         self.app.setWindowIcon(QIcon(os.path.join('assets', 'qalam-logo.png')))
         # WICHTIG: qalam ist eine Menüleisten-App ohne dauerhaftes Fenster. Ohne dies
         # beendet Qt die ganze App, sobald das letzte Fenster schließt – z. B. das
