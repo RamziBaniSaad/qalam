@@ -153,3 +153,7 @@ noor-einstellungen.json
 
 # Abgeleitetes macOS-Icon: wird von build_mac_app.command aus dem PNG erzeugt.
 assets/qalam-logo.icns
+
+# Laufzeit: der Briefkasten fuers Sprechen und Sicherungen der Konfiguration
+.sprechpost/
+src/config.yaml.*
