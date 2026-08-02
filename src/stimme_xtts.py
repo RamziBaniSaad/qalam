@@ -180,7 +180,13 @@ def vorwaermen():
         # waehrend dieser Faden XTTS holt. Ramzi hoerte deshalb weiter Thorsten,
         # obwohl auf der Karte Platz war.
         import time as _t
-        for versuch in range(1, 4):
+        # Vorsprung fuer das Ohr: es laedt beim Start seine beiden Modelle, und
+        # solange das laeuft, kollidieren die verzoegerten Importe von
+        # transformers. Drei Anlaeufe im Abstand von drei Sekunden haben nicht
+        # gereicht -- der erste kam zu frueh und die naechsten liefen in
+        # dieselbe halbfertige Modultabelle. Also erst warten, dann laden.
+        _t.sleep(12)
+        for versuch in range(1, 5):
             try:
                 if _laden() is not None:
                     return
@@ -191,7 +197,7 @@ def vorwaermen():
             except Exception as e:
                 print('[Stimme] XTTS-Anlauf %d gescheitert: %s' % (versuch, e),
                       flush=True)
-                _t.sleep(3)
+                _t.sleep(6)
         print('[Stimme] XTTS bleibt aus, Piper spricht.', flush=True)
 
     threading.Thread(target=_lauf, daemon=True).start()
