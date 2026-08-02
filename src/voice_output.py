@@ -471,6 +471,15 @@ class Sprecher:
                     motor = 'piper'
 
             print('[Stimme] Motor: %s' % motor, flush=True)
+            # Messpunkte fuer "ich spreche in seine Aufnahme hinein".
+            #
+            # Der Verdacht steht in AUFGABEN.md: die Pruefung, ob Ramzi dran
+            # ist, sitzt VOR dem Erzeugen -- und Erzeugen dauert bei XTTS
+            # mehrere Sekunden. Faengt er in dieser Luecke an zu reden, merke
+            # ich es zu spaet. Bevor ich daran etwas aendere, will ich die
+            # Luecke in Zahlen sehen: wann wurde geprueft, wann ging der erste
+            # Ton raus.
+            _t_gefragt = time.time()
             stimme = None if motor == 'xtts' else self.stimme
             rate = xtts_rate if motor == 'xtts' else stimme.config.sample_rate
             self._stop.clear()
@@ -622,6 +631,10 @@ class Sprecher:
                     # Die Dauer wird GEMESSEN, nicht geschätzt: so viele Samples
                     # bei dieser Abtastrate sind genau so viele Sekunden.
                     dauer = len(ton) / float(rate)
+                    if _t_gefragt:
+                        print('[Stimme] erster Ton %.1f s nach der Pruefung'
+                              % (time.time() - _t_gefragt), flush=True)
+                        _t_gefragt = None
                     if not text:
                         # Ein leerer Anzeigetext heißt: derselbe Untertitel
                         # bleibt stehen. XTTS liefert viele kleine Tonstücke zu
