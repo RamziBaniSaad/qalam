@@ -991,9 +991,20 @@ class Weckwort:
         # Grafikkarte geholt, im Protokoll weiter 11 s gesehen und kurz
         # geglaubt, der Umzug haette nichts gebracht. Ein Protokoll, das das
         # falsche Bauteil nennt, ist schlimmer als keins.
+        # WAS gehoert wurde, gehoert ins Protokoll -- nicht nur wie lange es
+        # gedauert hat.
+        #
+        # Ramzi am 02.08.2026 abends: "ich hab jetzt mindestens 30 mal deinen
+        # Namen gerufen und du hoerst mich einfach nicht." Das Ohr lief, nahm
+        # auch auf, und im Protokoll standen lauter Zeilen wie "1,2s Audio ->
+        # 0,09s Rechenzeit" -- ohne ein einziges Wort davon. Damit war nicht
+        # feststellbar, ob es ihn falsch verstanden, gar nichts verstanden oder
+        # den Namen nur nicht erkannt hat. Eine Messung ohne das Ergebnis ist
+        # keine Messung.
         print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] {dauer_audio:.1f}s Audio -> '
               f'{dauer_rechnen:.2f}s Rechenzeit '
-              f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")})')
+              f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")}) '
+              f'| gehoert: {text!r}')
 
         # Der Folgesatz braucht den Namen nicht mehr.
         #
