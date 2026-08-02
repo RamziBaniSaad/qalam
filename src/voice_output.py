@@ -566,8 +566,12 @@ class Sprecher:
                         # gehoert ins Protokoll, sonst verschwindet ein
                         # kaputtes Modell lautlos hinter einer Stimme, die
                         # noch funktioniert.
-                        print('[Stimme] XTTS faellt aus, Piper springt ein: %s' % e,
-                              flush=True)
+                        # Piper ist raus (Ramzis Entscheidung: lieber stumm
+                        # als mit der alten Stimme). Also nur melden.
+                        print('[Stimme] XTTS ausgefallen, nichts gesprochen: %s'
+                              % e, flush=True)
+                        _abliefern(None, None)
+                        return
                 _erzeuge_piper()
                 # Das Schlusszeichen MUSS ankommen, sonst wartet der Abspieler
                 # ewig auf eine Anzeige, die nie kommt. Also so lange anbieten,

@@ -220,6 +220,56 @@ def _laden():
         return _modell
 
 
+def zerlegen(text, hoechstens=240, mindestens=40):
+    """In Stuecke schneiden, die XTTS wirklich annimmt.
+
+    Die Regel "nicht zerlegen" stoesst hier an eine harte Grenze im Modell:
+    mehr als rund 250 Zeichen je Aufruf nimmt XTTS nicht, es bricht mit
+    "maximum of 400 tokens" ab. Ramzis Hoerprobe ueber 200 Woerter fiel genau
+    darauf herein und blieb stumm.
+
+    Beide Regeln zusammen ergeben die richtige: schneide nur, wenn du musst,
+    und schneide an Satzzeichen, damit kein Stueck unter ~40 Zeichen faellt --
+    darunter fabuliert XTTS (gemessen). Ist ein Stueck trotzdem zu kurz, wird
+    es an das vorige gehaengt, statt es allein loszuschicken.
+    """
+    text = ' '.join((text or '').split())
+    if len(text) <= hoechstens:
+        return [text] if text else []
+
+    # An Satzenden und Kommas trennen -- dort pausiert XTTS ohnehin hoerbar,
+    # die Naht faellt also nicht auf.
+    roh = re.split(r'(?<=[.!?;:,])\s+', text)
+    stuecke, offen = [], ''
+    for teil in roh:
+        if not offen:
+            offen = teil
+        elif len(offen) + 1 + len(teil) <= hoechstens:
+            offen += ' ' + teil
+        else:
+            stuecke.append(offen)
+            offen = teil
+    if offen:
+        if stuecke and len(offen) < mindestens:
+            stuecke[-1] += ' ' + offen
+        else:
+            stuecke.append(offen)
+
+    # Was auch danach noch zu lang ist (ein einziger sehr langer Satz ohne
+    # Komma), wird hart an einer Wortgrenze geteilt.
+    fertig = []
+    for st in stuecke:
+        while len(st) > hoechstens:
+            schnitt = st.rfind(' ', 0, hoechstens)
+            if schnitt < mindestens:
+                schnitt = hoechstens
+            fertig.append(st[:schnitt].strip())
+            st = st[schnitt:].strip()
+        if st:
+            fertig.append(st)
+    return fertig
+
+
 # --- Sprechen ---------------------------------------------------------------
 
 def stuecke(text, anzeigen=None, tempo=None):
@@ -252,9 +302,11 @@ def stuecke(text, anzeigen=None, tempo=None):
         return
 
     lat, spk = _sprecher_daten
-    teile = [np.clip(s.detach().cpu().numpy(), -1.0, 1.0)
-             for s in m.inference_stream(fuers_modell, 'de', lat, spk,
-                                         speed=tempo)]
+    teile = []
+    for happen in zerlegen(fuers_modell):
+        teile.extend(np.clip(s.detach().cpu().numpy(), -1.0, 1.0)
+                     for s in m.inference_stream(happen, 'de', lat, spk,
+                                                 speed=tempo))
     if not teile:
         return
     ganz = (np.concatenate(teile) * 32767).astype(np.int16)
