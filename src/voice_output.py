@@ -463,11 +463,15 @@ class Sprecher:
                         # Fehler, der sich als Funktion tarnt -- und er belegt
                         # nebenbei Speicher fuer etwas, das niemand hoeren will.
                         stimme_xtts.vorwaermen()
+                        print('[Stimme] Ludvig noch nicht bereit -- dieser Satz '
+                              'bleibt ungesprochen: %r' % (' '.join(saetze))[:60],
+                              flush=True)
                         return
                 except Exception:
                     motor = 'piper'
 
-            stimme = self.stimme
+            print('[Stimme] Motor: %s' % motor, flush=True)
+            stimme = None if motor == 'xtts' else self.stimme
             rate = xtts_rate if motor == 'xtts' else stimme.config.sample_rate
             self._stop.clear()
             klang = _klangvorgaben()
