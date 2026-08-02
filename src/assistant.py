@@ -919,7 +919,7 @@ class Assistent:
         """
         try:
             import stimme_xtts
-            for _ in range(60):          # bis zu 30 s
+            for _ in range(160):         # bis zu 80 s -- Laden dauert 16 s, plus Anlaeufe
                 if stimme_xtts.bereit() or not self._laeuft.is_set():
                     break
                 time.sleep(0.5)

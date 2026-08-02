@@ -514,9 +514,20 @@ class Sprecher:
                     etwas = False
                     try:
                         laut = getattr(klang, 'volume', 1.0) if klang else 1.0
+                        # Das Tempo kommt aus RAMZIS Regler, nicht aus einer
+                        # Vorgabe von mir. Ich hatte hier 1,15 fest verdrahtet,
+                        # weil ihm Ludvig zu langsam war -- damit haette er
+                        # gegen meinen Wert anschrauben muessen. Zwei Quellen
+                        # fuer dieselbe Sache sind genau der Fehler, den er
+                        # schon beim Feedback-Bereich abgestellt hat.
+                        try:
+                            import einstellungen
+                            tempo = float(einstellungen.hole('tempo') or 1.0)
+                        except Exception:
+                            tempo = 1.0
                         for stueck, ton in stimme_xtts.stuecke(
                                 ' '.join(saetze), anzeigen,
-                                tempo=stimme_xtts.TEMPO):
+                                tempo=max(0.5, min(2.0, tempo))):
                             if schluss.is_set():
                                 break
                             if laut != 1.0:
