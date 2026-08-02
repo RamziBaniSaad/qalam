@@ -199,16 +199,24 @@ def _laden():
 
 # --- Sprechen ---------------------------------------------------------------
 
-def stuecke(text, anzeigen, tempo=None):
-    """Erzeugt den Ton und liefert ihn passend zu den Untertitel-Anzeigen.
+def stuecke(text, tempo=None):
+    """Erzeugt den Ton stueckweise. Liefert (anzeigetext, int16-Feld).
 
-    Erzeugt wird der GANZE Text in einem Aufruf (Regel: nicht zerlegen). Die
-    Anzeigen bekommen daraus Scheiben, deren Laenge aus ihrem Zeichenanteil
-    geschaetzt wird -- das reicht fuer die Wort-Hervorhebung und kostet nichts.
-    Was am Ende uebrig bleibt, haengt an der letzten Anzeige.
+    Der GANZE Text geht in EINEM Aufruf raus -- Zerlegen ist die Ursache des
+    Kauderwelschs. Geliefert wird trotzdem stueckweise, weil XTTS auf der Karte
+    schneller rechnet, als man zuhoert: erster Ton nach ~0,7 s.
 
-    Liefert (anzeige, int16-Feld). Wirft nichts weiter als das, was das Modell
-    selbst wirft -- der Aufrufer faellt dann auf Piper zurueck.
+    Der Anzeigetext haengt nur am ERSTEN Stueck; danach kommt ein leerer, damit
+    der Untertitel-Streifen stehen bleibt statt zu springen. Das ist Ramzis
+    Befund vom 02.08.2026: "die Sprünge passen nicht mehr mit den Worten, weil
+    du das anders aussprichst." Er hat recht, und die Ursache war meine
+    Schaetzung -- ich habe die Tondauer je Anzeige aus der ZEICHENZAHL
+    gerechnet. Bei Piper ging das durch, weil es gleichmaessig spricht; XTTS
+    dehnt und pausiert je nach Satz. Eine falsche Hervorhebung ist schlimmer
+    als gar keine, also faellt sie hier weg, bis es echte Wortzeiten gibt.
+
+    Angezeigt wird der URSPRUENGLICHE Text, nicht der umgebaute: Ramzi soll
+    lesen, was ich sagen wollte, nicht meine Kommas fuers Modell.
     """
     import numpy as np
 
@@ -216,26 +224,40 @@ def stuecke(text, anzeigen, tempo=None):
     if m is None:
         return
     tempo = TEMPO if tempo is None else tempo
-    fertig = vorbereiten(text)
-    if not fertig:
+    fuers_modell = vorbereiten(text)
+    if not fuers_modell:
         return
 
-    anzeigen = [a for a in (anzeigen or []) if a.strip()] or [fertig]
-    # Sollmenge je Anzeige in Samples. JE_ZEICHEN ist bei Tempo 1,15 gemessen;
-    # ein anderes Tempo streckt oder staucht entsprechend.
-    soll = [max(1, int(len(a) * JE_ZEICHEN * (TEMPO / max(tempo, 0.1)) * RATE))
-            for a in anzeigen]
-
-    puffer = np.zeros(0, dtype=np.int16)
+    anzeige = ' '.join((text or '').split())
     lat, spk = _sprecher_daten
-    i = 0
-    for stueck in m.inference_stream(fertig, 'de', lat, spk, speed=tempo):
-        ton = stueck.detach().cpu().numpy()
-        ton = np.clip(ton, -1.0, 1.0)
-        puffer = np.concatenate([puffer, (ton * 32767).astype(np.int16)])
-        while i < len(anzeigen) - 1 and len(puffer) >= soll[i]:
-            yield anzeigen[i], puffer[:soll[i]]
-            puffer = puffer[soll[i]:]
-            i += 1
-    if len(puffer):
-        yield anzeigen[i], puffer
+    zuerst = True
+    for stueck in m.inference_stream(fuers_modell, 'de', lat, spk, speed=tempo):
+        ton = np.clip(stueck.detach().cpu().numpy(), -1.0, 1.0)
+        yield (anzeige if zuerst else ''), (ton * 32767).astype(np.int16)
+        zuerst = False
+
+    # Geholten Kartenspeicher wieder hergeben.
+    #
+    # PyTorch behaelt einmal angeforderten Speicher als Vorrat -- fuer ein
+    # Training ist das richtig, hier ist es gefaehrlich: die Belegung waechst
+    # mit jedem gesprochenen Satz weiter, obwohl das Modell gleich gross
+    # bleibt. Ramzi hat es am 02.08.2026 live gesehen, 7,4 von 8 GB waehrend
+    # eines Diktats -- ein Schritt vor der Grenze, hinter der sein Rechner
+    # abstuerzt. Das Freigeben kostet wenige Millisekunden und passiert NACH
+    # dem letzten Stueck, stoert also keinen laufenden Satz.
+    _aufraeumen()
+
+
+def _aufraeumen():
+    try:
+        import torch
+        if _geraet == 'cuda':
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def belegung_mb():
+    """Wie viel liegt gerade auf der Karte -- fuer Protokoll und Tafel."""
+    frei, gesamt = _freier_platz_mb()
+    return (gesamt - frei) if gesamt else 0.0

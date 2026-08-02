@@ -515,8 +515,7 @@ class Sprecher:
                     try:
                         laut = getattr(klang, 'volume', 1.0) if klang else 1.0
                         for stueck, ton in stimme_xtts.stuecke(
-                                ' '.join(saetze), anzeigen,
-                                tempo=stimme_xtts.TEMPO):
+                                ' '.join(saetze), tempo=stimme_xtts.TEMPO):
                             if schluss.is_set():
                                 break
                             if laut != 1.0:
@@ -593,7 +592,25 @@ class Sprecher:
                     # Die Dauer wird GEMESSEN, nicht geschätzt: so viele Samples
                     # bei dieser Abtastrate sind genau so viele Sekunden.
                     dauer = len(ton) / float(rate)
-                    _untertitel(text, _wortzeiten(text, dauer), time.time(), dauer)
+                    if not text:
+                        # Ein leerer Anzeigetext heißt: derselbe Untertitel
+                        # bleibt stehen. XTTS liefert viele kleine Tonstücke zu
+                        # EINER Anzeige -- die je Stück neu zu setzen würde den
+                        # Streifen flackern lassen.
+                        strom.write(ton)
+                        continue
+                    if motor == 'xtts':
+                        # Keine Wort-Hervorhebung: sie wird aus der Zeichenzahl
+                        # geschätzt, und XTTS dehnt und pausiert zu
+                        # unterschiedlich, als dass das passte. Ramzi hat die
+                        # falschen Sprünge sofort gesehen. Die geschätzte Dauer
+                        # dient nur noch dazu, dass der Streifen nicht mitten
+                        # im Satz ausblendet.
+                        _untertitel(text, [], time.time(),
+                                    len(text) * stimme_xtts.JE_ZEICHEN)
+                    else:
+                        _untertitel(text, _wortzeiten(text, dauer),
+                                    time.time(), dauer)
                     strom.write(ton)
             finally:
                 schluss.set()
