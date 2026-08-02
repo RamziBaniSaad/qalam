@@ -216,6 +216,7 @@ class Weckwort:
     def __init__(self, beim_wecken, modell='small', geraet=None,
                  aggressivitaet=3, max_sekunden=15.0, stille_ms=None,
                  beim_erkennen=None, beim_mitschreiben=None, flink_modell='small',
+                 beim_unterbrechen=None,
                  spricht_gerade=None, ist_kurzbefehl=None):
         self.beim_wecken = beim_wecken
         # Darf gefragt werden, ob der laufende Satz ein kurzer Befehl ist.
@@ -248,6 +249,7 @@ class Weckwort:
         # unterbrochen ... dafuer hast du das Ohr einmal komplett beendet."
         # Der gemeinsame Merker steht in warteschlange (die Untertitel-Datei,
         # die JEDER Sprecher schreibt) -- damit reicht ein ODER.
+        self.beim_unterbrechen = beim_unterbrechen
         _eigener = spricht_gerade or (lambda: False)
 
         def _spricht_irgendwer():
@@ -895,8 +897,12 @@ class Weckwort:
             # Ausreißer von 18-24 s Rechenzeit.
             if erkannt and not self.beim_mitschreiben:
                 continue
-            if blicke >= BLICKE_JE_AEUSSERUNG and not erkannt:
-                continue                 # das war kein Ruf -- siehe die Konstante
+            if blicke >= BLICKE_JE_AEUSSERUNG and not erkannt and not ich_rede:
+                # Die Grenze spart Rechenzeit bei Gemurmel, das kein Ruf war.
+                # Solange ICH rede, gilt sie nicht: dann versucht Ramzi gerade
+                # durchzukommen, und ihn nach sechs Blicken nicht mehr
+                # anzusehen ist genau das Gegenteil von dem, was er braucht.
+                continue
 
             blicke += 1
             vorlaeufig = self._hoer_kurz(schnipsel)
@@ -913,6 +919,22 @@ class Weckwort:
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True
                 self._melde(self.beim_erkennen)
+                # MITTEN IM SATZ UNTERBROCHEN.
+                #
+                # Bis zum 02.08.2026 hat der Mitlauscher den Namen zwar
+                # gefunden, es aber nur weitergemeldet -- gestoppt wurde erst,
+                # wenn Ramzi zu Ende geredet hatte und das genaue Modell dran
+                # war. Gemessen um 20:45: seine fuenf Rufe landeten in EINEM
+                # Block von 14,1 Sekunden und wurden erst ausgewertet, als er
+                # aufhoerte zu rufen. Er dachte, der fuenfte Ruf haette
+                # gewirkt -- in Wahrheit war es das Ende seiner Rufe.
+                #
+                # `ist_mein_echo` ist der Schutz davor, dass mein eigener
+                # Lautsprecher mich stoppt: nur wenn das Gehoerte NICHT das
+                # ist, was ich gerade sage, war es wirklich er.
+                if ich_rede and not warteschlange.ist_mein_echo(vorlaeufig):
+                    warteschlange.redet_merken(True)
+                    self._melde(self.beim_unterbrechen)
             if erkannt or time.time() < self.folge_bis:
                 self._melde(self.beim_mitschreiben, vorlaeufig)
                 # Steckt in dem, was bisher zu hören war, schon ein kurzer

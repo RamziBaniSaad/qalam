@@ -246,6 +246,11 @@ class Assistent:
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
                             beim_mitschreiben=self._mitschreiben,
+                            # Sofort die Klappe halten, wenn er mitten in
+                            # meinem Satz meinen Namen sagt. Der Mitlauscher
+                            # ruft das an, sobald er ihn hoert -- ohne auf eine
+                            # Sprechpause zu warten.
+                            beim_unterbrechen=self._unterbrich_mich,
                             ist_kurzbefehl=self._ist_kurzbefehl,
                             spricht_gerade=lambda: self.sprecher.spricht_gerade())
         self._laeuft = threading.Event()
@@ -957,6 +962,20 @@ class Assistent:
             except Exception:
                 pass
             time.sleep(2.0)
+
+    def _unterbrich_mich(self):
+        """Ramzi hat mitten in meinem Satz meinen Namen gesagt -- aufhoeren.
+
+        Bewusst hart und ohne Ausklingen: er hat Vorrang, und ein Satz, der
+        noch zu Ende gesprochen wird, fuehlt sich fuer ihn genau wie das an,
+        worueber er sich beschwert hat.
+        """
+        try:
+            if self.sprecher.spricht_gerade():
+                self.sprecher.stoppe()
+                print('[Stimme] unterbrochen -- Ramzi hat uebernommen.', flush=True)
+        except Exception:
+            pass
 
     def _sprechpost_wache(self):
         """Saetze aussprechen, die andere Prozesse eingeworfen haben.
