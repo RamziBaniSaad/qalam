@@ -15,6 +15,16 @@ HIER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATEI = os.path.join(HIER, 'noor-einstellungen.json')
 
 STANDARD = {
+    # Welche Stimme spricht: 'xtts' (Ludvig, auf der Grafikkarte) oder 'piper'
+    # (Thorsten, auf der CPU). Umschaltbar auf der Tafel, ohne Neustart.
+    #
+    # MUSS hier stehen, und der Grund hat Ramzi einen Abend gekostet: `setze()`
+    # filtert gegen genau dieses Verzeichnis und wirft alles Unbekannte
+    # STILLSCHWEIGEND weg. Der Schalter auf der Tafel schrieb also ins Leere,
+    # `hole()` gab None zurueck, die Vorgabe griff -- und ich sprach weiter mit
+    # Ludvig, obwohl er Thorsten eingestellt hatte. Kein Fehler, keine Meldung,
+    # nur ein Schalter, der nichts tut.
+    'stimme_motor': 'xtts',
     # Sprechtempo. 1.0 = wie das Modell trainiert wurde. Ramzi findet das zu
     # langsam; über 1.6 klingt es gehetzt.
     'tempo': 1.25,
