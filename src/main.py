@@ -205,6 +205,13 @@ class QalamApp(QObject):
         """
         self.input_simulator = InputSimulator()
 
+        # Nur aktiv, wenn ~/.qalam-diagnose existiert -- siehe diagnose_mac.py.
+        try:
+            from diagnose_mac import starte_wenn_gewuenscht
+            starte_wenn_gewuenscht()
+        except Exception:
+            pass
+
         self.key_listener = KeyListener()
         self.key_listener.add_callback("on_activate", self.on_activation)
         self.key_listener.add_callback("on_activate_with_llm", self.on_activation_with_llm_cleanup)
