@@ -452,8 +452,18 @@ class Sprecher:
                     if stimme_xtts.bereit():
                         motor = 'xtts'
                     else:
-                        # Laedt im Hintergrund; ab dem naechsten Satz ist es da.
+                        # LIEBER STUMM ALS MIT DER ALTEN STIMME.
+                        #
+                        # Ramzi am 02.08.2026, nachdem Piper zum wiederholten
+                        # Mal eingesprungen ist: "ich weiss nicht, ob ich den
+                        # wirklich als Rueckfall brauche. Wenn Ludvig gerade
+                        # nicht da ist, dann einfach gar nicht sprechen."
+                        # Er hat recht: ein Rueckfall, der ungefragt mit einer
+                        # anderen Stimme redet, ist kein Netz, sondern ein
+                        # Fehler, der sich als Funktion tarnt -- und er belegt
+                        # nebenbei Speicher fuer etwas, das niemand hoeren will.
                         stimme_xtts.vorwaermen()
+                        return
                 except Exception:
                     motor = 'piper'
 

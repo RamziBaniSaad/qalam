@@ -884,7 +884,6 @@ class Assistent:
 
     def starte(self):
         print('[Noor] Lade Modelle …')
-        _ = self.sprecher.stimme
         self.ohr.starte()
         self._laeuft.set()
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
@@ -923,9 +922,16 @@ class Assistent:
                 if stimme_xtts.bereit() or not self._laeuft.is_set():
                     break
                 time.sleep(0.5)
+            else:
+                # XTTS kam nicht -- dann keine Ansage. Siehe voice_output.
+                return
         except Exception:
-            pass
-        self.sprecher.sprich('Ich bin jetzt da.')
+            return
+        # Laenger als Ramzis Wortlaut, und das ist kein Eigenmaechtigkeit:
+        # unter ~40 Zeichen halluziniert XTTS nachweislich ("Fertig." kam auf
+        # 2 von 12 sauber). "Ich bin jetzt da." allein sind 17 Zeichen -- und
+        # genau das ist passiert, Ramzi hoerte danach fuenf Sekunden Unsinn.
+        self.sprecher.sprich('Ich bin jetzt da, du kannst mich ansprechen.')
 
     def _sprechpost_wache(self):
         """Saetze aussprechen, die andere Prozesse eingeworfen haben.
