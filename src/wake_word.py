@@ -35,6 +35,24 @@ FRAME_LEN = int(RATE * FRAME_MS / 1000)
 BLICK_FRAMES = int(3.0 * 1000 / FRAME_MS)
 # Satzpause -- siehe starte(), Stille-Zweig. Kein Regler, siehe dort.
 SATZ_STILLE_FRAMES = int(0.6 * 1000 / FRAME_MS)
+
+# Wie viele Sprach-Frames HINTEREINANDER kommen müssen, damit die aufgelaufene
+# Stille verworfen wird.
+#
+# Das ist die Antwort auf Ramzis Problem vom 02.08.2026: er zockt, das Spiel
+# macht Geräusche, und sein fertiger Satz wurde nicht abgeschickt. Gemessen am
+# Protokoll: er hörte 02:06:37 auf zu reden, abgeschickt wurde 02:07:53 -- eine
+# Minute später, und nur weil er irgendwann wieder etwas sagte.
+#
+# Die Ursache war, dass EIN einzelner Frame den Zähler zurücksetzte. Ein Frame
+# sind 30 ms. webrtcvad hält kurze Geräusche -- ein Schlag, ein Mob, ein Klick
+# -- durchaus für Sprache, und jedes davon löschte die ganze aufgelaufene
+# Stille. Bei laufendem Spielton kam die Ruhe deshalb NIE zustande.
+#
+# 4 Frames sind 120 ms. Eine gesprochene Silbe ist mindestens doppelt so lang,
+# echtes Reden reißt das also sofort; ein einzelner Knall nicht. Absichtlich
+# knapp gewählt: je höher, desto eher verschluckt es einen kurzen echten Ruf.
+SPRACHE_FOLGE_MIN = 4
 # Ab wie viel Ton der Mitlauscher überhaupt hinsieht. Nachgemessen mit
 # `werkzeuge_ohr_messen.py`: ein alleinstehendes "Noor" sind 0,66 s -- die
 # Schwelle muss deutlich darunter liegen, sonst wird der häufigste Ruf
@@ -538,6 +556,7 @@ class Weckwort:
 
         puffer = collections.deque()
         stille = 0
+        sprach_folge = 0      # Sprach-Frames hintereinander, siehe SPRACHE_FOLGE_MIN
         war_pausiert = False  # merkt den Wechsel aus der Denkpause heraus,
                               # damit die Redepause danach von vorn zaehlt
 
@@ -691,7 +710,12 @@ class Weckwort:
 
                 if ist_sprache:
                     in_sprache = True
-                    stille = 0
+                    # NUR bei mehreren Frames hintereinander gilt die Stille als
+                    # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
+                    # Begründung samt Messung oben bei SPRACHE_FOLGE_MIN.
+                    sprach_folge += 1
+                    if sprach_folge >= SPRACHE_FOLGE_MIN:
+                        stille = 0
                     sprach += 1
                     gesamt_sprach += 1
                     puffer.append(frame)
@@ -704,6 +728,7 @@ class Weckwort:
                         abgeben(endgueltig=False)   # er redet noch -- nur ein Zwischenstück
                         in_sprache = True            # bleibt in Sprache, es geht ja weiter
                 elif in_sprache:
+                    sprach_folge = 0
                     stille += 1
                     puffer.append(frame)
                     # Die erste Sekunde Stille gehört noch zum Ausschnitt.
