@@ -515,7 +515,8 @@ class Sprecher:
                     try:
                         laut = getattr(klang, 'volume', 1.0) if klang else 1.0
                         for stueck, ton in stimme_xtts.stuecke(
-                                ' '.join(saetze), tempo=stimme_xtts.TEMPO):
+                                ' '.join(saetze), anzeigen,
+                                tempo=stimme_xtts.TEMPO):
                             if schluss.is_set():
                                 break
                             if laut != 1.0:

@@ -199,7 +199,7 @@ def _laden():
 
 # --- Sprechen ---------------------------------------------------------------
 
-def stuecke(text, tempo=None):
+def stuecke(text, anzeigen=None, tempo=None):
     """Erzeugt den Ton stueckweise. Liefert (anzeigetext, int16-Feld).
 
     Der GANZE Text geht in EINEM Aufruf raus -- Zerlegen ist die Ursache des
@@ -228,13 +228,41 @@ def stuecke(text, tempo=None):
     if not fuers_modell:
         return
 
-    anzeige = ' '.join((text or '').split())
     lat, spk = _sprecher_daten
-    zuerst = True
-    for stueck in m.inference_stream(fuers_modell, 'de', lat, spk, speed=tempo):
-        ton = np.clip(stueck.detach().cpu().numpy(), -1.0, 1.0)
-        yield (anzeige if zuerst else ''), (ton * 32767).astype(np.int16)
-        zuerst = False
+    teile = [np.clip(s.detach().cpu().numpy(), -1.0, 1.0)
+             for s in m.inference_stream(fuers_modell, 'de', lat, spk,
+                                         speed=tempo)]
+    if not teile:
+        return
+    ganz = (np.concatenate(teile) * 32767).astype(np.int16)
+
+    # Erst alles erzeugen, DANN aufteilen -- und zwar an der echten Gesamtdauer.
+    #
+    # Zwei Anlaeufe davor waren falsch, beide von Ramzi am Geraet widerlegt:
+    # zuerst habe ich die Dauer je Anzeige aus der Zeichenzahl GESCHAETZT (die
+    # Wort-Hervorhebung sprang daneben), dann den ganzen Text als EINE Anzeige
+    # geschickt -- da zeigte der Streifen nur, was in eine Zeile passt, und der
+    # Rest fiel weg. Der Zeichenanteil an einer GEMESSENEN Gesamtdauer stimmt
+    # dagegen: er kann sich innerhalb einer Anzeige verschieben, aber die
+    # Summe passt, und keine Anzeige geht verloren.
+    #
+    # Der Preis ist ehrlich: der erste Ton kommt jetzt nach der vollen
+    # Rechenzeit (~4-5 s) statt nach 0,7 s. Ein Untertitel, der fehlt, ist
+    # schlimmer als eine Ansage, die etwas spaeter anfaengt.
+    anzeigen = [a for a in (anzeigen or []) if a and a.strip()]
+    if not anzeigen:
+        anzeigen = [' '.join((text or '').split())]
+    gesamt_zeichen = sum(len(a) for a in anzeigen) or 1
+
+    ab = 0
+    for nr, a in enumerate(anzeigen):
+        if nr == len(anzeigen) - 1:
+            bis = len(ganz)
+        else:
+            bis = ab + int(len(a) / gesamt_zeichen * len(ganz))
+        if bis > ab:
+            yield a, ganz[ab:bis]
+        ab = bis
 
     # Geholten Kartenspeicher wieder hergeben.
     #
