@@ -161,6 +161,24 @@ WECKWORT = re.compile(
     re.IGNORECASE
 )
 
+# Dasselbe, aber STRENGER -- und nur fuer die Frage "habe ICH das gerade
+# gesagt?".
+#
+# Ramzis Hinweis vom 02.08.2026: "du musst aufpassen, dass aehnliche Woerter
+# auch zaehlen, wie zum Beispiel das deutsche Wort NUR." Er hat recht, und der
+# Unterschied ist wichtig: beim ZUHOEREN zaehlen die zweifelhaften Varianten
+# nur am Satzanfang, sonst loese ich bei jedem zweiten Satz aus. Bei mir selbst
+# ist es umgekehrt -- sage ich "nur" mitten im Satz und mein Mikrofon faengt
+# genau diesen Fetzen auf, faengt er fuer das Ohr ganz vorn an. Also hier ohne
+# Positionsbedingung, an jeder Stelle.
+#
+# Der Preis ist ihm bewusst und von ihm ausdruecklich abgenickt: in genau
+# diesem einen Satz kann er mich nicht unterbrechen. Danach wieder.
+SELBST_WECKWORT = re.compile(
+    '\\b(?:' + _EINDEUTIG[3:-1] + '|' + _ZWEIFELHAFT[3:-1] + ')\\b',
+    re.IGNORECASE)
+
+
 PROJEKT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Die eigentlichen Sperrdateien und die Warteschlangen-Logik liegen in
@@ -944,7 +962,7 @@ class Weckwort:
                 # verpasster Ruf ist billiger als ein Satz, der sich selbst
                 # abwuergt -- Ramzi kann noch einmal rufen, ich nicht.
                 _meiner = warteschlange._mein_satz() or ''
-                _ich_nannte_mich = bool(WECKWORT.search(_meiner))
+                _ich_nannte_mich = bool(SELBST_WECKWORT.search(_meiner))
                 if ich_rede and not _ich_nannte_mich                         and not warteschlange.ist_mein_echo(vorlaeufig):
                     warteschlange.redet_merken(True)
                     self._melde(self.beim_unterbrechen)
