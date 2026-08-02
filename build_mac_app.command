@@ -25,6 +25,34 @@ mkdir -p "$HOME/Applications"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+# --- Icon ------------------------------------------------------------------
+# Ohne eigenes Icon zeigt macOS das leere Standard-Programmsymbol -- die App
+# saehe dann nicht nach Qalam aus, egal wie sie heisst. Das Fenster- und
+# Menueleisten-Symbol setzt src/main.py aus qalam-logo.png; fuer das BUNDLE
+# braucht macOS aber zwingend eine .icns-Datei.
+#
+# Erzeugt wird sie hier aus demselben PNG, mit Bordmitteln (sips + iconutil),
+# und nur wenn sie fehlt oder aelter als das PNG ist. Die .icns gehoert damit
+# nicht ins Repo -- sie ist abgeleitet, kein Original.
+LOGO="$PROJECT_DIR/assets/qalam-logo.png"
+ICNS="$PROJECT_DIR/assets/qalam-logo.icns"
+if [ -f "$LOGO" ] && { [ ! -f "$ICNS" ] || [ "$LOGO" -nt "$ICNS" ]; }; then
+    SET="$(mktemp -d)/qalam.iconset"
+    mkdir -p "$SET"
+    for GROESSE in 16 32 128 256 512; do
+        sips -z $GROESSE $GROESSE "$LOGO" --out "$SET/icon_${GROESSE}x${GROESSE}.png" >/dev/null 2>&1
+        sips -z $((GROESSE * 2)) $((GROESSE * 2)) "$LOGO" --out "$SET/icon_${GROESSE}x${GROESSE}@2x.png" >/dev/null 2>&1
+    done
+    iconutil -c icns "$SET" -o "$ICNS" 2>/dev/null && echo "Icon gebaut: $ICNS"
+    rm -rf "$(dirname "$SET")"
+fi
+if [ -f "$ICNS" ]; then
+    cp "$ICNS" "$APP/Contents/Resources/qalam.icns"
+    ICON_EINTRAG="    <key>CFBundleIconFile</key><string>qalam.icns</string>"
+else
+    ICON_EINTRAG="    <!-- kein Icon gefunden: assets/qalam-logo.png fehlt -->"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -37,6 +65,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleVersion</key><string>1.0</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
+$ICON_EINTRAG
     <!-- Menüleisten-App: kein Dock-Icon, kein App-Switcher-Eintrag. -->
     <key>LSUIElement</key><true/>
     <!-- Ohne diese Beschreibung verweigert macOS den Mikrofonzugriff. -->

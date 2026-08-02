@@ -150,3 +150,6 @@ ohr-fehler.log
 ohr-neu.log
 waechter.log
 noor-einstellungen.json
+
+# Abgeleitetes macOS-Icon: wird von build_mac_app.command aus dem PNG erzeugt.
+assets/qalam-logo.icns
