@@ -514,7 +514,7 @@ class Sprecher:
                     etwas = False
                     try:
                         laut = getattr(klang, 'volume', 1.0) if klang else 1.0
-                        for stueck, ton, worte in stimme_xtts.stuecke(
+                        for stueck, ton in stimme_xtts.stuecke(
                                 ' '.join(saetze), anzeigen,
                                 tempo=stimme_xtts.TEMPO):
                             if schluss.is_set():
@@ -523,7 +523,7 @@ class Sprecher:
                                 ton = (ton.astype(np.float32) * laut) \
                                     .clip(-32768, 32767).astype(np.int16)
                             etwas = True
-                            if not _abliefern((stueck, worte), ton):
+                            if not _abliefern(stueck, ton):
                                 break
                         _abliefern(None, None)
                         return
@@ -600,15 +600,15 @@ class Sprecher:
                         # Streifen flackern lassen.
                         strom.write(ton)
                         continue
-                    if isinstance(text, tuple):
-                        # XTTS liefert die Wortzeiten mit -- GEMESSEN, nicht
-                        # geschätzt: der fertige Ton geht durch die
-                        # Spracherkennung, und die sagt zu jedem Wort, wann es
-                        # anfängt. Genau die Hervorhebung, die Ramzi sein
-                        # Highlight nennt, und die bei einer Schätzung
-                        # danebensprang.
-                        text, worte = text
-                        _untertitel(text, worte, time.time(), dauer)
+                    if motor == 'xtts':
+                        # Keine Wort-Hervorhebung: sie wird aus der Zeichenzahl
+                        # geschätzt, und XTTS dehnt und pausiert zu
+                        # unterschiedlich, als dass das passte. Ramzi hat die
+                        # falschen Sprünge sofort gesehen. Die geschätzte Dauer
+                        # dient nur noch dazu, dass der Streifen nicht mitten
+                        # im Satz ausblendet.
+                        _untertitel(text, [], time.time(),
+                                    len(text) * stimme_xtts.JE_ZEICHEN)
                     else:
                         _untertitel(text, _wortzeiten(text, dauer),
                                     time.time(), dauer)
