@@ -902,7 +902,30 @@ class Assistent:
             # torchaudio-Konflikt am 02.08.2026 drei Anlaeufe lang versteckt.
             print('[Stimme] XTTS-Vorwaermen nicht moeglich: %s' % e, flush=True)
         print('[Noor] Ich höre zu. Sag meinen Namen.')
-        self.sprecher.sprich('Ich höre zu.')
+        threading.Thread(target=self._begruessen, daemon=True).start()
+
+    def _begruessen(self):
+        """Die Startansage -- aber erst, wenn die richtige Stimme da ist.
+
+        Ramzi am 02.08.2026: "beim Start sagst du mit Thorsten immer noch 'ich
+        höre zu'." Zwei Dinge daran, beide seine Ansage: der Satz heißt jetzt
+        "Ich bin jetzt da.", und er wartet auf XTTS. Sonst begrüßt mich die
+        Stimme, die wir gerade ersetzt haben -- ausgerechnet der eine Satz, den
+        er jedes Mal hört.
+
+        Gewartet wird begrenzt: kommt XTTS nicht (kein Platz auf der Karte),
+        wird trotzdem gesprochen. Lieber die alte Stimme als gar keine Ansage,
+        denn sie ist auch das Zeichen "ich laufe wieder".
+        """
+        try:
+            import stimme_xtts
+            for _ in range(60):          # bis zu 30 s
+                if stimme_xtts.bereit() or not self._laeuft.is_set():
+                    break
+                time.sleep(0.5)
+        except Exception:
+            pass
+        self.sprecher.sprich('Ich bin jetzt da.')
 
     def _sprechpost_wache(self):
         """Saetze aussprechen, die andere Prozesse eingeworfen haben.

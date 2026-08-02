@@ -197,6 +197,64 @@ def _laden():
         return _modell
 
 
+# --- Wortzeiten: mein eigenes Ohr hoert meinen eigenen Mund ab --------------
+
+_ohr = None
+
+# Klein und nur zum Ausmessen: erkannt werden muss hier nichts, der Text steht
+# ja fest -- gebraucht werden allein die Zeitpunkte. `base` kostet ~250 MB auf
+# der Karte und braucht fuer einen gesprochenen Satz Bruchteile einer Sekunde.
+OHR_MODELL = 'base'
+OHR_BRAUCHT_MB = 400
+
+
+def _ohr_holen():
+    global _ohr
+    if _ohr is not None:
+        return _ohr
+    frei, gesamt = _freier_platz_mb()
+    if not gesamt or frei < OHR_BRAUCHT_MB or \
+            (gesamt - frei) + OHR_BRAUCHT_MB > GRENZE_MB:
+        return None
+    from faster_whisper import WhisperModel
+    _ohr = WhisperModel(OHR_MODELL, device='cuda', compute_type='float16')
+    return _ohr
+
+
+def wortzeiten(ton, rate=RATE):
+    """Echte Zeitpunkte je Wort aus dem erzeugten Ton.
+
+    Ramzis Highlight war die mitlaufende Wort-Hervorhebung, und sie ging beim
+    Wechsel auf XTTS verloren: bei Piper liess sie sich aus der Zeichenzahl
+    schaetzen, weil Piper gleichmaessig spricht. XTTS dehnt und pausiert je nach
+    Satz -- die Schaetzung sprang daneben, er hat es sofort gesehen.
+
+    Statt besser zu raten wird jetzt gemessen: der fertige Ton geht durch die
+    Spracherkennung, und die liefert zu jedem Wort Anfang und Ende. Das ist
+    dieselbe Idee wie beim Zurueckhoeren gegen das Kauderwelsch -- ich pruefe
+    mein Ergebnis, statt es vorherzusagen.
+
+    Gibt [] zurueck, wenn kein Platz auf der Karte ist. Dann bleibt die
+    Hervorhebung eben aus; eine falsche waere schlimmer.
+    """
+    import numpy as np
+    m = _ohr_holen()
+    if m is None:
+        return []
+    try:
+        stuecke_, _ = m.transcribe(ton.astype(np.float32) / 32768.0,
+                                   language='de', beam_size=1,
+                                   word_timestamps=True)
+        aus = []
+        for s in stuecke_:
+            for w in (s.words or []):
+                aus.append({'w': w.word.strip(), 'ab': float(w.start),
+                            'd': max(0.05, float(w.end - w.start))})
+        return aus
+    except Exception:
+        return []
+
+
 # --- Sprechen ---------------------------------------------------------------
 
 def stuecke(text, anzeigen=None, tempo=None):
@@ -252,16 +310,61 @@ def stuecke(text, anzeigen=None, tempo=None):
     anzeigen = [a for a in (anzeigen or []) if a and a.strip()]
     if not anzeigen:
         anzeigen = [' '.join((text or '').split())]
-    gesamt_zeichen = sum(len(a) for a in anzeigen) or 1
 
+    gemessen = wortzeiten(ganz)
+
+    # Kurze Aeusserungen noch einmal wuerfeln, wenn sie zu lang geraten sind.
+    #
+    # Unter ~40 Zeichen ist XTTS unzuverlaessig (gemessen: "Fertig." 2 von 12
+    # sauber). Das laesst sich hier billig abfangen, weil der Ton ohnehin schon
+    # durch die Erkennung geht: kommen deutlich mehr Woerter zurueck, als im
+    # Text stehen, hat das Modell dazugedichtet -- dann neu erzeugen. Ein
+    # kurzer Satz kostet dabei nur ein bis zwei Sekunden.
+    soll_woerter = len(fuers_modell.split())
+    versuche = 0
+    while (len(fuers_modell) < 40 and gemessen and versuche < 2
+           and len(gemessen) > soll_woerter + 2):
+        versuche += 1
+        teile = [np.clip(s.detach().cpu().numpy(), -1.0, 1.0)
+                 for s in m.inference_stream(fuers_modell, 'de', lat, spk,
+                                             speed=tempo)]
+        if not teile:
+            break
+        ganz = (np.concatenate(teile) * 32767).astype(np.int16)
+        gemessen = wortzeiten(ganz)
+    zaehler = [len(a.split()) for a in anzeigen]
+
+    if gemessen and sum(zaehler) and len(gemessen) >= sum(zaehler) * 0.7:
+        # Echte Wortgrenzen: geschnitten wird dort, wo das naechste Wort
+        # anfaengt, und die Hervorhebung bekommt gemessene Zeiten.
+        i = 0
+        ab_probe = 0
+        for nr, a in enumerate(anzeigen):
+            n = min(zaehler[nr], len(gemessen) - i)
+            meine = gemessen[i:i + n]
+            i += n
+            if nr == len(anzeigen) - 1 or i >= len(gemessen):
+                bis_probe = len(ganz)
+            else:
+                bis_probe = min(len(ganz),
+                                int(gemessen[i]['ab'] * RATE))
+            if bis_probe <= ab_probe or not meine:
+                continue
+            null = meine[0]['ab']
+            worte = [{'w': w['w'], 'ab': w['ab'] - null, 'd': w['d']}
+                     for w in meine]
+            yield a, ganz[ab_probe:bis_probe], worte
+            ab_probe = bis_probe
+        return
+
+    # Rueckfall ohne Messung: nach Zeichenanteil, ohne Hervorhebung.
+    gesamt_zeichen = sum(len(a) for a in anzeigen) or 1
     ab = 0
     for nr, a in enumerate(anzeigen):
-        if nr == len(anzeigen) - 1:
-            bis = len(ganz)
-        else:
-            bis = ab + int(len(a) / gesamt_zeichen * len(ganz))
+        bis = len(ganz) if nr == len(anzeigen) - 1 \
+            else ab + int(len(a) / gesamt_zeichen * len(ganz))
         if bis > ab:
-            yield a, ganz[ab:bis]
+            yield a, ganz[ab:bis], []
         ab = bis
 
     # Geholten Kartenspeicher wieder hergeben.
