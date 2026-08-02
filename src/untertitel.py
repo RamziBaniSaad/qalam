@@ -315,7 +315,19 @@ def main():
             self._letztes = ((text, farbe), {'worte': worte, 'start': start})
             self._farbe = farbe
             self._start = start
-            mass = QFontMetrics(self._schrift)
+            # MIT dem Gerät messen, nicht ohne. `QFontMetrics(schrift)`
+            # antwortet mit geräteunabhängigen Zahlen; gemalt wird aber
+            # mit der Auflösung des Bildschirms, auf dem das Fenster
+            # gerade liegt. Auf Ramzis iPad (175 Prozent) sind das zwei
+            # verschiedene Breiten -- die Wörter bekommen ihren Platz nach
+            # der schmalen zugeteilt und werden nach der breiten gezeichnet.
+            # Genau das zeigt sein Bild vom 02.08.2026: das letzte Wort
+            # sitzt korrekt am rechten Rand (der Umbruch stimmt also),
+            # aber jedes einzelne ist breiter als sein Platz.
+            #
+            # Das zweite Argument ist das Malgerät. Damit fragt Qt die
+            # Maße, die für DIESES Fenster gelten.
+            mass = QFontMetrics(self._schrift, self)
             zeilenhoehe = int(mass.height() * 1.32)
 
             # Wörter samt Zeiten. Ohne Zeiten (Ramzis eigene Sätze, der
@@ -367,7 +379,19 @@ def main():
             maler.setRenderHint(QPainter.Antialiasing)
             maler.setRenderHint(QPainter.TextAntialiasing)
             maler.setFont(self._schrift)
-            mass = QFontMetrics(self._schrift)
+            # MIT dem Gerät messen, nicht ohne. `QFontMetrics(schrift)`
+            # antwortet mit geräteunabhängigen Zahlen; gemalt wird aber
+            # mit der Auflösung des Bildschirms, auf dem das Fenster
+            # gerade liegt. Auf Ramzis iPad (175 Prozent) sind das zwei
+            # verschiedene Breiten -- die Wörter bekommen ihren Platz nach
+            # der schmalen zugeteilt und werden nach der breiten gezeichnet.
+            # Genau das zeigt sein Bild vom 02.08.2026: das letzte Wort
+            # sitzt korrekt am rechten Rand (der Umbruch stimmt also),
+            # aber jedes einzelne ist breiter als sein Platz.
+            #
+            # Das zweite Argument ist das Malgerät. Damit fragt Qt die
+            # Maße, die für DIESES Fenster gelten.
+            mass = QFontMetrics(self._schrift, self)
 
             vergangen = None if self._start is None else time.time() - self._start
             ruhig = QColor(self._farbe)
