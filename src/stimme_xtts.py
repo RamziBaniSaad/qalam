@@ -172,10 +172,27 @@ def vorwaermen():
         return
 
     def _lauf():
-        try:
-            _laden()
-        except Exception as e:
-            print('[Stimme] XTTS liess sich nicht laden: %s' % e, flush=True)
+        # Mehrere Anlaeufe, und der Grund ist ein Wettlauf, kein Zufall:
+        # transformers laedt seine Untermodule erst bei Bedarf, und diese
+        # Mechanik vertraegt es nicht, wenn zwei Faeden gleichzeitig
+        # hineinlaufen -- dann kommt ein nacktes KeyError 'transformers.utils'
+        # zurueck. Beim Start passiert genau das: das Ohr laedt seine Modelle,
+        # waehrend dieser Faden XTTS holt. Ramzi hoerte deshalb weiter Thorsten,
+        # obwohl auf der Karte Platz war.
+        import time as _t
+        for versuch in range(1, 4):
+            try:
+                if _laden() is not None:
+                    return
+                # Kein Platz auf der Karte -- Wiederholen bringt nichts.
+                print('[Stimme] XTTS: kein Platz auf der Karte, Piper spricht.',
+                      flush=True)
+                return
+            except Exception as e:
+                print('[Stimme] XTTS-Anlauf %d gescheitert: %s' % (versuch, e),
+                      flush=True)
+                _t.sleep(3)
+        print('[Stimme] XTTS bleibt aus, Piper spricht.', flush=True)
 
     threading.Thread(target=_lauf, daemon=True).start()
 
