@@ -52,7 +52,11 @@ SATZ_STILLE_FRAMES = int(0.6 * 1000 / FRAME_MS)
 # 4 Frames sind 120 ms. Eine gesprochene Silbe ist mindestens doppelt so lang,
 # echtes Reden reißt das also sofort; ein einzelner Knall nicht. Absichtlich
 # knapp gewählt: je höher, desto eher verschluckt es einen kurzen echten Ruf.
-SPRACHE_FOLGE_MIN = 4
+# Nachgezogen am 02.08.2026 um 02:40: mit 4 Frames hat Minecraft die Stille
+# weiterhin geloescht -- Ramzi wartete von 02:15:45 bis 02:15:58 vergeblich.
+# 8 Frames sind 240 ms. Ein alleinstehendes "Noor" dauert 660 ms und reisst
+# das klar; ein Schlag oder Schritt im Spiel nicht.
+SPRACHE_FOLGE_MIN = 8
 # Ab wie viel Ton der Mitlauscher überhaupt hinsieht. Nachgemessen mit
 # `werkzeuge_ohr_messen.py`: ein alleinstehendes "Noor" sind 0,66 s -- die
 # Schwelle muss deutlich darunter liegen, sonst wird der häufigste Ruf
@@ -707,6 +711,15 @@ class Weckwort:
                     ist_sprache = self.vad.is_speech(frame.tobytes(), RATE)
                 except Exception:
                     continue
+
+                if not ist_sprache:
+                    # Die Folge reisst bei JEDEM stillen Frame -- auch dann,
+                    # wenn gerade keine Aeusserung laeuft. Ohne diese Zeile
+                    # war der Zaehler kein Folge-Zaehler, sondern eine Summe:
+                    # verstreute Geraeusch-Frames ueber Minuten addierten sich
+                    # und loeschten die Stille doch. Genau daran ist der erste
+                    # Versuch gescheitert, obwohl die Idee richtig war.
+                    sprach_folge = 0
 
                 if ist_sprache:
                     in_sprache = True
