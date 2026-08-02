@@ -645,7 +645,22 @@ class Weckwort:
                 # trotzdem geweckt werden koennen. Genau daran ist es beim
                 # ersten Test gescheitert -- ich habe "wach auf" nie gehoert,
                 # weil ich an dieser Stelle schon abgebrochen habe.
-                if qalam_nimmt_auf() or self._spricht_gerade():
+                # NUR noch beim Diktat wegwerfen, nicht mehr waehrend ich
+                # rede.
+                #
+                # Ramzi am 02.08.2026 spaet abends, nach dreissig vergeblichen
+                # Rufen: "ich kann dich nicht unterbrechen, was natuerlich sehr
+                # nervig ist, wenn ich gerade mit dir sprechen will, aber du die
+                # ganze Zeit weiterredest." Hier lag es: solange ich sprach,
+                # wurde der Puffer geleert und gar nicht erst zugehoert. Sein
+                # Name kam im Protokoll an ('gehoert: Nur.') und lief trotzdem
+                # ins Leere.
+                #
+                # Das Gegenargument -- meine eigene Stimme koennte mich wecken --
+                # ist bedacht und woanders geloest: `ist_mein_echo()` vergleicht
+                # das Gehoerte mit dem, was ich gerade sage. Diese Pruefung ist
+                # der richtige Ort dafuer, nicht ein Ohr, das die Ohren zuhaelt.
+                if qalam_nimmt_auf():
                     puffer.clear()
                     in_sprache = False
                     sprach = 0
