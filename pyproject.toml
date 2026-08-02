@@ -36,6 +36,10 @@ dependencies = [
     "pycaw>=20240210; platform_system == 'Windows'",
     "pywin32>=308; platform_system == 'Windows'",
     "comtypes>=1.4.10; platform_system == 'Windows'",
+    # Medien-Sitzungen von Windows: erlaubt, ein Video gezielt anzuhalten,
+    # ohne Spotify mitzutreffen (src/videos.py). Die globale Medientaste
+    # könnte das nicht -- die trifft immer nur "irgendwas".
+    "winsdk>=1.0.0b10; platform_system == 'Windows'",
     
     # API integrations
     "openai>=1.28.0",

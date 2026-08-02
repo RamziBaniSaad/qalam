@@ -125,6 +125,57 @@ def _leiser(an):
         pass
 
 
+_video_prozess = None
+
+
+def _videos(an):
+    """Videos anhalten bzw. wieder anlaufen lassen -- siehe videos.py.
+
+    Ramzi am 02.08.2026: Dämpfen reicht bei einem Video nicht, das Bild läuft
+    ja weiter. „Ich möchte davon eigentlich nichts verpassen." Musik bleibt
+    ausdrücklich beim Dämpfen.
+
+    Eigener PROZESS, kein Faden: die Medien-Schnittstelle kommt über COM/WinRT
+    ins Haus, und genau diese Sorte Aufruf hat am 31.07. schon einmal das Ohr
+    getötet (siehe lautstaerke.py). Anders als damals bei der Lautstärke ist
+    hier nachgemessen, dass ein abgesetzter Prozess die Sitzungen auch wirklich
+    sieht -- dort war genau das der Grund, warum es beim Faden bleiben musste.
+    """
+    global _video_prozess
+    try:
+        import subprocess
+        skript = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos.py')
+        p = subprocess.Popen(
+            [sys.executable, skript, '--anhalten' if an else '--fortsetzen'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if an:
+            _video_prozess = p
+    except Exception:
+        pass
+
+
+def _videos_abwarten():
+    """Warten, bis wirklich angehalten ist -- aber nicht ewig.
+
+    Der Aufruf dauert gemessen ~415 ms. Die stehen NICHT vor dem ersten Wort
+    herum: angestoßen wird er zusammen mit der Dämpfung, abgewartet erst kurz
+    bevor der erste Ton rausgeht -- dazwischen erzeugt Piper ohnehin. Damit
+    kostet das Anhalten in der Praxis fast nichts.
+
+    Der Zeitausfall ist Absicht: hängt die Medien-Schnittstelle, rede ich
+    lieber über ein laufendes Video, als gar nicht zu reden.
+    """
+    global _video_prozess
+    p, _video_prozess = _video_prozess, None
+    if p is None:
+        return
+    try:
+        p.wait(timeout=3)
+    except Exception:
+        pass
+
+
 def _notbremse_lautstaerke():
     """Zurückstellen, falls es sonst niemand tut.
 
@@ -370,6 +421,9 @@ class Sprecher:
             # vorliest -- und der ist ein eigener Prozess. Deshalb liegt der
             # Merker der alten Lautstärken in einer Datei, siehe lautstaerke.py.
             _leiser(True)
+            # Videos gleich mit anstoßen -- abgewartet wird erst kurz vor dem
+            # ersten Ton, siehe _videos_abwarten().
+            _videos(True)
             stimme = self.stimme
             rate = stimme.config.sample_rate
             self._stop.clear()
@@ -424,6 +478,9 @@ class Sprecher:
             erzeuger = threading.Thread(target=_erzeuge, daemon=True)
             erzeuger.start()
 
+            # JETZT muss das Video stehen -- der nächste Schritt macht Ton.
+            _videos_abwarten()
+
             # Ein Strom für alle Sätze: sonst knackt es bei jedem Satzwechsel.
             strom = sd.OutputStream(samplerate=rate, channels=1, dtype='int16')
             strom.start()
@@ -468,6 +525,13 @@ class Sprecher:
                     pass
                 strom.stop()
                 strom.close()
+                # Das Video wieder anlaufen lassen. Anders als bei der
+                # Dämpfung gehört das HIER hin und nicht dem Wächter im
+                # Assistenten: der weiß nichts davon, und ein stehendes Video
+                # wäre schlimmer als leise Musik -- Ramzi säße vor einem Bild,
+                # das nicht weitergeht. Fortgesetzt wird nur, was ich selbst
+                # angehalten habe (videos.py).
+                _videos(False)
                 # Das Zurückstellen gehört dem Wächter im Assistenten -- hier
                 # nur das Netz für den Fall, dass es den nicht gibt.
                 _notbremse_lautstaerke()
