@@ -932,7 +932,20 @@ class Weckwort:
                 # `ist_mein_echo` ist der Schutz davor, dass mein eigener
                 # Lautsprecher mich stoppt: nur wenn das Gehoerte NICHT das
                 # ist, was ich gerade sage, war es wirklich er.
-                if ich_rede and not warteschlange.ist_mein_echo(vorlaeufig):
+                # ICH SAGE MEINEN EIGENEN NAMEN -- und wecke mich damit selbst.
+                #
+                # Ramzi hat es sofort bemerkt: "du unterbrichst dich selber,
+                # wenn du irgendwie ein Wort wie Noor sagst." Der Echo-Schutz
+                # vergleicht das Gehoerte mit meinem laufenden Satz, aber bei
+                # einem kurzen Fetzen wie "Nur." trifft der Wortvergleich zu
+                # schwach. Deshalb hier zusaetzlich die einfachste Frage, die
+                # es gibt: steht mein Name ueberhaupt in dem, was ich gerade
+                # sage? Dann war ich es hoechstwahrscheinlich selbst, und ein
+                # verpasster Ruf ist billiger als ein Satz, der sich selbst
+                # abwuergt -- Ramzi kann noch einmal rufen, ich nicht.
+                _meiner = warteschlange._mein_satz() or ''
+                _ich_nannte_mich = bool(WECKWORT.search(_meiner))
+                if ich_rede and not _ich_nannte_mich                         and not warteschlange.ist_mein_echo(vorlaeufig):
                     warteschlange.redet_merken(True)
                     self._melde(self.beim_unterbrechen)
             if erkannt or time.time() < self.folge_bis:
