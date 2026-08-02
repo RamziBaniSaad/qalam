@@ -424,8 +424,41 @@ class Sprecher:
             # Videos gleich mit anstoßen -- abgewartet wird erst kurz vor dem
             # ersten Ton, siehe _videos_abwarten().
             _videos(True)
+            # Welcher Motor spricht: XTTS (Ludvig) oder Piper.
+            #
+            # XTTS klingt deutlich menschlicher -- Ramzi hat es am 02.08.2026
+            # ueber vier Hoerrunden ausgewaehlt. Es hat aber zwei Bedingungen,
+            # die Piper nicht hat: es braucht 2,6 GB auf der Karte, und es
+            # halluziniert bei ungeschicktem Text (siehe stimme_xtts.py und
+            # noor/werkzeuge/stimme-regeln.md).
+            #
+            # Deshalb ist Piper kein Auslaufmodell, sondern der Rueckfall: ist
+            # die Karte voll (Spiel, viele Fenster) oder geht beim Erzeugen
+            # etwas schief, spricht Piper SOFORT, statt dass ich stumm bleibe.
+            # Auf der CPU wuerde XTTS elf Sekunden je Satz brauchen -- das ist
+            # ausdruecklich kein Rueckfall, lieber eine schlichtere Stimme
+            # sofort als die schoene eine halbe Minute spaeter.
+            motor = 'piper'
+            try:
+                import einstellungen
+                gewuenscht = (einstellungen.hole('stimme_motor') or 'xtts')
+            except Exception:
+                gewuenscht = 'xtts'
+            xtts_rate = None
+            if gewuenscht == 'xtts':
+                try:
+                    import stimme_xtts
+                    xtts_rate = stimme_xtts.RATE
+                    if stimme_xtts.bereit():
+                        motor = 'xtts'
+                    else:
+                        # Laedt im Hintergrund; ab dem naechsten Satz ist es da.
+                        stimme_xtts.vorwaermen()
+                except Exception:
+                    motor = 'piper'
+
             stimme = self.stimme
-            rate = stimme.config.sample_rate
+            rate = xtts_rate if motor == 'xtts' else stimme.config.sample_rate
             self._stop.clear()
             klang = _klangvorgaben()
 
@@ -448,7 +481,17 @@ class Sprecher:
             fertig = queue.Queue(maxsize=1)
             schluss = threading.Event()
 
-            def _erzeuge():
+            def _abliefern(stueck, ton):
+                """Ein fertiges Paar in die Warteschlange, bis Platz ist."""
+                while not schluss.is_set():
+                    try:
+                        fertig.put((stueck, ton), timeout=0.2)
+                        return True
+                    except queue.Full:
+                        continue
+                return False
+
+            def _erzeuge_piper():
                 for stueck in anzeigen:
                     if schluss.is_set():
                         break
@@ -458,12 +501,49 @@ class Sprecher:
                         ton = np.concatenate(teile) if teile else None
                     except Exception:
                         ton = None
-                    while not schluss.is_set():
-                        try:
-                            fertig.put((stueck, ton), timeout=0.2)
-                            break
-                        except queue.Full:
-                            continue
+                    if not _abliefern(stueck, ton):
+                        break
+
+            def _erzeuge():
+                # XTTS bekommt den GANZEN Text in einem Aufruf -- Zerlegen ist
+                # genau die Ursache des Kauderwelschs (gemessen, 240 Proben).
+                # Die Anzeigen bekommen daraus Scheiben, damit die Untertitel
+                # weiter mitlaufen. Geliefert wird stueckweise, deshalb faengt
+                # der Ton nach ~0,7 s an statt nach 4-5 s.
+                if motor == 'xtts':
+                    etwas = False
+                    try:
+                        laut = getattr(klang, 'volume', 1.0) if klang else 1.0
+                        for stueck, ton in stimme_xtts.stuecke(
+                                ' '.join(saetze), anzeigen,
+                                tempo=stimme_xtts.TEMPO):
+                            if schluss.is_set():
+                                break
+                            if laut != 1.0:
+                                ton = (ton.astype(np.float32) * laut) \
+                                    .clip(-32768, 32767).astype(np.int16)
+                            etwas = True
+                            if not _abliefern(stueck, ton):
+                                break
+                        _abliefern(None, None)
+                        return
+                    except Exception as e:
+                        if etwas:
+                            # Mittendrin abgebrochen: NICHT von vorn mit Piper
+                            # anfangen -- Ramzi hoerte sonst den halben Satz
+                            # zweimal, und die Abtastrate des offenen Stroms
+                            # passt ohnehin nicht mehr.
+                            print('[Stimme] XTTS brach mitten im Satz ab: %s' % e,
+                                  flush=True)
+                            _abliefern(None, None)
+                            return
+                        # Nicht stumm bleiben: Piper springt ein. Der Fehler
+                        # gehoert ins Protokoll, sonst verschwindet ein
+                        # kaputtes Modell lautlos hinter einer Stimme, die
+                        # noch funktioniert.
+                        print('[Stimme] XTTS faellt aus, Piper springt ein: %s' % e,
+                              flush=True)
+                _erzeuge_piper()
                 # Das Schlusszeichen MUSS ankommen, sonst wartet der Abspieler
                 # ewig auf eine Anzeige, die nie kommt. Also so lange anbieten,
                 # bis Platz da ist -- ein einmaliger Versuch mit Zeitausfall hat

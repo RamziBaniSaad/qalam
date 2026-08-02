@@ -888,9 +888,44 @@ class Assistent:
         self.ohr.starte()
         self._laeuft.set()
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
+        threading.Thread(target=self._sprechpost_wache, daemon=True).start()
         self._abbruch_taste_starten()
+        # XTTS im Hintergrund warmlaufen lassen, damit nicht der erste Satz
+        # 16 Sekunden auf das Modell wartet. Bis es da ist, spricht Piper.
+        try:
+            import stimme_xtts
+            stimme_xtts.vorwaermen()
+        except Exception as e:
+            # Nicht stumm verschlucken: geht das schief, spricht zwar Piper
+            # weiter und alles klingt gesund -- aber dann suche ich beim
+            # naechsten Mal am falschen Ende. Genau so hat sich der
+            # torchaudio-Konflikt am 02.08.2026 drei Anlaeufe lang versteckt.
+            print('[Stimme] XTTS-Vorwaermen nicht moeglich: %s' % e, flush=True)
         print('[Noor] Ich höre zu. Sag meinen Namen.')
         self.sprecher.sprich('Ich höre zu.')
+
+    def _sprechpost_wache(self):
+        """Saetze aussprechen, die andere Prozesse eingeworfen haben.
+
+        Warum das hier laeuft und nicht im Absender: mit XTTS haelt nur EIN
+        Prozess das Modell (2,6 GB auf der Karte, 16 s Ladezeit). Ein
+        kurzlebiger Aufruf wie noor-sprich.ps1 kann es nicht selbst laden --
+        er wirft seinen Satz ein und ist fertig, ich spreche ihn.
+
+        Die Warteschlange-Regeln gelten unveraendert: `sprich()` wartet von
+        selbst, wenn Ramzi gerade redet. Ich hole hier also nur ab.
+        """
+        import sprechpost
+        while self._laeuft.is_set():
+            try:
+                sprechpost.bereit_melden()
+                text = sprechpost.abholen()
+                if text:
+                    self.sprecher.sprich(text)
+                else:
+                    time.sleep(0.25)
+            except Exception:
+                time.sleep(1.0)
 
     def stoppe(self):
         self._laeuft.clear()
