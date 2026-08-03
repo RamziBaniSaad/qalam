@@ -1045,8 +1045,17 @@ class Weckwort:
         dauer_audio = len(puffer) * FRAME_MS / 1000
         _start = time.time()
         try:
-            segmente, _ = self.modell.transcribe(audio, language='de', beam_size=1)
-            text = ' '.join(s.text for s in segmente).strip()
+            # vad_filter + no_speech-Schwelle: dieselbe Absicherung wie beim
+            # flink-Modell (_hoer_kurz oben), hier bisher gefehlt. Whisper
+            # erfindet auf Stille Text -- am 03.08.2026 im Protokoll gesehen:
+            # "Ich habe keine Erkrankungen. Ich erkenne sie. ..." mehrfach
+            # wiederholt, mitten in einer echten Aeusserung. Ramzis Auftrag,
+            # das Ohr solle "ein bisschen besser hoeren", ist genau das: ein
+            # erfundener Satz zaehlte bisher als gehoertes Wort.
+            segmente, _ = self.modell.transcribe(audio, language='de', beam_size=1,
+                                                 vad_filter=True)
+            text = ' '.join(s.text for s in segmente
+                            if s.no_speech_prob < ERFINDUNGS_SCHWELLE).strip()
         except Exception as e:
             print(f'[Weckwort] Erkennung fehlgeschlagen: {e}')
             return
