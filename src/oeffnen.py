@@ -81,6 +81,25 @@ def _glaette(text):
     return verhoerer.korrigiere(t)
 
 
+def _glaette_katalog(text):
+    """Wie `_glaette`, aber OHNE die Verhörer-Korrektur.
+
+    Der Unterschied ist nicht kosmetisch, er hat mich am 03.08.2026 einen
+    Fehlschlag gekostet. Seit die Korrekturtabelle „dododeks -> dododex"
+    kennt, wurde beim Vergleich auch die KATALOGSEITE korrigiert: der
+    Eintrag „dododeks" wurde zu „dododex", und „öffne dodo deks" (was Qalam
+    als zwei Wörter hört und deshalb nicht korrigiert) passte auf nichts mehr.
+
+    Die Tabelle gehört auf das, was GEHÖRT wurde. Was im Katalog steht, ist
+    schon richtig geschrieben -- daran gibt es nichts zu korrigieren.
+    """
+    t = (text or '').lower()
+    for a, b in (('ä', 'a'), ('ö', 'o'), ('ü', 'u'), ('ß', 'ss')):
+        t = t.replace(a, b)
+    t = re.sub(r'[^\w ]+', ' ', t)
+    return re.sub(r'\s+', ' ', t).strip()
+
+
 _stand = {'zeit': None, 'katalog': {}}
 
 
@@ -126,11 +145,77 @@ def verstehe(rohtext):
     treffer, laenge = None, 0
     for name, eintrag in katalog().items():
         for w in eintrag.get('worte', []):
-            wg = _glaette(w)
+            wg = _glaette_katalog(w)
             if not wg:
                 continue
             if re.search(rf'(^|\s){re.escape(wg)}(\s|$)', text) and len(wg) > laenge:
                 treffer, laenge = (name, eintrag), len(wg)
+    if treffer:
+        return treffer
+
+    # Zweiter Anlauf ohne Leerzeichen -- weil Qalam Namen zerlegt.
+    #
+    # Ramzi hat am 03.08.2026 dreimal „öffne Dododex" gesagt und dreimal nichts
+    # bekommen. Im Protokoll stand „do do dex": ein Spracherkenner setzt die
+    # Wortgrenzen nach dem, was er kennt, und einen Spielenamen kennt er nicht.
+    # Oben wird auf ganze Wörter geprüft, und zwischen „do do dex" und
+    # „dododex" liegen genau zwei Leerzeichen.
+    #
+    # NUR als zweiter Anlauf und erst ab fünf Zeichen: ohne Leerzeichen wird
+    # aus dem Vergleich eine Teilzeichenkette, und ein kurzes Wort steckt
+    # schnell zufällig in einem längeren. „Ist das Auto da" darf nichts
+    # aufmachen, „mach mir do do dex auf" schon.
+    eng = text.replace(' ', '')
+    for name, eintrag in katalog().items():
+        for w in eintrag.get('worte', []):
+            wg = _glaette_katalog(w).replace(' ', '')
+            if len(wg) >= 5 and wg in eng and len(wg) > laenge:
+                treffer, laenge = (name, eintrag), len(wg)
+    if treffer:
+        return treffer
+
+    # Dritter Anlauf: fast richtig ist auch richtig.
+    #
+    # Ramzi hat denselben Namen in einer Minute als „do do dex", „do-do-dix"
+    # und „doh doh dex" gesprochen, und Qalam hat jedes Mal etwas anderes
+    # geschrieben. Diese Schreibweisen alle in den Katalog zu tippen ist ein
+    # Wettlauf, den man nicht gewinnt -- es gibt beliebig viele, und jede
+    # einzelne müsste jemand vorher erraten.
+    #
+    # Also wird hier verglichen, wie ÄHNLICH das Gehörte ist, statt ob es
+    # gleich ist. „dohdohdex" und „dododex" sind sich zu 88 Prozent ähnlich,
+    # „dododix" zu 93 -- ein Zufallstreffer kommt da nicht mehr hin.
+    #
+    # Warum das trotzdem kein Fenster aufreisst, das niemand wollte: bis
+    # hierher ist schon geprüft, dass ein Absichtswort dabeisteht („mach mir",
+    # „öffne") und dass der Satz kurz ist. Und erst ab sechs Zeichen -- kurze
+    # Wörter sind sich zu leicht ähnlich.
+    # DER VORFILTER IST HIER KEIN FEINSCHLIFF, SONDERN DER UNTERSCHIED ZWISCHEN
+    # brauchbar und unbrauchbar: ohne ihn hat dieser Anlauf 487 ms je Satz
+    # gebraucht, weil er jeden Ausschnitt gegen jedes Wort im Katalog gehalten
+    # hat. Das Ohr wäre in dieser Zeit taub gewesen -- bei einem Modul, dessen
+    # ganzer Sinn „schneller als der Chat" ist.
+    #
+    # Die Abkürzung: zwei Wörter, die sich zu 85 Prozent ähneln, teilen sich
+    # fast immer mindestens drei Buchstaben am Stück. Diese Prüfung kostet
+    # nichts und wirft weit über 99 von 100 Kandidaten sofort weg.
+    import difflib
+    bestes = 0.0
+    for name, eintrag in katalog().items():
+        for w in eintrag.get('worte', []):
+            wg = _glaette_katalog(w).replace(' ', '')
+            if len(wg) < 6:
+                continue
+            if not any(wg[i:i + 3] in eng for i in range(len(wg) - 2)):
+                continue
+            # Der Name kann im Satz länger oder kürzer angekommen sein, also
+            # werden Ausschnitte um seine Länge herum verglichen.
+            for breite in range(max(6, len(wg) - 2), len(wg) + 3):
+                for i in range(len(eng) - breite + 1):
+                    aehnlich = difflib.SequenceMatcher(
+                        None, wg, eng[i:i + breite]).ratio()
+                    if aehnlich >= 0.85 and aehnlich > bestes:
+                        treffer, bestes = (name, eintrag), aehnlich
     return treffer
 
 
@@ -229,6 +314,13 @@ def oeffne(name):
     verloren. Dieselbe Begründung wie bei _an_noor() in assistant.py."""
     def _lauf():
         try:
+            # Der Insel Bescheid sagen -- Ramzi soll oben sehen, was aufgeht,
+            # ohne dass ich es ihm zusaetzlich erzaehlen muss.
+            try:
+                import ereignis
+                ereignis.melde('Fenster geöffnet: %s' % name, 'fenster')
+            except Exception:
+                pass
             # CREATE_NO_WINDOW ist hier kein Detail, sondern der Unterschied
             # zwischen Werkzeug und Stoerung. Das Ohr laeuft unter pythonw, also
             # ohne Konsole -- jeder PowerShell-Aufruf macht sich deshalb ein
