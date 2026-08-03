@@ -216,6 +216,15 @@ def ist_mein_echo(gehoert):
 GESAGT = os.path.join(PROJEKT, '.noor-gesagt.json')
 GESAGT_ALTER = 60.0      # so lange kann ein Satz von mir noch zurückkommen
 
+# Dasselbe noch einmal zum LESEN. Die Datei oben ist eine Arbeitsdatei: sie
+# hält nur die letzte Minute und sieht aus wie Maschinentext.
+#
+# Ramzis Auftrag vom 03.08.2026: was ich zwischendurch sage, steht nirgends zum
+# Nachlesen -- die Zusammenfassung am Ende landet im Chat, die Zwischenrufe nur
+# in der Luft und im Untertitel. Hat er gerade weggeschaut, ist es weg. Also
+# hier, und aufmachen kann er es mit „mach mir auf, was du gesagt hast".
+GESAGT_LOG = os.path.join(PROJEKT, 'noor-gesagt.log')
+
 
 def merke_gesagt(text):
     """Aufschreiben, was ich gerade gesagt habe -- für den Echo-Vergleich.
@@ -258,6 +267,13 @@ def merke_gesagt(text):
             json.dump(neu[-40:], f, ensure_ascii=False)
         os.replace(tmp, GESAGT)
     except Exception:
+        pass
+    # Zum Nachlesen, anhängend und mit Uhrzeit. Darf nie der Grund sein, warum
+    # ein Satz nicht gesprochen wird -- deshalb sein eigenes try.
+    try:
+        with open(GESAGT_LOG, 'a', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")}  {text}\n')
+    except OSError:
         pass
 
 
