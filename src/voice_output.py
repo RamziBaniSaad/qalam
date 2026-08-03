@@ -335,6 +335,15 @@ def _untertitel(text, worte, start, dauer):
         untertitel.zeige(text, 'noor', worte, start, dauer)
     except Exception:
         pass
+    # Und mitschreiben, DASS ich es gesagt habe. Der Streifen hält nur das
+    # laufende Stück; der Echo-Schutz braucht die letzte Minute am Stück, weil
+    # das Ohr erst nach einer Sprechpause auswertet -- ausführliche Begründung
+    # in warteschlange.merke_gesagt().
+    try:
+        import warteschlange
+        warteschlange.merke_gesagt(text)
+    except Exception:
+        pass
 
 
 def _er_hat_uebernommen():

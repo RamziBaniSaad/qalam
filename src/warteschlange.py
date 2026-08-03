@@ -190,13 +190,87 @@ def ist_mein_echo(gehoert):
     nicht kippen. Kurze Wörter fliegen raus, weil "und", "das", "ist" in jedem
     Satz vorkommen und sonst jede Äußerung wie mein Echo aussähe.
     """
-    meiner = _mein_satz()
-    if not meiner or not gehoert:
+    if not gehoert:
         return False
     g = _worte(gehoert)
     if not g:
         return False
-    return len(g & _worte(meiner)) / len(g) >= 0.6
+
+    meiner = _mein_satz()
+    if meiner and len(g & _worte(meiner)) / len(g) >= 0.6:
+        return True
+
+    # Der Rückblick auf die letzte Minute -- Begründung in merke_gesagt().
+    #
+    # Erst ab fünf Wörtern, und das ist die Sicherung, auf die es ankommt:
+    # ein kurzer Zuruf wie „Noor, stopp" oder „ja, mach" muss IMMER
+    # durchkommen, auch wenn ich dieselben Wörter gerade selbst gesagt habe.
+    # Ramzi wollte ausdrücklich weiter unterbrechen können -- lieber einmal
+    # mein eigenes Echo bearbeiten als ihn überhören.
+    if len(g) < 5:
+        return False
+    frueher = _zuletzt_gesagt()
+    return bool(frueher) and len(g & _worte(frueher)) / len(g) >= 0.6
+
+
+GESAGT = os.path.join(PROJEKT, '.noor-gesagt.json')
+GESAGT_ALTER = 60.0      # so lange kann ein Satz von mir noch zurückkommen
+
+
+def merke_gesagt(text):
+    """Aufschreiben, was ich gerade gesagt habe -- für den Echo-Vergleich.
+
+    WARUM ES NICHT REICHT, NUR AUF DEN LAUFENDEN SATZ ZU SCHAUEN -- der Fehler
+    vom 03.08.2026, der mir meine eigene Antwort als Auftrag zurückgeschickt
+    hat:
+
+    Das Ohr wertet einen ganzen Block aus, wenn Ramzi eine Pause macht -- im
+    Fall des Fehlers waren das 14,1 Sekunden am Stück. Ausgewertet wird also
+    NACH dem Sprechen, nicht währenddessen. `_mein_satz()` weiß aber nur, was
+    ich GERADE sage; eine Sekunde später gibt es None zurück, und mein eigener
+    Satz sah aus wie seiner.
+
+    Dazu kam ein zweiter Grund: Piper spricht in Stücken, und der Untertitel
+    hält immer nur das laufende Stück. Selbst im richtigen Moment hätte der
+    Vergleich also nur einen Bruchteil dessen gesehen, was zu hören war -- zu
+    wenig für die Sechzig-Prozent-Schwelle.
+
+    Also wird hier mitgeschrieben, was in der letzten Minute aus mir kam. Eine
+    Datei und keine Variable im Speicher, weil Sprechen und Hören zwei
+    getrennte Prozesse sind.
+    """
+    if not text:
+        return
+    jetzt = time.time()
+    try:
+        with open(GESAGT, encoding='utf-8') as f:
+            alt = json.load(f)
+    except Exception:
+        alt = []
+    neu = [e for e in alt if jetzt - e.get('t', 0) < GESAGT_ALTER]
+    neu.append({'t': jetzt, 'text': text})
+    try:
+        # Über eine Zwischendatei, damit der lesende Prozess nie eine halb
+        # geschriebene Datei erwischt -- dort würde json still scheitern und
+        # der Echo-Schutz wäre lautlos aus.
+        h, tmp = tempfile.mkstemp(dir=PROJEKT, suffix='.json')
+        with os.fdopen(h, 'w', encoding='utf-8') as f:
+            json.dump(neu[-40:], f, ensure_ascii=False)
+        os.replace(tmp, GESAGT)
+    except Exception:
+        pass
+
+
+def _zuletzt_gesagt():
+    """Alles, was in der letzten Minute aus mir kam, als ein Text."""
+    try:
+        with open(GESAGT, encoding='utf-8') as f:
+            alt = json.load(f)
+    except Exception:
+        return ''
+    jetzt = time.time()
+    return ' '.join(e.get('text', '') for e in alt
+                    if jetzt - e.get('t', 0) < GESAGT_ALTER)
 
 
 def ramzi_ist_dran():
