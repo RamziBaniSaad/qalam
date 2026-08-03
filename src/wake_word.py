@@ -226,9 +226,27 @@ class _Lebend:
     def __init__(self, welches):
         self._welches = welches
 
-    def search(self, text):
+    def _muster(self):
         h, s = _weckwort_muster()
-        return (h if self._welches == 'hoeren' else s).search(text or '')
+        return h if self._welches == 'hoeren' else s
+
+    def search(self, text):
+        return self._muster().search(text or '')
+
+    # ALLES durchreichen, nicht nur `search`.
+    #
+    # Der Fehler, der genau das gekostet hat (03.08.2026, 23:02): hier stand
+    # nur `search`. Der Code ruft aber auch `sub` -- der Name wird aus dem Satz
+    # herausgeschnitten, bevor er abgeschickt wird. Im Protokoll stand dann
+    # "Rueckruf fehlgeschlagen: '_Lebend' object has no attribute 'sub'", und
+    # weil der Rueckruf abstuerzte, wurde MINUTENLANG nichts mehr abgeschickt.
+    # Ramzi hat weitergeredet, sein Mikrofon stummgeschaltet und gewartet --
+    # alles umsonst.
+    #
+    # Die Lehre: ein Stellvertreter, der nur die eine Stelle bedient, die ich
+    # gerade im Kopf habe, ist kein Stellvertreter, sondern eine Falle.
+    def __getattr__(self, name):
+        return getattr(self._muster(), name)
 
 
 WECKWORT = _Lebend('hoeren')

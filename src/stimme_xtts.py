@@ -217,7 +217,12 @@ def _laden():
         m = tts.synthesizer.tts_model
         _sprecher_daten = tuple(m.speaker_manager.speakers[SPRECHER].values())
         _modell, _geraet = m, geraet
-        return _modell
+    try:
+        import ereignis
+        ereignis.melde('Ludvig geladen, %s' % geraet, 'rechner')
+    except Exception:
+        pass
+    return _modell
 
 
 def zerlegen(text, hoechstens=240, mindestens=40):
@@ -376,6 +381,11 @@ def entladen():
         import torch
         gc.collect()
         torch.cuda.empty_cache()
+    except Exception:
+        pass
+    try:
+        import ereignis
+        ereignis.melde('Ludvig entladen, Karte frei', 'rechner')
     except Exception:
         pass
     return True
