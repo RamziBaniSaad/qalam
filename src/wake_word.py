@@ -932,7 +932,15 @@ class Weckwort:
             # eigenes Echo, dann hat Ramzi mitten in meinem Satz übernommen --
             # und genau dann soll ich aufhören. Das ist die Lage, die er
             # beschrieben hat: "ich rede, und du redest trotzdem weiter."
-            if ich_rede and im_gespraech and not warteschlange.ist_mein_echo(vorlaeufig):
+            # `kurz_erlaubt=True` NUR hier, nicht beim Weckwort weiter unten.
+            # Hier geht es um den Merker "Ramzi hat übernommen", und den setzte
+            # bisher mein eigener Lautsprecher: ein Zwei-Wort-Fetzen meiner
+            # Stimme rutschte durch den Echo-Vergleich und wuergte mein
+            # Vorlesen ab. Beim Weckwort bleibt die Sperre bestehen -- "Noor"
+            # dazwischenrufen muss IMMER durchkommen, das ist Ramzis
+            # ausdrueckliche Bedingung.
+            if (ich_rede and im_gespraech
+                    and not warteschlange.ist_mein_echo(vorlaeufig, kurz_erlaubt=True)):
                 warteschlange.redet_merken(True)
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True

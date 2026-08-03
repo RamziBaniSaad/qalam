@@ -182,7 +182,7 @@ def _worte(text):
         c.lower() if c.isalnum() or c.isspace() else ' ' for c in text).split() if len(w) > 2}
 
 
-def ist_mein_echo(gehoert):
+def ist_mein_echo(gehoert, kurz_erlaubt=False):
     """Ist das, was das Ohr gehört hat, in Wahrheit meine eigene Stimme?
 
     Verglichen wird über die Wörter, nicht Zeichen für Zeichen: das schnelle
@@ -207,7 +207,22 @@ def ist_mein_echo(gehoert):
     # durchkommen, auch wenn ich dieselben Wörter gerade selbst gesagt habe.
     # Ramzi wollte ausdrücklich weiter unterbrechen können -- lieber einmal
     # mein eigenes Echo bearbeiten als ihn überhören.
-    if len(g) < 5:
+    # `kurz_erlaubt` hebt diese Sperre auf, und zwar genau dort, wo ich SELBST
+    # gerade spreche (wake_word._mitlauscher).
+    #
+    # Ramzis Befund vom 03.08.2026, den ich vorher nicht gesehen hatte: beim
+    # Vorlesen bricht mein eigener Lautsprecher meinen Satz ab. Der Mitlauscher
+    # hört alle paar Sekunden einen kurzen Fetzen -- zwei, drei Wörter -- und
+    # der fällt durch beide Netze: `_mein_satz()` hält nur das gerade laufende
+    # Stück (der Schall hinkt hinterher, es passt oft nicht), und der Rückblick
+    # unten greift erst ab fünf Wörtern. Also galt mein eigenes Echo als "Ramzi
+    # hat übernommen", und ich habe mich selbst gestoppt.
+    #
+    # Während ich rede, ist meine Stimme nachweislich im Raum. Ein
+    # Wortvergleich, der dann anschlägt, ist viel wahrscheinlicher Echo als
+    # Zufall -- deshalb darf die Längensperre dort fallen. Sie bleibt überall
+    # sonst: ein kurzer Zuruf muss durchkommen.
+    if len(g) < 5 and not kurz_erlaubt:
         return False
     frueher = _zuletzt_gesagt()
     return bool(frueher) and len(g & _worte(frueher)) / len(g) >= 0.6
