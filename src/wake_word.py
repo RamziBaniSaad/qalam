@@ -17,6 +17,7 @@ WARUM NICHT openWakeWord (Stand 30.07.2026):
     davorgehängt werden; der Rest bleibt wie er ist.
 """
 import collections
+import json
 import os
 import queue
 import re
@@ -156,10 +157,81 @@ MINDEST_SPRACH_FRAMES = int(0.35 * 1000 / FRAME_MS)
 # wieder herausnehme, falls Fehlstarts auftauchen.
 _EINDEUTIG = r'(?:noor|nour|nuur|nuor|nuhr|noah|nura|moor|muur|muhr|mohr|noer|nohr|mura)'
 _ZWEIFELHAFT = r'(?:nur|nor|mur|mor|moe|mo)'
-WECKWORT = re.compile(
-    rf'(?:^[\s,.!?"\']*{_ZWEIFELHAFT}\b|\b{_EINDEUTIG}\b)',
-    re.IGNORECASE
-)
+
+
+# Die Listen oben sind nur noch der Notnagel -- gepflegt wird in einer DATEI.
+#
+# Ramzis Auftrag vom 03.08.2026, aus seinem eigenen Protokoll heraus: er hat
+# viermal meinen Namen gerufen, dreimal stand im Log "Noa.", "Nu an.", "No." --
+# alle drei fehlten in den Listen, erst der vierte Ruf ("Nur.") traf. Sein
+# Wunsch: "eine Datei, wo ich deine anderen Versionen einfach ergaenzen kann,
+# auch verrueckte Sachen, wie du sie hier im Protokoll siehst."
+#
+# Eine Codeaenderung je Verhoerer waere der falsche Preis dafuer. Also dieselbe
+# Bauart wie noor-katalog.json und noor-verhoerer.json: eine JSON-Datei, neu
+# gelesen wenn sie sich geaendert hat, kein Neustart.
+_WECKWORT_DATEI = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                               'noor-weckwort.json')
+_weckwort_stand = {'zeit': None, 'hoeren': None, 'selbst': None}
+
+
+def _baue_weckwort():
+    """Beide Muster aus der Datei bauen. Faellt auf die Listen oben zurueck."""
+    eindeutig, am_anfang = None, None
+    try:
+        with open(_WECKWORT_DATEI, encoding='utf-8-sig') as f:
+            roh = json.load(f)
+        e = [re.escape(w.strip().lower()) for w in roh.get('eindeutig', [])
+             if w and w.strip()]
+        a = [re.escape(w.strip().lower()) for w in roh.get('am_anfang', [])
+             if w and w.strip()]
+        # Doppelte raus, laengste zuerst -- sonst gewinnt in der Alternative
+        # das kuerzere Bruchstueck und "noora" wuerde als "noor" enden.
+        if e:
+            eindeutig = '(?:%s)' % '|'.join(sorted(set(e), key=len, reverse=True))
+        if a:
+            am_anfang = '(?:%s)' % '|'.join(sorted(set(a), key=len, reverse=True))
+    except Exception:
+        pass
+    eindeutig = eindeutig or _EINDEUTIG
+    am_anfang = am_anfang or _ZWEIFELHAFT
+    hoeren = re.compile(
+        rf'(?:^[\s,.!?"\']*{am_anfang}\b|\b{eindeutig}\b)', re.IGNORECASE)
+    # Fuer "habe ICH das gesagt?" ohne Positionsbedingung -- Begruendung
+    # unten bei SELBST_WECKWORT.
+    selbst = re.compile(
+        r'\b(?:%s|%s)\b' % (eindeutig[3:-1], am_anfang[3:-1]), re.IGNORECASE)
+    return hoeren, selbst
+
+
+def _weckwort_muster():
+    """Das aktuelle Paar (hoeren, selbst) -- neu gebaut nur bei Aenderung."""
+    try:
+        zeit = os.path.getmtime(_WECKWORT_DATEI)
+    except OSError:
+        zeit = None
+    if zeit != _weckwort_stand['zeit'] or _weckwort_stand['hoeren'] is None:
+        h, s = _baue_weckwort()
+        _weckwort_stand.update({'zeit': zeit, 'hoeren': h, 'selbst': s})
+    return _weckwort_stand['hoeren'], _weckwort_stand['selbst']
+
+
+class _Lebend:
+    """Verhaelt sich wie ein fertiges Muster, holt sich aber immer das neueste.
+
+    Damit bleibt jede vorhandene Zeile `WECKWORT.search(...)` unveraendert --
+    und liest trotzdem die Datei mit. Ein Umbau aller Aufrufstellen waere mehr
+    Risiko als Nutzen gewesen."""
+
+    def __init__(self, welches):
+        self._welches = welches
+
+    def search(self, text):
+        h, s = _weckwort_muster()
+        return (h if self._welches == 'hoeren' else s).search(text or '')
+
+
+WECKWORT = _Lebend('hoeren')
 
 # Dasselbe, aber STRENGER -- und nur fuer die Frage "habe ICH das gerade
 # gesagt?".
@@ -174,9 +246,7 @@ WECKWORT = re.compile(
 #
 # Der Preis ist ihm bewusst und von ihm ausdruecklich abgenickt: in genau
 # diesem einen Satz kann er mich nicht unterbrechen. Danach wieder.
-SELBST_WECKWORT = re.compile(
-    '\\b(?:' + _EINDEUTIG[3:-1] + '|' + _ZWEIFELHAFT[3:-1] + ')\\b',
-    re.IGNORECASE)
+SELBST_WECKWORT = _Lebend('selbst')
 
 
 PROJEKT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
