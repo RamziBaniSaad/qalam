@@ -132,11 +132,24 @@ def daempfen(anteil=ANTEIL):
                 jetzt = regler.GetMasterVolume()
                 if jetzt <= 0.001:
                     continue          # ist schon stumm, nichts zu merken
-                # Nur beim ERSTEN Dämpfen merken. Sonst würde ein zweiter Ruf
-                # den schon gedämpften Wert als "vorher" festschreiben, und die
-                # Musik käme nie wieder auf ihre Lautstärke zurück.
-                gemerkt.setdefault(s.Process.pid, jetzt)
-                regler.SetMasterVolume(gemerkt[s.Process.pid] * anteil, None)
+                if s.Process.pid in gemerkt:
+                    # Steht schon im Merker, ist also schon gedämpft. Noch
+                    # einmal zu setzen bringt nichts und wäre nur eine weitere
+                    # Gelegenheit, etwas falsch zu machen.
+                    continue
+                if jetzt <= anteil + 0.02:
+                    # Schon so leise, dass Dämpfen nichts brächte -- und wenn
+                    # hier der Rest eines misslungenen Zurückstellens läge,
+                    # würde ich ihn als "so war es vorher" festschreiben.
+                    #
+                    # GENAU SO ist Ramzis Chrome am 03.08.2026 auf 0,023
+                    # gelandet: der Merker sagte "vorher 0,15", tatsächlich war
+                    # 0,15 schon der gedämpfte Wert. 0,15 von 0,15. Er hatte
+                    # den Verdacht von selbst -- "dann machst du von diesen 15
+                    # Prozent nochmal die 15 Prozent" -- und er stimmte.
+                    continue
+                gemerkt[s.Process.pid] = jetzt
+                regler.SetMasterVolume(jetzt * anteil, None)
                 anzahl += 1
             except Exception:
                 continue
@@ -180,12 +193,22 @@ def zuruecksetzen_im_hintergrund():
 
 
 def zuruecksetzen():
-    """Auf die Lautstärke von vorher zurück -- nicht auf 100 Prozent."""
+    """Auf die Lautstärke von vorher zurück -- nicht auf 100 Prozent.
+
+    VERGESSEN WIRD NUR, WAS AUCH WIRKLICH ZURÜCKGESTELLT WURDE. Vorher wurde
+    der Merker am Ende bedingungslos geleert -- auch wenn `_sitzungen()` gerade
+    nichts geliefert hat (COM zickt gelegentlich) oder das Programm im Moment
+    nicht in der Liste stand. Dann blieb die Lautstärke unten, aber niemand
+    wusste mehr, worauf sie gehört. Beim nächsten Dämpfen galt der leise Wert
+    als "vorher", und es wurde noch leiser. Das ist der Fehler, an dem Ramzi am
+    03.08.2026 sein Video kaum noch hören konnte.
+    """
     anzahl = 0
     with _schloss:
         gemerkt = _lies_merker()
         if not gemerkt:
             return 0
+        offen = dict(gemerkt)
         for s in _sitzungen():
             try:
                 if not s.Process:
@@ -194,6 +217,33 @@ def zuruecksetzen():
                 if alt is None:
                     continue
                 _regler(s).SetMasterVolume(alt, None)
+                offen.pop(s.Process.pid, None)
+                anzahl += 1
+            except Exception:
+                continue
+        _schreib_merker(offen)
+    return anzahl
+
+
+def alles_laut():
+    """Jedes Programm auf volle Lautstärke -- Ramzis Notausgang.
+
+    Sein Auftrag vom 03.08.2026: „Statt dass ich in die Einstellungen gehe, in
+    den Sound, und bei allen meinen Apps alles auf 100 Prozent mache, sage ich
+    das ganz kurz, du machst das alles auf 100, und ich kann weitermachen."
+
+    Bewusst ohne Merker und ohne Rücksicht auf das, was vorher war: das hier
+    ist kein Zurückstellen, sondern die Handbremse für den Fall, dass beim
+    Zurückstellen etwas schiefging. Ein Notausgang, der selbst wieder von einer
+    Datei abhinge, wäre keiner.
+    """
+    anzahl = 0
+    with _schloss:
+        for s in _sitzungen():
+            try:
+                if not s.Process:
+                    continue
+                _regler(s).SetMasterVolume(1.0, None)
                 anzahl += 1
             except Exception:
                 continue

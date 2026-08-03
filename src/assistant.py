@@ -286,6 +286,22 @@ class Assistent:
             (['hor auf', 'sei mal still', 'ruhe', 'stopp reden', 'nicht weiter reden'],
              lambda: self._still()),
 
+            # Ramzis Notausgang vom 03.08.2026, nachdem sein Video kaum noch zu
+            # hören war: „Statt dass ich in die Einstellungen gehe, in den
+            # Sound, und bei all meinen Apps alles auf 100 Prozent mache, sage
+            # ich das ganz kurz, und ich kann weitermachen."
+            #
+            # Absichtlich viele Formulierungen: er hat selbst gesagt, er wisse
+            # nicht, welcher Befehl es sein soll. Also muss jeder gehen, der
+            # ihm einfällt -- in dem Moment ist er genervt und überlegt nicht,
+            # wie es „richtig" heißt.
+            (['alles wieder laut', 'alles laut', 'mach alles laut',
+              'alles auf hundert', 'alles auf 100', 'lautstarke zuruck',
+              'lautstarke wieder normal', 'wieder normal laut',
+              'mach die lautstarke wieder', 'ton wieder normal',
+              'volle lautstarke', 'alles wieder auf hundert'],
+             lambda: self._alles_laut()),
+
             # "musik" allein steht mit drin, seit Ramzi am 01.08.2026 genau das
             # gesagt hat und es im Chat landete. Sein Wunsch war ausdrücklich,
             # den Umschalt-Charakter zu behalten: sagt er "Musik aus", während
@@ -317,6 +333,26 @@ class Assistent:
     def _still(self):
         self.sprecher.stoppe()
         return None      # nichts sagen -- er will ja gerade Ruhe
+
+    def _alles_laut(self):
+        """Jedes Programm auf volle Lautstärke -- Ramzis Handbremse.
+
+        Läuft in einem eigenen Faden: das Aufzählen der Audio-Sitzungen geht
+        über COM und braucht ein paar hundert Millisekunden. Solange darf das
+        Ohr nicht stehen -- dieselbe Begründung wie bei der Dämpfung selbst.
+        """
+        def _lauf():
+            try:
+                # Erst hier importiert, wie überall sonst in dieser Datei: das
+                # Modul zieht pycaw und COM nach, und das soll den Start des
+                # Ohrs nicht aufhalten.
+                import lautstaerke
+                anzahl = lautstaerke.alles_laut()
+                print(f'[Lautstärke] {anzahl} Programme auf 100 Prozent.', flush=True)
+            except Exception as e:
+                print(f'[Lautstärke] fehlgeschlagen: {e}', flush=True)
+        threading.Thread(target=_lauf, daemon=True).start()
+        return 'Alles wieder auf volle Lautstärke.'
 
     def _musik(self):
         """Wiedergabe umschalten -- oder Spotify erst mal aufmachen.
