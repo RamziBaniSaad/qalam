@@ -138,7 +138,23 @@ class ResultThread(QThread):
 
             # Time the transcription process
             start_time = time.time()
-            result = transcribe(audio_data, self.local_model)
+            # `local_model` ist seit dem 03.08.2026 ein Modellhalter und nicht
+            # mehr das Modell selbst. `hole()` wartet, falls das Vorladen noch
+            # läuft, und `an()`/`ab()` sagen der Wache, dass gerade jemand
+            # damit arbeitet -- sonst könnte sie mitten in der Transkription
+            # aufräumen. Die Zuweisung bleibt bewusst LOKAL und wird wieder
+            # gelöst: hielte dieser Faden das Modell fest, gäbe ein Entladen
+            # den Speicher nie frei.
+            if hasattr(self.local_model, 'hole'):
+                self.local_model.an()
+                try:
+                    modell = self.local_model.hole()
+                    result = transcribe(audio_data, modell)
+                finally:
+                    modell = None
+                    self.local_model.ab()
+            else:
+                result = transcribe(audio_data, self.local_model)
             end_time = time.time()
 
             transcription_time = end_time - start_time

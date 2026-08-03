@@ -32,6 +32,7 @@ from ui.main_window import MainWindow
 from ui.settings_window import SettingsWindow
 from ui.status_window import StatusWindow
 from transcription import create_local_model
+from modellhalter import Modellhalter
 from input_simulation import InputSimulator
 from utils import ConfigManager
 from llm_processor import LLMProcessor
@@ -223,7 +224,14 @@ class QalamApp(QObject):
 
         model_options = ConfigManager.get_config_section('model_options')
         model_path = model_options.get('local', {}).get('model_path')
-        self.local_model = create_local_model() if not model_options.get('use_api') else None
+        # Nicht mehr hier laden, sondern erst beim Tastendruck -- und wieder
+        # entladen, wenn eine Weile niemand diktiert hat. Warum, steht in
+        # modellhalter.py: die 2084 MB lagen bisher rund um die Uhr auf der
+        # Karte, auch nachts und auch im Spiel.
+        self.local_model = (Modellhalter(create_local_model)
+                            if not model_options.get('use_api') else None)
+        if self.local_model:
+            self.local_model.starte_wache()
 
         self.result_thread = None
         self.llm_processor = LLMProcessor() if ConfigManager.get_config_value('llm_post_processing', 'enabled') else None
@@ -262,6 +270,13 @@ class QalamApp(QObject):
             self.key_listener.stop()
         if getattr(self, 'input_simulator', None):
             self.input_simulator.cleanup()
+        # Die Wache ist ein Hintergrundfaden. Beim Neustart über die
+        # Einstellungen liefe sonst eine zweite mit -- zwei Wachen, die
+        # dasselbe Modell verwalten, und keine weiß von der anderen.
+        halter = getattr(self, 'local_model', None)
+        if halter is not None and hasattr(halter, 'stoppe_wache'):
+            halter.stoppe_wache()
+            halter.entlade('Qalam beendet')
 
     def exit_app(self):
         """
@@ -368,6 +383,12 @@ class QalamApp(QObject):
         """
         if self.result_thread and self.result_thread.isRunning():
             return
+
+        # Hier und nicht erst beim Transkribieren: das Laden läuft ab jetzt in
+        # einem eigenen Faden, WÄHREND Ramzi spricht. Bei allem, was länger
+        # dauert als der Ladevorgang, wartet er also auf gar nichts.
+        if self.local_model:
+            self.local_model.wecke()
 
         self.result_thread = ResultThread(self.local_model, self.use_llm)
         if not ConfigManager.get_config_value('misc', 'hide_status_window'):

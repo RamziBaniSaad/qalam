@@ -133,8 +133,15 @@ def get_optimal_device():
         ConfigManager.console_print("Using CPU")
         return "cpu"
 
-def create_local_model():
-    """Create a local model using Whisper."""
+def create_local_model(erzwinge=None):
+    """Create a local model using Whisper.
+
+    `erzwinge` ist ein Paar ('cpu', 'int8') und übersteuert Gerät und Rechenart
+    aus der Konfiguration. Gebraucht wird das vom `Modellhalter`: der lädt nicht
+    mehr beim Start, sondern beim Tastendruck -- also möglicherweise mitten im
+    Spiel, wenn die Karte fast voll ist. Dann muss er auf die CPU ausweichen
+    können, ohne dass Ramzis Einstellung dauerhaft umgeschrieben wird.
+    """
     if not HAS_FASTER_WHISPER and not HAS_VOSK:
         ConfigManager.console_print("Neither Faster Whisper nor Vosk available, defaulting to API mode")
         return None
@@ -176,7 +183,10 @@ def create_local_model():
         compute_type = local_model_options['compute_type']
         model_path = local_model_options.get('model_path')
 
-        if compute_type == 'int8':
+        if erzwinge:
+            device, compute_type = erzwinge
+            ConfigManager.console_print(f'Erzwungen: {device}/{compute_type}.')
+        elif compute_type == 'int8':
             device = 'cpu'
             ConfigManager.console_print('Using int8 quantization, forcing CPU usage.')
         else:

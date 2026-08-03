@@ -46,6 +46,21 @@ STANDARD = {
     # 0 = Untertitel ganz aus. Damit ist der Regler gleichzeitig der Schalter.
     'untertitel_sekunden': 10,
 
+    # ------------------------------------------------- Qalam auf der Karte
+    # Wie lange das Diktat-Modell nach dem letzten Diktat noch auf der
+    # Grafikkarte liegen bleibt. Ramzis Auftrag vom 03.08.2026: es soll nicht
+    # rund um die Uhr 2 GB belegen, nur damit es jederzeit bereit ist.
+    #
+    # Zwei Werte, weil zwei Lagen. Im Alltag großzügig -- lädt es nach jedem
+    # Satz neu, wartet er ständig. Im Spiel knapp, denn dort zählt jedes
+    # Megabyte. Startet ein Spiel, während das Modell nur wartet, geht es
+    # sofort weg; dafür gibt es keinen Wert, das ist immer so.
+    #
+    # 0 im Alltag heißt NIE entladen (Regler ganz links = aus, wie überall
+    # hier). 0 im Spiel heißt: sofort weg, sobald das Diktat getippt ist.
+    'qalam_ruhe_sekunden': 180,
+    'qalam_spiel_sekunden': 10,
+
     # ------------------------------------------------------------------ Feedback
     # Ramzis Auftrag vom 01.08.2026 nachts: KEIN Schalter plus Skala mehr,
     # sondern je Sache EIN Regler von 0 bis 100 -- und 0 heißt aus. Zwei
