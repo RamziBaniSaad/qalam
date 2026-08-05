@@ -69,6 +69,7 @@ KATALOG = {
     'noor_video.wav':       'fenster_auf',
     'noor_musik.wav':       'fenster_auf',
     'noor_fenster_zu.wav':  'fenster_zu',
+    'noor_insel.wav':       'insel',
     # -- Qalam (Aufnahme)
     'rec_start.wav':        'aufnahme_start',
     'beep.wav':             'aufnahme_ende',

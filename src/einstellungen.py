@@ -90,6 +90,7 @@ STANDARD = {
     'laut_aufnahme_start': 100,   # Qalam beginnt aufzunehmen
     'laut_aufnahme_ende':  100,   # Qalam ist fertig
     'laut_countdown':      100,   # die Countdown-Klänge
+    'laut_insel':          100,   # neuer Eintrag auf der Insel (Tafel)
 
     # Das Sichtbare. Ramzi hielt hier nur an/aus für möglich -- Glanz und Blitz
     # haben aber je einen Helligkeitswert, also sind auch sie Regler mit
