@@ -75,8 +75,14 @@ KLAMMER_VORNE = ('mach', 'machs', 'tu', 'tue', 'kannst', 'wurdest', 'bitte')
 KLAMMER_RAEUMEN = ('raum', 'raume', 'raumst', 'raumen')
 
 # „mach ALLES zu" -- kein einzelnes Fenster gemeint, sondern mein Bildschirm.
-ALLES = ('alles', 'alle fenster', 'den bildschirm', 'deinen bildschirm',
-         'bei dir', 'auf', 'sauber', 'leer')
+#
+# Getrennt nach Einzelwörtern und Phrasen, weil beide anders geprüft werden
+# müssen: „auf" darf nur als ganzes Wort zählen (sonst träfe es „aufräumen"),
+# „deinen bildschirm" dagegen kann als Wortvergleich nie treffen -- es besteht
+# aus zweien. Zusammen in einer Liste blieben die Phrasen wirkungslos, und
+# „mach deinen Bildschirm zu" suchte dann ein Fenster namens „bildschirm".
+ALLES_WORTE = ('alles', 'auf', 'sauber', 'leer')
+ALLES_PHRASEN = ('alle fenster', 'den bildschirm', 'deinen bildschirm', 'bei dir')
 
 # „mach bei MIR alles zu" -- Ramzis Auftrag vom 05.08.2026. Liegen mehrere
 # Fenster von mir auf seinem Bildschirm, will er sie mit einem Satz los, ohne
@@ -141,7 +147,8 @@ def verstehe(rohtext):
 
     # „alles" erst NACH dem Katalog prüfen: sonst schlüge „mach alles zu"
     # richtig an, aber „mach das Aufräum-Fenster zu" ebenfalls.
-    if any(a in text.split() for a in ALLES):
+    if (any(a in text.split() for a in ALLES_WORTE)
+            or any(p in text for p in ALLES_PHRASEN)):
         return 'alles'
 
     rest = [w for w in text.split() if w not in FUELLER]
