@@ -452,10 +452,18 @@ class Assistent:
         nicht." Eine Sonderbehandlung für einen Fall, den es nicht gibt, wäre
         Code, den niemand je wieder versteht.
 
-        DIE DOPPELBELEGUNG (01.08.2026, seine Idee und sein erster Vorschlag):
-        einmal drücken hält an, zweimal schnell hintereinander bricht ab.
-        Dieselbe Taste für beides, weil beides zur selben Sache gehört -- und
-        weil eine zweite Sondertaste eine zweite Sache zum Merken wäre.
+        DIE BELEGUNG hängt am Zustand -- eine Taste, drei Bedeutungen, und
+        jede gilt genau dann, wenn die anderen sinnlos wären:
+
+            hört mir niemand zu  ->  RUFEN (wecken, wie das Weckwort)
+            ich höre zu, 1x      ->  anhalten
+            ich höre zu, 2x kurz ->  abbrechen
+
+        Die Doppelbelegung darunter ist vom 01.08.2026, seine Idee und sein
+        erster Vorschlag: dieselbe Taste für beides, weil beides zur selben
+        Sache gehört -- und weil eine zweite Sondertaste eine zweite Sache zum
+        Merken wäre. Aus demselben Grund kam am 05.08.2026 das Rufen dazu,
+        statt eine dritte Taste einzuführen.
 
         WARUM DER ERSTE DRUCK SOFORT PAUSIERT, statt erst eine Sekunde auf
         einen möglichen zweiten zu warten: in genau dieser Wartesekunde liefe
@@ -478,6 +486,36 @@ class Assistent:
                 if taste != keyboard.Key.ctrl_r:
                     return
                 jetzt = time.time()
+
+                # HÖRT MIR GERADE NIEMAND ZU? Dann ist die Taste der RUF.
+                #
+                # Ramzis Auftrag vom 05.08.2026, und er schließt zwei Lücken
+                # mit einem Griff. Erstens tat die Taste außerhalb einer
+                # Aufnahme etwas Sinnloses: sie pausierte eine Aufnahme, die
+                # es nicht gab, und konnte etwas abbrechen, das nicht lief.
+                # Zweitens -- und das ist der eigentliche Schmerz -- muss er
+                # meinen Namen oft zwei-, drei-, fünfmal rufen, bis das Ohr
+                # ihn hört. Seine Worte: "so unglaublich selten, dass du mich
+                # beim ersten Mal hörst."
+                #
+                # Ein Tastendruck trifft immer. Das ist ausdrücklich der
+                # Kompromiss und nicht die Lösung -- einen Knopf zu drücken
+                # statt den Namen zu sagen, nimmt etwas von dem "du bist
+                # einfach da". Das Weckwort bleibt der Hauptweg, die Taste ist
+                # der Ausweg, wenn er dreimal ins Leere geredet hat.
+                #
+                # Im eigenen Faden, weil pynput den Tastatur-Listener anhält,
+                # solange dieser Rückruf läuft: `_wach_werden` spielt einen Ton
+                # und rührt die Stimme an: das darf seine Tastatur nicht
+                # blockieren.
+                if jetzt >= self.ohr.folge_bis:
+                    # Zurücksetzen, damit ein schnell folgender zweiter Druck
+                    # als Pause gilt und nicht als Abbruch. Wer gerade erst
+                    # geweckt hat, will nicht im selben Atemzug abbrechen.
+                    self._letzter_tastendruck = 0.0
+                    threading.Thread(target=self._wach_werden, daemon=True).start()
+                    return
+
                 if jetzt - self._letzter_tastendruck <= DOPPEL_FENSTER:
                     # Zurücksetzen, damit ein DRITTER Druck wieder normal
                     # pausiert und nicht als Teil einer Kette gilt.
@@ -1030,7 +1068,13 @@ class Assistent:
                 sprechpost.bereit_melden()
                 text = sprechpost.abholen()
                 if text:
+                    # Die zweite Hälfte der Messung zu Ramzis Befund vom
+                    # 05.08.2026 (die erste steht in warteschlange.py). Zwischen
+                    # diesen beiden Zeilen liegt das Warten -- fehlt die zweite
+                    # im Protokoll, ist der Satz nicht bloß spät, sondern hängt.
+                    print(f'[Sprechpost] abgeholt: {text[:50]!r}', flush=True)
                     self.sprecher.sprich(text)
+                    print('[Sprechpost] gesprochen', flush=True)
                 else:
                     time.sleep(0.25)
             except Exception:

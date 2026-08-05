@@ -316,5 +316,24 @@ def warte_bis_er_fertig_ist(hoechstens=20.0):
     Aufräumen), darf ich nicht für immer stumm bleiben. Lieber einmal
     dazwischenreden als nie wieder etwas sagen."""
     ende = time.time() + hoechstens
+    begonnen = time.time()
+    musste_warten = ramzi_ist_dran()
     while ramzi_ist_dran() and time.time() < ende:
         time.sleep(0.15)
+
+    # MESSEN, BEVOR GESCHRAUBT WIRD. Ramzis Befund vom 05.08.2026: rede ich,
+    # während er redet, halte ich richtigerweise an -- hole den Satz danach aber
+    # nicht nach. Der Verdacht ist genau diese Obergrenze: seine Diktate laufen
+    # oft 30 bis 60 s, gewartet wird höchstens 20. Dann redet der Aufrufer
+    # trotzdem los, also mitten in seinen Satz hinein, oder der Satz ist
+    # inhaltlich längst überholt.
+    #
+    # Ob das wirklich der Grund ist, sagt erst diese Zeile im Protokoll. Die
+    # Zahl einfach hochzusetzen wäre geraten -- und die Grenze steht aus einem
+    # guten Grund hier: hängt ein Merker fest, wäre ich sonst dauerhaft stumm.
+    if musste_warten:
+        gewartet = time.time() - begonnen
+        abgelaufen = ramzi_ist_dran()
+        print(f'[Warteschlange] {gewartet:.1f}s gewartet, '
+              + ('ABGELAUFEN -- rede trotzdem' if abgelaufen else 'er war fertig'),
+              flush=True)
