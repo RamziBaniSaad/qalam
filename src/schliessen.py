@@ -40,6 +40,9 @@ import oeffnen  # noqa: E402  -- Katalog und _glaette werden geteilt
 WERKZEUGE = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge')
 SKRIPT_ALLES = os.path.join(WERKZEUGE, 'noor-links-zu.ps1')
 SKRIPT_EINS = os.path.join(WERKZEUGE, 'noor-zu.ps1')
+# Räumt AUF RAMZIS BILDSCHIRM weg, was ich ihm gezeigt habe -- und nur das.
+# Seine eigenen Fenster stehen in einer anderen Liste und bleiben unberührt.
+SKRIPT_SEINE = os.path.join(WERKZEUGE, 'noor-zeigen.ps1')
 
 # Dieselbe Deckelung wie beim Öffnen und aus demselben Grund: in einem langen
 # Auftrag kommt leicht mal „zumachen" vor, ohne dass ein Fenster gemeint ist.
@@ -64,9 +67,29 @@ ABSICHT = (
 # damit außen vor, „das ist mir zu viel" endet nicht auf „zu".
 KLAMMER_VORNE = ('mach', 'machs', 'tu', 'tue', 'kannst', 'wurdest', 'bitte')
 
+# Dieselbe Klammer, aber mit „auf" am Ende: „räum meinen Bildschirm AUF".
+#
+# Bewusst NUR mit Räum-Verben, nicht mit „mach"/„tu" -- sonst würde „mach mir
+# YouTube auf" als Schließbefehl gelesen, also das genaue Gegenteil dessen, was
+# er will. Die Endung entscheidet hier nicht allein; das Verb muss dazu passen.
+KLAMMER_RAEUMEN = ('raum', 'raume', 'raumst', 'raumen')
+
 # „mach ALLES zu" -- kein einzelnes Fenster gemeint, sondern mein Bildschirm.
 ALLES = ('alles', 'alle fenster', 'den bildschirm', 'deinen bildschirm',
          'bei dir', 'auf', 'sauber', 'leer')
+
+# „mach bei MIR alles zu" -- Ramzis Auftrag vom 05.08.2026. Liegen mehrere
+# Fenster von mir auf seinem Bildschirm, will er sie mit einem Satz los, ohne
+# jedes einzeln anzuklicken und ohne aus einem Vollbildspiel zu müssen.
+#
+# Muss VOR `ALLES` geprüft werden, und das ist der ganze Witz: „mach bei mir
+# alles zu" enthält beides. Zuerst `ALLES` zu fragen hieße, seinen Wunsch zu
+# hören und meinen eigenen Bildschirm zu räumen.
+#
+# Als Teilstring geprüft, nicht gegen einzelne Wörter -- das sind Phrasen aus
+# zwei Wörtern, die ein `split()`-Vergleich nie treffen könnte.
+BEI_RAMZI = ('bei mir', 'meinen bildschirm', 'meinem bildschirm',
+             'auf meiner seite', 'meine fenster', 'meiner seite')
 
 # Wörter, die zum Befehl gehören und nicht zum Namen des Fensters.
 FUELLER = {
@@ -94,7 +117,9 @@ def verstehe(rohtext):
     eindeutig = any(a in text for a in ABSICHT)
     # Verbklammer: „mach das wieder ZU" -- Partikel am Satzende, Verb vorn.
     klammer = (worte[-1] == 'zu' and any(w in KLAMMER_VORNE for w in worte))
-    if not (eindeutig or klammer):
+    # „räum meinen Bildschirm auf" -- dieselbe Klammer, andere Partikel.
+    klammer_auf = (worte[-1] == 'auf' and any(w in KLAMMER_RAEUMEN for w in worte))
+    if not (eindeutig or klammer or klammer_auf):
         return None
 
     # Erst den Katalog fragen: steht dort ein passender Name, ist das die
@@ -108,6 +133,11 @@ def verstehe(rohtext):
                 treffer, laenge = name, len(wg)
     if treffer:
         return treffer
+
+    # „bei mir" vor „alles": der Satz „mach bei mir alles zu" enthält beides,
+    # und die falsche Reihenfolge würde meinen Bildschirm räumen statt seinen.
+    if any(a in text for a in BEI_RAMZI):
+        return 'bei_ramzi'
 
     # „alles" erst NACH dem Katalog prüfen: sonst schlüge „mach alles zu"
     # richtig an, aber „mach das Aufräum-Fenster zu" ebenfalls.
@@ -141,6 +171,11 @@ def mach(rohtext):
     if not ziel:
         return None
 
+    if ziel == 'bei_ramzi':
+        _lauf(['powershell', '-NoProfile', '-NonInteractive',
+               '-ExecutionPolicy', 'Bypass', '-File', SKRIPT_SEINE, '-SeineZu'])
+        return 'Mache bei dir alles zu.'
+
     if ziel == 'alles':
         _lauf(['powershell', '-NoProfile', '-NonInteractive',
                '-ExecutionPolicy', 'Bypass', '-File', SKRIPT_ALLES])
@@ -154,6 +189,11 @@ def mach(rohtext):
 PROBEN = [
     'mach das wieder zu',
     'mach alles zu',
+    # Diese vier müssen 'bei_ramzi' ergeben, nicht 'alles':
+    'mach bei mir alles zu',
+    'mach bei mir zu',
+    'räum meinen Bildschirm auf',
+    'mach meine Fenster zu',
     'mach YouTube zu',
     'schließ mal Spotify',
     'räum auf',
