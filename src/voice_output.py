@@ -114,13 +114,59 @@ def in_saetze(text):
 
 
 def _leiser(an):
-    """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können."""
+    """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können.
+
+    Beim ZURÜCKSTELLEN wird gewartet, solange Ramzi selbst redet.
+
+    Ramzis Befund vom 06.08.2026, mehrfach erlebt: "während ich rede, geht
+    die Musik wieder lauter." Gemessen und bestätigt -- die Dämpfung hing am
+    falschen Ereignis. Sie ging hoch, sobald ICH mit Sprechen fertig war,
+    ohne zu prüfen, ob ER inzwischen angefangen hat. Genau das ist sein
+    Alltag: er fängt mitten in meinem Satz an. Aus seiner Sicht sah es so
+    aus, als würde die Musik ausgerechnet dann laut, wenn er verstanden
+    werden will.
+
+    Die Dämpfung gehört also an ZWEI Bedingungen, nicht an eine: leise
+    bleibt es, solange einer von uns beiden redet. Erst wenn BEIDE still
+    sind, geht sie zurück.
+
+    Die Obergrenze ist kein Schönheitsfehler, sondern Absicht: hängt der
+    Redet-Merker fest, bliebe die Musik sonst für immer leise, und Ramzi
+    müsste seinen Notausgang benutzen ("alles wieder laut"). Ein Wartender,
+    der nicht aufgeben kann, ist schlimmer als eine Sekunde zu früh."""
     try:
         import lautstaerke
-        # Eigener Prozess, nicht eigener Faden -- Begruendung in lautstaerke.py:
-        # dieser Code hat das Ohr schon einmal getoetet.
-        (lautstaerke.daempfen_im_hintergrund() if an
-         else lautstaerke.zuruecksetzen_im_hintergrund())
+        if an:
+            # Eigener Prozess, nicht eigener Faden -- Begruendung in
+            # lautstaerke.py: dieser Code hat das Ohr schon einmal getoetet.
+            lautstaerke.daempfen_im_hintergrund()
+            return
+
+        import threading
+        import warteschlange
+
+        def _wenn_beide_still():
+            # Höchstens 90 s warten. Länger als das redet niemand am Stück,
+            # und wenn doch, ist ein einmaliges Zurückstellen das kleinere
+            # Übel gegenüber dauerhaft leiser Musik.
+            ende = time.time() + 90
+            while time.time() < ende:
+                try:
+                    if not warteschlange.ramzi_redet():
+                        break
+                except Exception:
+                    break
+                time.sleep(0.3)
+            lautstaerke.zuruecksetzen_im_hintergrund()
+
+        try:
+            redet = warteschlange.ramzi_redet()
+        except Exception:
+            redet = False
+        if redet:
+            threading.Thread(target=_wenn_beide_still, daemon=True).start()
+        else:
+            lautstaerke.zuruecksetzen_im_hintergrund()
     except Exception:
         pass
 
