@@ -426,7 +426,7 @@ def _klick(x, y):
     maus = Maus()
     vorher = maus.position
     maus.position = (x, y)
-    time.sleep(0.12)
+    time.sleep(0.08)
     maus.click(Button.left)
     # War 0.3 -- dritte vorsichtig gekuerzte Stelle, keine dokumentierte
     # Fehlersuche dahinter.
