@@ -286,6 +286,21 @@ class Assistent:
             (['hor auf', 'sei mal still', 'ruhe', 'stopp reden', 'nicht weiter reden'],
              lambda: self._still()),
 
+            # Das Gegenstück zum Unterbrechen. Ramzi unterbricht mich oft --
+            # mit meinem Namen oder der rechten Strg-Taste --, und danach fehlt
+            # ihm der Rest. Sein Auftrag vom 07.08.2026.
+            #
+            # Vorgelesen wird der letzte ABSATZ von vorn und nicht "ab der
+            # Stelle": wo genau der Ton abgeschnitten wurde, weiß niemand --
+            # der Sprecher gibt Ton an die Karte und stoppt den Strom, es gibt
+            # keine Marke "bis hierher gehört". Ein "weiter ab Wort 14" wäre
+            # geraten, und Raten ist teurer als ein paar Sekunden Wiederholung.
+            # Ramzi hat genau das selbst vorgeschlagen.
+            (['rede weiter', 'red weiter', 'sprich weiter', 'sag das nochmal',
+              'nochmal sagen', 'wiederhol', 'nochmal von vorn',
+              'noch mal von vorne', 'mach weiter mit dem satz'],
+             lambda: self._nochmal()),
+
             # Ramzis Notausgang vom 03.08.2026, nachdem sein Video kaum noch zu
             # hören war: „Statt dass ich in die Einstellungen gehe, in den
             # Sound, und bei all meinen Apps alles auf 100 Prozent mache, sage
@@ -333,6 +348,32 @@ class Assistent:
     def _still(self):
         self.sprecher.stoppe()
         return None      # nichts sagen -- er will ja gerade Ruhe
+
+    def _nochmal(self):
+        """Den letzten Absatz noch einmal vorlesen.
+
+        Die Arbeit macht werkzeuge/noor-nochmal.ps1 -- dieselbe Datei, die auch
+        der Tafel-Knopf "Nochmal" startet. EIN Weg für Sprache und Knopf, damit
+        die beiden nicht auseinanderlaufen; genau dieselbe Regel wie bei
+        noor-knoepfe.json.
+
+        Das Skript wirft die Sätze in den Sprech-Briefkasten, den dieser
+        Prozess ohnehin leert -- ich muss hier also nichts sprechen und nichts
+        zurückgeben.
+        """
+        skript = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                              'noor-nochmal.ps1')
+        if not os.path.exists(skript):
+            return 'Dafür fehlt mir das Skript.'
+        try:
+            subprocess.Popen(
+                ['powershell', '-NoProfile', '-NonInteractive',
+                 '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+                 '-File', skript],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception:
+            return 'Das hat nicht geklappt.'
+        return None      # der Absatz kommt gleich selbst, kein Zwischenruf
 
     def _alles_laut(self):
         """Jedes Programm auf volle Lautstärke -- Ramzis Handbremse.
