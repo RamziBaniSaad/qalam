@@ -1008,6 +1008,7 @@ class Assistent:
         self._laeuft.set()
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
         threading.Thread(target=self._sprechpost_wache, daemon=True).start()
+        threading.Thread(target=self._befehlswache, daemon=True).start()
         threading.Thread(target=self._stimmen_wache, daemon=True).start()
         self._abbruch_taste_starten()
         # XTTS im Hintergrund warmlaufen lassen, damit nicht der erste Satz
@@ -1120,6 +1121,58 @@ class Assistent:
                     time.sleep(0.25)
             except Exception:
                 time.sleep(1.0)
+
+    # ------------------------------------------------------------------
+    # Befehle von aussen -- der Weg, den die Tafel-Knoepfe "Stopp" und
+    # "Weckwort" brauchen. Ramzis Auftrag vom 07.08.2026.
+    #
+    # EIN EIGENER FADEN, und das ist der ganze Punkt: die Sprechpost-Wache
+    # nebenan blockiert, solange ich einen Satz spreche (`sprich()` kehrt erst
+    # danach zurueck). Genau DANN will er "Stopp" druecken -- ein Knopf, der
+    # erst wirkt, wenn ich fertig geredet habe, waere kein Stopp.
+    #
+    # Dateien statt Netzwerk, dieselbe Begruendung wie beim Sprech-Briefkasten:
+    # ein Port muesste vergeben und aufgeraeumt werden, eine Datei liegt
+    # einfach, bis jemand kommt. Der Name traegt den Befehl, der Inhalt ist
+    # egal -- geschrieben wird ueber ".teil" und dann umbenannt, damit nie ein
+    # halb geschriebener Befehl gelesen wird.
+    BEFEHLE_ORDNER = '.befehle'
+
+    def _befehlswache(self):
+        ordner = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            self.BEFEHLE_ORDNER)
+        while self._laeuft.is_set():
+            try:
+                if not os.path.isdir(ordner):
+                    time.sleep(0.3)
+                    continue
+                for name in sorted(os.listdir(ordner)):
+                    if name.endswith('.teil'):
+                        continue          # noch im Schreiben
+                    pfad = os.path.join(ordner, name)
+                    try:
+                        os.remove(pfad)   # erst wegnehmen, dann tun
+                    except OSError:
+                        continue
+                    self._befehl_ausfuehren(name.split('.')[0].lower())
+                time.sleep(0.15)
+            except Exception:
+                time.sleep(1.0)
+
+    def _befehl_ausfuehren(self, befehl):
+        print(f'[Befehl] {befehl}', flush=True)
+        if befehl == 'stopp':
+            self.sprecher.stoppe()
+        elif befehl == 'weckwort':
+            # Umschalten und nicht "an"/"aus": der Knopf weiss zwar, was er
+            # anzeigt, aber zwischen Anzeige und Druck kann sich der Zustand
+            # geaendert haben (Ramzi sagt "Noor, schlaf" und drueckt danach).
+            # Wer umschaltet, kann nicht danebenliegen.
+            schlaeft = not self.ohr.schlaeft
+            self.ohr.schlaeft = schlaeft
+            if not schlaeft:
+                self.sprecher.sprich('Ich bin da.')
 
     def stoppe(self):
         self._laeuft.clear()
