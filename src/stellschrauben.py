@@ -329,6 +329,70 @@ TABELLE = [
       ' tone', 'quittungston', 'bestatigungston', 'wachton', 'wach ton'],
      'schalter', STIMME, 'toene'),
 
+    # --- Die Knöpfe der Tafel, jetzt auch per Sprache ----------------------
+    #
+    # Ramzis Regel vom 07.08.2026: "all die Knöpfe, die wir hier haben, sollten
+    # eigentlich schon als Reflexe da sein." Umgekehrt gilt es ausdrücklich
+    # NICHT -- nicht jeder Reflex braucht einen Knopf, das wären viel zu viele.
+    #
+    # Die Art ist 'wahl' und nicht 'schalter': "Hände frei" ist kein An/Aus im
+    # Sinne von `_schalter()` (das kennt "einschalten", "ausmachen" und
+    # dergleichen, aber weder "frei" noch "gebunden"), und der Anzeigeschirm
+    # hat ohnehin drei Zustände. Jede Möglichkeit bringt ihre eigenen
+    # Stichwörter mit -- das ist zugleich die Antwort auf seine Sorge vor
+    # Überschneidungen: die inneren Stichwörter werden erst geprüft, NACHDEM
+    # das äußere getroffen hat. "Sichtbar" bei den Schritten kann deshalb nicht
+    # mit "sichtbar" anderswo kollidieren.
+    (['hande', 'haende'], 'wahl', STIMME, ('haende', [
+        (['frei', 'darfst', 'ruhig anfassen', 'wieder anfassen'],
+         True, 'Hände sind frei.'),
+        (['gebunden', 'nicht anfassen', 'finger weg', 'fass nichts'],
+         False, 'Hände sind gebunden.'),
+    ])),
+
+    (['schritte'], 'wahl', STIMME, ('feedback_modus', [
+        (['nur sichtbar', 'sichtbar', 'nur was ich sehe'],
+         'sichtbar', 'Ich melde nur noch, was du auch siehst.'),
+        (['alle', 'jeden'], 'alle', 'Ich melde jeden Schritt.'),
+    ])),
+
+    (['aufnahmefenster', 'aufnahme fenster', 'aufnahmenfenster'],
+     'wahl', STIMME, ('bild_fenster_aus', [
+        (['versteck', 'ausblenden', 'nicht zeigen', 'unsichtbar'],
+         True, 'Das Aufnahmefenster bleibt versteckt.'),
+        (['zeig', 'einblenden', 'sichtbar'],
+         False, 'Das Aufnahmefenster ist wieder sichtbar.'),
+    ])),
+
+    (['anzeigeschirm', 'untertitel auf', 'untertitel bei', 'untertitel nach',
+      'untertitel zum', 'untertitel zur'],
+     'wahl', STIMME, ('anzeige_schirm', [
+        (['tafel', 'sekundar', 'linken'],
+         'ich', 'Untertitel laufen bei der Tafel.'),
+        (['grossen', 'primar', 'mitte'],
+         'ramzi', 'Untertitel laufen auf dem großen.'),
+        (['ipad', 'i pad', 'tablet', 'tertiar'],
+         'ipad', 'Untertitel laufen auf dem iPad.'),
+    ])),
+
+    # Die Stimme über ihre NAMEN und nicht über das Wort "Stimme": das ist
+    # schon belegt -- "stimme laut" und "stimme leise" gehören zur Lautstärke.
+    # Ein Reflex, der sich mit einem bestehenden beißt, ist schlimmer als
+    # keiner: man merkt erst beim Danebengreifen, dass etwas fehlt.
+    (['ludvig', 'ludwig', 'thorsten', 'torsten'],
+     'wahl', STIMME, ('stimme_motor', [
+        (['ludvig', 'ludwig'], 'xtts', 'Ich rede jetzt als Ludvig.'),
+        (['thorsten', 'torsten'], 'piper', 'Ich rede jetzt als Thorsten.'),
+    ])),
+
+    # "sichtdaur" ist kein Tippfehler: `_glaette` ersetzt oben "ue" durch "u",
+    # damit "Ue" und "Ü" dasselbe treffen. Aus "Sichtdauer" wird dadurch
+    # "sichtdaur", und ein Stichwort in der richtigen Schreibweise hätte hier
+    # nie gegriffen. Dieselbe Sorte Falle wie "laut starker" weiter oben --
+    # die Liste muss die geglättete Form enthalten, nicht die gesprochene.
+    (['sichtdaur', 'sicht daur', 'sichtdauer'],
+     'zahl', STIMME, 'mindest_anzeige_sekunden'),
+
     # --- Sonderfälle ------------------------------------------------------
     (['probe hor', 'probe an', 'probehor', 'mach mal eine probe', 'probesatz',
       'sag mal was', 'sag was', 'wie klingst du', 'wie horst du sich',
@@ -349,6 +413,11 @@ GRENZEN = {
     'tempo':        (0.8, 1.8, 0.05),
     'lautstaerke':  (0.0, 1.5, 0.05),
     'stille_ms':    (600, 10000, 200),
+    # Untergrenze 0, und 0 heißt AUS -- Ramzis Regel für jeden Regler dieser
+    # Tafel. Dieselben Zahlen wie der Schieber in index.html; ein Wert, den die
+    # Tafel nicht darstellen kann, würde beim nächsten Anfassen still
+    # zurechtgebogen.
+    'mindest_anzeige_sekunden': (0, 120, 1),
     'orange_seconds':     (5, 3600, 1),
     'red_seconds':        (5, 3600, 1),
     'auto_submit_seconds': (10, 3600, 1),
@@ -387,6 +456,20 @@ def _setze_stimme(schluessel, wert, text, worte):
         wert = _rasten(_grenzen(wert, klein, gross), schritt)
         einstellungen.setze(tempo=wert)
         return f'Tempo steht auf {_sprich_zahl(wert)}.'
+
+    if schluessel == 'mindest_anzeige_sekunden':
+        # Immer Sekunden. "Sichtdauer eine Minute" ist trotzdem erlaubt --
+        # niemand rechnet freiwillig um, nur weil die Einheit intern eine
+        # andere ist.
+        if einheit == 'min':
+            wert *= 60
+        elif einheit == 'ms':
+            wert /= 1000.0
+        wert = int(_rasten(_grenzen(wert, klein, gross), schritt))
+        einstellungen.setze(mindest_anzeige_sekunden=wert)
+        if wert == 0:
+            return 'Sichtdauer ist aus, ich räume nichts mehr weg.'
+        return f'Sichtdauer steht auf {_sprich_dauer(wert)}.'
 
     # Lautstärke
     if einheit == '%' or wert > 1.5:
@@ -430,6 +513,21 @@ def _setze_schalter(ort, schluessel, an):
         _yaml_setze(schluessel, an)
     ja, nein = SCHALTER_NAMEN[schluessel]
     return ja if an else nein
+
+
+def _setze_wahl(ort, schluessel, wert, ansage):
+    """Einen von mehreren festen Zuständen setzen.
+
+    Der Unterschied zu `_setze_schalter`: dort gibt es an und aus, hier drei
+    Bildschirme, zwei Stimmen oder zwei Meldungsumfänge. Die Ansage kommt aus
+    der Tabelle mit, weil sie je Möglichkeit anders lautet -- ein
+    zusammengebauter Satz ("X steht auf ipad") klingt nach Maschine.
+    """
+    if ort == STIMME:
+        einstellungen.setze(**{schluessel: wert})
+    else:
+        _yaml_setze(schluessel, wert)
+    return ansage
 
 
 def _stand():
@@ -537,7 +635,14 @@ def verstehe(rohtext, ausfuehren=True):
     # Lautstärke der Musik wirklich ändern, statt so zu tun. Ein ehrliches
     # "verstehe ich noch nicht" ist besser als eine falsche Tat.
     if any(w in text for w in ('musik', 'spotify', 'lied', 'song', 'playlist',
-                               'titel', 'video')):
+                               'video')):
+        return None
+    # "titel" braucht eine Wortgrenze, alle anderen nicht. Grund: "Untertitel"
+    # enthält es -- und damit hat dieser Riegel jeden Untertitel-Befehl
+    # verschluckt, ohne eine Spur zu hinterlassen. Gefunden am 07.08.2026 beim
+    # ersten Trockenlauf des neuen Anzeigeschirm-Reflexes; ohne den Test wäre
+    # er als "geht halt nicht" durchgegangen.
+    if re.search(r'\btitel\b', text):
         return None
 
     # Ein Eintrag, der nur mit dem Stichwort trifft aber keine Zahl und kein
@@ -577,6 +682,19 @@ def verstehe(rohtext, ausfuehren=True):
                 return f'[würde {schluessel} setzen: {an}]'
             return _setze_schalter(ort, schluessel, an)
 
+        if art == 'wahl':
+            feld, moeglichkeiten = schluessel
+            for teile, w, ansage in moeglichkeiten:
+                if _trifft(teile, text):
+                    if not ausfuehren:
+                        return f'[würde {feld} setzen: {w}]'
+                    return _setze_wahl(ort, feld, w, ansage)
+            # Das Stichwort saß, die Möglichkeit fehlt ("Hände" allein). Nicht
+            # aufgeben, sondern den nächsten Eintrag ranlassen -- dieselbe
+            # Regel wie oben, sonst verdeckt ein Halbtreffer einen echten
+            # Befehl weiter hinten.
+            continue
+
         # art == 'zahl'
         if wert is None:
             # "mach mal lauter" / "rede langsamer" -- kein Zahlwert, aber eine
@@ -592,6 +710,16 @@ def verstehe(rohtext, ausfuehren=True):
                     return f'[würde lautstaerke setzen: {1.0 if an else 0.0}]'
                 einstellungen.setze(lautstaerke=1.0 if an else 0.0)
                 return 'Stimme ist stumm.' if not an else 'Lautstärke steht auf 100 Prozent.'
+            # "Sichtdauer aus" ist der Weg, mir das Aufräumen ganz aus der Hand
+            # zu nehmen -- ohne ihn müsste Ramzi eine Zahl nennen, um etwas
+            # abzuschalten. "Sichtdauer an" bringt die Vorgabe zurück.
+            if schluessel == 'mindest_anzeige_sekunden' and an is not None:
+                neu = 5 if an else 0
+                if not ausfuehren:
+                    return f'[würde mindest_anzeige_sekunden setzen: {neu}]'
+                einstellungen.setze(mindest_anzeige_sekunden=neu)
+                return ('Sichtdauer steht auf fünf Sekunden.' if an
+                        else 'Sichtdauer ist aus, ich räume nichts mehr weg.')
             continue
         if not ausfuehren:
             return f'[würde {schluessel} setzen: {wert} ({_einheit(text) or "ohne Einheit"})]'

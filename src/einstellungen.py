@@ -128,6 +128,23 @@ STANDARD = {
     # das selbst für eine Einstellung, die niemand braucht -- sie ist drin,
     # weil sie fast nichts kostet und in einem verkauften Produkt fehlen würde.
     'bild_fenster_aus': False,
+
+    # DIESE ZWEI GEHÖREN HIERHER, auch wenn nur die Tafel sie setzt -- und das
+    # ist kein Schönheitsfehler, sondern ein stiller Datenverlust, der hier
+    # lauerte:
+    #
+    # `setze()` baut die Datei aus `alle()` neu auf, und `alle()` behält nur,
+    # was in dieser Tabelle steht. Ein Schlüssel, der in der Datei liegt, hier
+    # aber fehlt, wird also bei JEDER gesprochenen Änderung weggeschrieben.
+    # "Tempo eins vier" hätte gereicht, um Sichtdauer und Zoom zu löschen --
+    # die Tafel wäre beim nächsten Start auf die Vorgaben zurückgesprungen,
+    # ohne dass jemand etwas verstellt hat.
+    #
+    # Gefunden am 07.08.2026 beim Anschließen der Sprachreflexe an genau diese
+    # beiden Werte. Sichtbar war der Fehler nie: zwischen einem gesprochenen
+    # Befehl und dem nächsten Tafel-Neustart sieht selten jemand nach.
+    'mindest_anzeige_sekunden': 5,   # Sichtdauer, Bereich "Sehen"
+    'tafel_zoom': 100,               # Zoomstufe der Tafel in Prozent
 }
 
 _stand = {'zeit': None, 'werte': dict(STANDARD)}
