@@ -176,8 +176,53 @@ try:
 except Exception as e:
     print(f'Untertitel nicht gestartet: {e}')
 
+def _schon_da():
+    """Läuft main.py schon? Dann gibt es hier keine zweite.
+
+    Ramzis Befund vom 06.08.2026 nachts: „es laufen irgendwie zwei Instanzen von
+    Qalam." Gemessen und bestätigt — main.py lief zweimal, einmal aus dem
+    Windows-Autostart (launcher_hidden.vbs) und einmal als Kind von hier. Zwei
+    Tray-Symbole, zwei Anwärter auf dieselbe Tastenkombination.
+
+    Es ist dieselbe Falle wie am 31.07., nur eine Ebene höher: damals stritten
+    zwei Ohren um dasselbe Mikrofon, und danach hörte keines mehr etwas.
+
+    WARTEN und nicht überspringen: der Aufruf unten bestimmt die Lebensdauer
+    dieses Prozesses — endet er, räumt der finally-Zweig Ohr und Untertitel mit
+    weg. Kehrte ich hier einfach zurück, wären beide sofort wieder tot.
+
+    Rückgabe: die Prozesse, auf die zu warten ist (leer = ich starte selbst).
+    Die venv-Hülle startet den Basis-Interpreter als Kind, es sind also
+    typischerweise ZWEI Einträge für EIN Programm — für die Wartefrage
+    unerheblich.
+    """
+    try:
+        import psutil
+    except Exception:
+        return []
+    ziel = os.path.join('src', 'main.py').lower()
+    treffer = []
+    for p in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            if p.info['pid'] == os.getpid():
+                continue
+            zeile = ' '.join(p.info['cmdline'] or []).lower()
+            if ziel in zeile and 'qalam' in zeile:
+                treffer.append(p)
+        except Exception:
+            continue
+    return treffer
+
+
 try:
-    subprocess.run([sys.executable, im_projekt('src', 'main.py')])
+    _laufende = _schon_da()
+    if _laufende:
+        print(f'Qalam läuft schon ({len(_laufende)} Prozess(e)) -- '
+              f'ich starte keine zweite und warte.')
+        import psutil
+        psutil.wait_procs(_laufende)
+    else:
+        subprocess.run([sys.executable, im_projekt('src', 'main.py')])
 finally:
     if schrift and schrift.poll() is None:
         schrift.terminate()
