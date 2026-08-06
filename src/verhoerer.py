@@ -41,7 +41,28 @@ def _tabelle():
             # Ausfall, siehe reference_noor_stellschrauben.
             with open(DATEI, encoding='utf-8-sig') as f:
                 roh = json.load(f)
-            _stand['tabelle'] = {k: v for k, v in roh.items() if not k.startswith('_')}
+            flach = {}
+            for k, v in roh.items():
+                if k.startswith('_'):
+                    continue
+                if isinstance(v, list):
+                    # NEUE FORM (07.08.2026): das Wort selbst ist der Schlüssel,
+                    # darunter seine Verhörer als Liste --
+                    # "aniworld": ["anivorld", "any world", ...].
+                    # Ramzis Einwand gegen die alte Fassung: hundert flache
+                    # Paare lesen sich nicht, wozu sie gehören. Hier wird die
+                    # Liste zur flachen Nachschlagetabelle aufgerollt, die
+                    # `korrigiere()` unten unverändert benutzt.
+                    for falsch in v:
+                        flach[falsch] = k
+                else:
+                    # ALTE FORM bleibt lesbar: falsch -> richtig, ein Paar pro
+                    # Zeile. Zwei Formen gleichzeitig zu können heißt, die
+                    # Datei muss nicht in einem Zug umgestellt sein -- eine
+                    # halb umgestellte Tabelle ließe sonst Befehle lautlos
+                    # durchfallen.
+                    flach[k] = v
+            _stand['tabelle'] = flach
             _stand['zeit'] = zeit
         except Exception:
             pass  # halb geschriebene Datei: beim naechsten Mal wieder versuchen
