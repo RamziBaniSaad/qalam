@@ -18,9 +18,23 @@ Set procs = svc.ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHER
 running = False
 Dim pids()
 n = 0
+' Die TAFEL bleibt ausdruecklich verschont, und der Leucht-Rahmen mit ihr. Sie
+' sind eigene Programme (noor/werkzeuge/tafel/tafel.py bzw. noor-arbeitet.py)
+' und haben mit dem Diktat nichts zu tun -- sie borgen sich nur Qalams Python,
+' weil PyQt5 allein in dieser venv liegt. Genau dieser geborgte Pfad hat
+' "qalam" in ihrer Befehlszeile stehen, und damit fielen sie hier jedes Mal
+' mit um.
+'
+' Ramzis Befund vom 06.08.2026 nachts: "du hast den Dashboard beendet und er
+' ist auf jeden Fall nicht wieder gestartet." Ich hatte es an dem Abend selbst
+' getan, mit demselben Filter -- der Umschalter tat es die ganze Zeit auch, nur
+' unbemerkt. Ein Hotkey, der Grafikspeicher freigeben soll, darf ihm nicht die
+' Anzeige mitnehmen, auf der er abliest, was ueberhaupt laeuft.
 For Each p In procs
     If Not IsNull(p.CommandLine) Then
-        If InStr(LCase(p.CommandLine), "qalam") > 0 Then
+        If InStr(LCase(p.CommandLine), "qalam") > 0 _
+           And InStr(LCase(p.CommandLine), "tafel.py") = 0 _
+           And InStr(LCase(p.CommandLine), "noor-arbeitet.py") = 0 Then
             ReDim Preserve pids(n)
             pids(n) = p.ProcessId
             n = n + 1
