@@ -215,7 +215,10 @@ def zurueck_zu(hwnd):
                 vorn = _user32.GetForegroundWindow()
                 if vorn and not _gleich(vorn, ziel):
                     _user32.ShowWindow(ctypes.c_void_p(int(vorn)), 6)   # SW_MINIMIZE
-            time.sleep(0.25)
+            # War 0.25 -- reine Nachsehen-Pause ohne dokumentierten Fehlschlag
+            # dahinter, deshalb als erste von wenigen vorsichtig gekuerzt.
+            # Ramzis Auftrag 07.08.2026: die Bruecke stoert ihn beim Zocken.
+            time.sleep(0.15)
             if _gleich(_user32.GetForegroundWindow(), ziel):
                 return stufe
         except Exception:
@@ -293,7 +296,9 @@ def hole_nach_vorn(hwnd):
                     time.sleep(0.25)
 
             _user32.SetForegroundWindow(hwnd)
-            time.sleep(0.3)
+            # War 0.3 -- ebenfalls eine reine Nachsehen-Pause, zweite von
+            # wenigen vorsichtig gekuerzten Stellen.
+            time.sleep(0.2)
             if _gleich(_user32.GetForegroundWindow(), hwnd):
                 return True
         except Exception:
@@ -423,7 +428,9 @@ def _klick(x, y):
     maus.position = (x, y)
     time.sleep(0.12)
     maus.click(Button.left)
-    time.sleep(0.3)
+    # War 0.3 -- dritte vorsichtig gekuerzte Stelle, keine dokumentierte
+    # Fehlersuche dahinter.
+    time.sleep(0.2)
     maus.position = vorher
 
 
