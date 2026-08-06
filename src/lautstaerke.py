@@ -262,6 +262,29 @@ if __name__ == '__main__':
         daempfen()
     elif '--zurueck' in sys.argv:
         zuruecksetzen()
+    elif '--alles-laut' in sys.argv:
+        # Der Notausgang als eigener Aufruf -- damit der Tafel-Knopf eine
+        # DATEI starten kann statt `pythonw -c "import lautstaerke"`.
+        #
+        # Der Unterschied ist genau der Fehler, den Ramzi am 06.08.2026 nachts
+        # dreimal gemeldet hat ("funktioniert alles laut nicht"): bei `-c`
+        # steht in sys.path[0] das ARBEITSVERZEICHNIS, und scheitert der Import
+        # dort, sieht das niemand -- pythonw hat keine Konsole, das PowerShell-
+        # Skript meldete trotzdem "alles laut". Ein gestartetes Skript legt
+        # SEINEN EIGENEN Ordner in sys.path, das kann nicht daneben gehen.
+        #
+        # Und es schreibt ein Protokoll: ein Notausgang, dessen Scheitern
+        # unsichtbar ist, ist keiner.
+        anzahl = alles_laut()
+        try:
+            with open(os.path.join(os.environ.get('TEMP', '.'),
+                                   'noor-lautstaerke.log'), 'a',
+                      encoding='utf-8') as f:
+                f.write(f'{time.strftime("%H:%M:%S")} alles_laut -> '
+                        f'{anzahl} Programme\n')
+        except Exception:
+            pass
+        print(anzahl)
     else:
         # Selbsttest: dämpfen, hinhören, zurückstellen.
         print('Dämpfe …', daempfen(), 'Programme')
