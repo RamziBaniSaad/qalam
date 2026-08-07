@@ -69,11 +69,76 @@ if IS_WINDOWS:
     _user32.GetWindow.restype = ctypes.c_void_p
 
 
+def _griff(x):
+    """Einen Fenstergriff als schlichte Zahl, egal wie ctypes ihn verpackt hat.
+
+    `int()` auf ein `c_void_p` ist KEINE Umwandlung -- ctypes liest dann den
+    rohen Speicher als Zeichenkette und wirft einen ValueError:
+
+        int(ctypes.c_void_p(12345))
+        ValueError: invalid literal for int() with base 10: b'90\\x00...'
+
+    Das war der eigentliche Fehler hinter dem ganzen Rätsel „die Rückgabe
+    meldet Fehlschlag, obwohl das Fenster vorn liegt" (07.08.2026, gemessen um
+    03:15). `_gleich(vorn, ziel)` bekam `ziel` als `c_void_p`, ist jedes Mal
+    geflogen, und der Fehler wurde von der Wartefunktion stillschweigend
+    geschluckt. Damit war der Vergleich seit dem Tag kaputt, an dem er gebaut
+    wurde -- und zwar lautlos: alles lief, es war nur immer „nein".
+
+    Genau die Sorte Fehler, die ohne Protokoll nie auffällt. Sichtbar wurde er
+    erst, als eine Zeile den Fenstertitel MIT ausgab und daneben „nein" stand.
+    """
+    if x is None:
+        return 0
+    roh = getattr(x, 'value', x)
+    try:
+        return int(roh or 0) & 0xFFFFFFFFFFFFFFFF
+    except (TypeError, ValueError):
+        return 0
+
+
 def _gleich(a, b):
     """Zwei Fenstergriffe vergleichen, egal wie ctypes sie gerade verpackt hat."""
-    if a is None or b is None:
-        return False
-    return (int(a) & 0xFFFFFFFFFFFFFFFF) == (int(b) & 0xFFFFFFFFFFFFFFFF)
+    ga, gb = _griff(a), _griff(b)
+    return bool(ga and gb and ga == gb)
+
+
+def _prozess(hwnd):
+    """Zu welchem Programm gehört dieses Fenster?"""
+    g = _griff(hwnd)
+    if not g:
+        return None
+    try:
+        pid = ctypes.c_ulong()
+        _user32.GetWindowThreadProcessId(ctypes.c_void_p(g), ctypes.byref(pid))
+        return int(pid.value) or None
+    except Exception:
+        return None
+
+
+def _wieder_dort(ziel):
+    """Ist Ramzi wieder da, wo er war? Programm zählt, nicht der Fenstergriff.
+
+    Gemessen am 07.08.2026, 03:11 -- der Beweis stand im eigenen Protokoll:
+
+        [Brücke] Stufe switch: nein nach 0.12 s -- vorn liegt 'Minecraft 1.8.9'
+
+    „Nein" und gleichzeitig liegt Minecraft vorn. Der Wechsel hatte also
+    längst geklappt, nur passte der Fenstergriff nicht zu dem, den ich mir
+    gemerkt hatte: ein Spiel im Vollbild hat mehr als ein Fenster, und beim
+    Zurückholen kommt nicht zwingend dasselbe nach vorn.
+
+    Das war nicht nur langsam, sondern gefährlich: weil keine Stufe ihren
+    eigenen Erfolg erkannt hat, lief die Kette bis zur härtesten weiter -- und
+    die klappt das Fenster zu, das gerade vorn liegt. Also Ramzis Spiel.
+
+    Deshalb wird das PROGRAMM verglichen. Ein anderes Fenster desselben
+    Spiels ist für ihn dasselbe Fenster."""
+    vorn = _user32.GetForegroundWindow()
+    if _gleich(vorn, ziel):
+        return True
+    p1, p2 = _prozess(vorn), _prozess(ziel)
+    return bool(p1 and p2 and p1 == p2)
 
 
 def finde_fenster(titel=FENSTER_TITEL):
@@ -241,8 +306,13 @@ def zurueck_zu(hwnd):
                 else:
                     _user32.SetForegroundWindow(ziel)
             else:
+                # Vor dem Zuklappen NOCHMAL fragen -- und zwar nach dem
+                # Programm. Sonst klappt diese Stufe genau das Fenster zu, das
+                # zurückgeholt werden sollte: Ramzis Spiel.
+                if _wieder_dort(ziel):
+                    return stufe
                 vorn = _user32.GetForegroundWindow()
-                if vorn and not _gleich(vorn, ziel):
+                if vorn:
                     _user32.ShowWindow(ctypes.c_void_p(int(vorn)), 6)   # SW_MINIMIZE
                 # Und dann AKTIV holen, statt darauf zu warten, dass Windows
                 # von selbst das nächste Fenster nach vorn schiebt.
@@ -273,8 +343,15 @@ def zurueck_zu(hwnd):
             # Also kurz nachsehen bei den beiden, die nur manchmal reichen,
             # und lange bei der, die es am Ende tut. Nachsehen kostet im
             # Erfolgsfall nichts: es bricht ab, sobald das Fenster vorn ist.
-            if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), ziel),
-                          0.50 if stufe == 'zuklappen' else 0.12):
+            _seit = time.monotonic()
+            geschafft = _warte_bis(lambda: _wieder_dort(ziel),
+                                   0.50 if stufe == 'zuklappen' else 0.25)
+            print(f'[{time.strftime("%H:%M:%S")}] [Brücke] Stufe {stufe}: '
+                  f'{"DA" if geschafft else "nein"} nach '
+                  f'{time.monotonic() - _seit:.2f} s -- vorn liegt '
+                  f'{_titel(int(_user32.GetForegroundWindow() or 0))!r}',
+                  flush=True)
+            if geschafft:
                 return stufe
         except Exception:
             continue
@@ -574,15 +651,26 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         # aus "Das hier tippe ich" wurde 'xDas hier tippe ich'. Die Prüfung
         # meldete daraufhin "kein Eingabefeld" -- nachdem sie seinen Text
         # bereits ausgeschnitten hatte. Sein Text war damit weg.
+        # Ende-Taste und Probe ohne Pause dazwischen, DANN einmal warten.
+        #
+        # Die beiden Pausen (0,12 + 0,25) standen hintereinander, obwohl sie
+        # dasselbe abwarten: dass die Oberfläche die Tastendrücke verarbeitet
+        # hat. Die Reihenfolge ist ohnehin gesichert -- Windows stellt
+        # Tastendrücke der Reihe nach zu, da kann nichts überholen. Es braucht
+        # also EINE Wartezeit am Ende, nicht zwei zwischendrin.
         _taste(tastatur, Key.end)
-        time.sleep(0.12)
         tastatur.type(PROBE)
-        time.sleep(0.25)
+        time.sleep(0.22)
 
         _zwischenablage_schreiben(MARKE)
         _warte_bis(lambda: _zwischenablage_lesen() == MARKE, 0.12)
         _taste(tastatur, 'a')
-        time.sleep(0.22)
+        # 0,22 -> 0,14. Hier wird nur das Markieren abgewartet, und was
+        # danach kommt (Strg+X) wird ohnehin nachgesehen statt abgewartet.
+        # Reicht es nicht, schneidet Strg+X nichts aus, die Prüfung meldet
+        # ehrlich "kein Feld getroffen" und der Klickweg übernimmt -- es wird
+        # nichts blind hineingeschrieben.
+        time.sleep(0.14)
         _taste(tastatur, 'x')          # ausschneiden, nicht kopieren
         inhalt = _warte_auf_ausschnitt(0.45)
 
