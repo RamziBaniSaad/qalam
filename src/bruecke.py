@@ -164,6 +164,35 @@ def _naechstes_fremdes(start, ausser):
     return 0
 
 
+def _warte_bis(pruefung, hoechstens, takt=0.015):
+    """Nachsehen bis es soweit ist, statt eine feste Zeit abzuwarten.
+
+    Ramzis Auftrag vom 07.08.2026: die Brücke stört ihn beim Zocken, er wartet
+    ein bis drei Sekunden auf Antwort und Fokus. Der Aufwand steckt nicht in
+    einem langsamen Schritt, sondern in einer Kette fester Pausen, von denen
+    jede so lang bemessen ist, dass sie auch im schlechtesten Fall reicht.
+
+    Die Zahlen selbst sind erkämpft -- hinter fast jeder steht ein
+    dokumentierter Fehlschlag. Sie werden deshalb NICHT gekürzt, sondern zur
+    OBERGRENZE: `hoechstens` ist genau die alte Pause. Trifft die Bedingung
+    früher zu, geht es früher weiter; trifft sie gar nicht zu, ist gewartet
+    worden wie bisher. Langsamer als vorher kann das nicht werden.
+
+    Der Takt ist absichtlich klein: ein Fenster wechselt in wenigen
+    Millisekunden den Vordergrund, und 15 ms Nachsehen kosten nichts gegen
+    350 ms Warten."""
+    ende = time.monotonic() + hoechstens
+    while True:
+        try:
+            if pruefung():
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= ende:
+            return False
+        time.sleep(takt)
+
+
 def zurueck_zu(hwnd):
     """Den Fokus dorthin zurückgeben, wo er vor mir war.
 
@@ -215,11 +244,7 @@ def zurueck_zu(hwnd):
                 vorn = _user32.GetForegroundWindow()
                 if vorn and not _gleich(vorn, ziel):
                     _user32.ShowWindow(ctypes.c_void_p(int(vorn)), 6)   # SW_MINIMIZE
-            # War 0.25 -- reine Nachsehen-Pause ohne dokumentierten Fehlschlag
-            # dahinter, deshalb als erste von wenigen vorsichtig gekuerzt.
-            # Ramzis Auftrag 07.08.2026: die Bruecke stoert ihn beim Zocken.
-            time.sleep(0.15)
-            if _gleich(_user32.GetForegroundWindow(), ziel):
+            if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), ziel), 0.15):
                 return stufe
         except Exception:
             continue
@@ -249,14 +274,12 @@ def hole_nach_vorn(hwnd):
     else:
         _user32.SetForegroundWindow(hwnd)
 
-    time.sleep(0.35)
-
     # NUR nachmessen, nie dem Rückgabewert glauben. SetForegroundWindow meldet
     # Erfolg, obwohl Windows den Wechsel verweigert hat -- gemessen am
     # 31.07.2026: der Aufruf sagte True, vorn stand weiterhin ein anderes
     # Fenster, und der Text landete in dessen Eingabefeld. Ein falsches "hat
     # geklappt" ist hier teurer als ein ehrliches "hat nicht geklappt".
-    if _gleich(_user32.GetForegroundWindow(), hwnd):
+    if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), hwnd), 0.35):
         return True
 
     # --- Die Vordergrundsperre ---------------------------------------------
@@ -296,10 +319,7 @@ def hole_nach_vorn(hwnd):
                     time.sleep(0.25)
 
             _user32.SetForegroundWindow(hwnd)
-            # War 0.3 -- ebenfalls eine reine Nachsehen-Pause, zweite von
-            # wenigen vorsichtig gekuerzten Stellen.
-            time.sleep(0.2)
-            if _gleich(_user32.GetForegroundWindow(), hwnd):
+            if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), hwnd), 0.2):
                 return True
         except Exception:
             pass
@@ -350,6 +370,28 @@ def _zwischenablage_schreiben(text):
         return True
     ok, _ = _mit_geduld(_schreib)
     return ok
+
+
+def _warte_auf_ausschnitt(hoechstens):
+    """Warten, bis das Ausschneiden in der Zwischenablage angekommen ist.
+
+    Davor liegt dort die MARKE, die wir selbst hineingelegt haben. Steht etwas
+    anderes darin, ist der Schnitt durch -- das ist ein EREIGNIS, auf das sich
+    warten lässt, statt eine Zeit zu raten. Der Normalfall (Ramzis Feld ist
+    leer, ausgeschnitten wird nur die Probe) ist damit nach ein paar
+    Millisekunden fertig statt nach einer knappen halben Sekunde.
+
+    Bleibt die Marke stehen, oder ist die Ablage leer -- Electron LEERT sie
+    beim Ausschneiden einer leeren Auswahl --, wird die volle Zeit gewartet.
+    Das ist der Fehlerfall, und der darf ruhig lange dauern."""
+    ende = time.monotonic() + hoechstens
+    while True:
+        wert = _zwischenablage_lesen()
+        if wert is not None and wert != MARKE:
+            return wert
+        if time.monotonic() >= ende:
+            return wert or ''
+        time.sleep(0.015)
 
 
 def _taste(tastatur, buchstabe, mit_strg=True):
@@ -484,12 +526,11 @@ def fokussiere_eingabefeld(hwnd, tastatur):
         time.sleep(0.25)
 
         _zwischenablage_schreiben(MARKE)
-        time.sleep(0.12)
+        _warte_bis(lambda: _zwischenablage_lesen() == MARKE, 0.12)
         _taste(tastatur, 'a')
         time.sleep(0.22)
         _taste(tastatur, 'x')          # ausschneiden, nicht kopieren
-        time.sleep(0.45)
-        inhalt = _zwischenablage_lesen() or ''
+        inhalt = _warte_auf_ausschnitt(0.45)
 
         # Zu lang heißt: das war der Chatverlauf, nicht das Feld. Ausgeschnitten
         # wurde dabei nichts (ein Verlauf ist nicht bearbeitbar).
