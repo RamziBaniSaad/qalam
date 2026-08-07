@@ -383,31 +383,75 @@ def ramzi_ist_dran():
     return qalam_nimmt_auf() or ramzi_redet()
 
 
-def warte_bis_er_fertig_ist(hoechstens=20.0):
+# Nach seinem letzten Wort erst einmal Ruhe halten.
+#
+# Ramzi macht Denkpausen MITTEN im Satz -- er denkt beim Reden, das steht so
+# auch in seinem Gedächtnis-Eintrag. Bisher reichte eine Atempause, damit ich
+# losgelegt habe; für ihn war das Reinreden, denn er war ja nicht fertig.
+# 0,6 s ist die Spanne, in der ein Mensch nach Luft holt, ohne den Faden
+# abzugeben -- lang genug, um seine Pausen zu überstehen, kurz genug, dass eine
+# Antwort noch als Antwort ankommt.
+NACHLAUF = 0.6
+
+# Wann ein Merker als kaputt gilt.
+#
+# Der Notausgang muss bleiben (hängt ein Merker fest, wäre ich sonst für immer
+# stumm), aber er saß an der falschen Stelle: nach 20 Sekunden wurde einfach
+# weitergeredet -- mitten in einen Satz, der 30 bis 60 Sekunden dauert. Im
+# Ohr-Protokoll stand das dreimal in Folge, und genau das erlebt er als "du
+# redest mir rein".
+#
+# Drei Minuten ist keine Wartezeit, sondern eine Diagnose: so lange redet
+# niemand am Stück. Bis dahin ist ein Auftrag ohnehin längst verfallen (siehe
+# sprechzentrale.FRIST) -- der Notausgang ist damit das, was er sein soll, ein
+# Netz gegen einen Fehler, und keine Regel für den Alltag.
+KAPUTT_NACH = 180.0
+
+
+def ruhig_seit():
+    """Wie lange ist er schon still? Sehr groß, wenn er es lange ist."""
+    if qalam_nimmt_auf():
+        return 0.0
+    try:
+        return time.time() - (os.path.getmtime(REDET_SPERRE) + REDET_ALTER)
+    except OSError:
+        return 1e9
+
+
+def er_ist_fertig(nachlauf=NACHLAUF):
+    """Darf ich jetzt anfangen -- ist er still UND war es lange genug still?"""
+    return ruhig_seit() >= nachlauf
+
+
+def warte_bis_er_fertig_ist(nachlauf=NACHLAUF):
     """Blockiert, bis Ramzi seinen Platz in der Warteschlange abgegeben hat.
 
-    Mit Obergrenze: hängt irgendwo ein Merker fest (Absturz, vergessenes
-    Aufräumen), darf ich nicht für immer stumm bleiben. Lieber einmal
-    dazwischenreden als nie wieder etwas sagen."""
-    ende = time.time() + hoechstens
-    begonnen = time.time()
-    musste_warten = ramzi_ist_dran()
-    while ramzi_ist_dran() and time.time() < ende:
-        time.sleep(0.15)
+    Gibt True zurück, wenn er wirklich fertig ist, und False, wenn ein Merker
+    festhängt und deshalb trotzdem gesprochen wird.
 
-    # MESSEN, BEVOR GESCHRAUBT WIRD. Ramzis Befund vom 05.08.2026: rede ich,
-    # während er redet, halte ich richtigerweise an -- hole den Satz danach aber
-    # nicht nach. Der Verdacht ist genau diese Obergrenze: seine Diktate laufen
-    # oft 30 bis 60 s, gewartet wird höchstens 20. Dann redet der Aufrufer
-    # trotzdem los, also mitten in seinen Satz hinein, oder der Satz ist
-    # inhaltlich längst überholt.
-    #
-    # Ob das wirklich der Grund ist, sagt erst diese Zeile im Protokoll. Die
-    # Zahl einfach hochzusetzen wäre geraten -- und die Grenze steht aus einem
-    # guten Grund hier: hängt ein Merker fest, wäre ich sonst dauerhaft stumm.
+    Ohne Obergrenze im gewohnten Sinn: gewartet wird, solange er redet, Punkt.
+    Was zu lange wartet, wird nicht doch noch gesprochen, sondern verfällt --
+    das entscheidet die Sprech-Zentrale, nicht diese Funktion. Hier bleibt nur
+    das Netz gegen einen kaputten Merker (KAPUTT_NACH).
+    """
+    begonnen = time.time()
+    musste_warten = not er_ist_fertig(nachlauf)
+    while True:
+        while ramzi_ist_dran():
+            if time.time() - begonnen > KAPUTT_NACH:
+                print('[Warteschlange] seit %.0f s blockiert -- der Merker gilt '
+                      'als kaputt, ich rede.' % (time.time() - begonnen),
+                      flush=True)
+                return False
+            time.sleep(0.1)
+        # Er ist still. Jetzt den Nachlauf abwarten -- und wenn er in dieser
+        # Zeit wieder anfängt, war es nur eine Denkpause und es geht von vorn
+        # los.
+        if er_ist_fertig(nachlauf):
+            break
+        time.sleep(0.05)
+
     if musste_warten:
-        gewartet = time.time() - begonnen
-        abgelaufen = ramzi_ist_dran()
-        print(f'[Warteschlange] {gewartet:.1f}s gewartet, '
-              + ('ABGELAUFEN -- rede trotzdem' if abgelaufen else 'er war fertig'),
-              flush=True)
+        print('[Warteschlange] %.1fs gewartet, er war fertig'
+              % (time.time() - begonnen), flush=True)
+    return True

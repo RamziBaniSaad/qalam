@@ -195,7 +195,14 @@ def _darf_jetzt(auftrag, stand):
             return 'zurueck'
         try:
             import warteschlange
-            if not warteschlange.ramzi_ist_dran():
+            # `er_ist_fertig` und nicht `not ramzi_ist_dran`: nach seinem
+            # letzten Wort gehört eine kurze Ruhe dazu, sonst falle ich in
+            # seine Denkpause hinein. Siehe warteschlange.NACHLAUF.
+            if warteschlange.er_ist_fertig():
+                return 'los'
+            if time.time() - auftrag['eingeworfen'] > warteschlange.KAPUTT_NACH:
+                print('[Zentrale] Merker hängt seit %.0f s -- ich rede trotzdem.'
+                      % warteschlange.KAPUTT_NACH, flush=True)
                 return 'los'
         except Exception:
             return 'los'
