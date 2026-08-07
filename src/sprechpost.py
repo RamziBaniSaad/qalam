@@ -30,14 +30,21 @@ KASTEN = os.path.join(PROJEKT, '.sprechpost')
 HOECHSTALTER = 120.0
 
 
-def einwerfen(text):
-    """Satz in den Kasten legen. Gibt True, wenn er dort liegt."""
+def einwerfen(text, rang=None):
+    """Satz in den Kasten legen. Gibt True, wenn er dort liegt.
+
+    `rang` reist im DATEINAMEN mit, nicht im Inhalt: der Inhalt ist der Satz,
+    und den will ich beim Nachsehen im Ordner lesen koennen, ohne erst JSON
+    auseinanderzunehmen. Der Zeitstempel bleibt vorn, damit die alphabetische
+    Sortierung weiter die zeitliche ist.
+    """
     text = (text or '').strip()
     if not text:
         return False
     try:
         os.makedirs(KASTEN, exist_ok=True)
-        name = '%.6f.txt' % time.time()
+        name = '%.6f%s.txt' % (time.time(),
+                               '' if rang is None else '--r%d' % rang)
         vor = os.path.join(KASTEN, name + '.teil')
         with open(vor, 'w', encoding='utf-8') as f:
             f.write(text)
@@ -75,7 +82,11 @@ def bereit_melden():
 
 
 def abholen():
-    """Aelteste Nachricht holen und entfernen. None, wenn nichts da ist."""
+    """Aelteste Nachricht holen und entfernen. None, wenn nichts da ist.
+
+    Gibt `(text, rang)` zurueck; `rang` ist None, wenn der Absender keinen
+    genannt hat -- dann entscheidet die Zentrale mit ihrer Vorgabe.
+    """
     try:
         if not os.path.isdir(KASTEN):
             return None
@@ -91,7 +102,13 @@ def abholen():
                 continue
             if alt > HOECHSTALTER or not text:
                 continue
-            return text
+            rang = None
+            if '--r' in n:
+                try:
+                    rang = int(n.rsplit('--r', 1)[1].split('.')[0])
+                except ValueError:
+                    rang = None
+            return text, rang
     except Exception:
         pass
     return None

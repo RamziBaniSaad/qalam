@@ -241,8 +241,26 @@ GESAGT_ALTER = 60.0      # so lange kann ein Satz von mir noch zurückkommen
 GESAGT_LOG = os.path.join(PROJEKT, 'noor-gesagt.log')
 
 
-def merke_gesagt(text):
-    """Aufschreiben, was ich gerade gesagt habe -- für den Echo-Vergleich.
+def merke(text, art='GESAGT'):
+    """Aufschreiben, was aus mir kam -- und was NICHT aus mir kam.
+
+    Drei Arten, und der Unterschied ist der ganze Punkt (Ramzis eigener
+    Vorschlag vom 07.08.2026, und er ist der richtige):
+
+        GESAGT       kam wirklich aus dem Lautsprecher
+        UNGESAGT     ist verfallen oder wurde beim Stopp weggeraeumt
+        ABGEBROCHEN  lief, wurde aber mitten im Satz gestoppt
+
+    Vorher stand hier nur, was wirklich zu hoeren war. Damit spielte "nochmal"
+    zwangslaeufig das Falsche: den Satz, den er schon kennt -- und nie den, der
+    verschluckt wurde. Jetzt steht beides da, unterscheidbar markiert, und
+    noor-nochmal.ps1 kann das Fehlende holen.
+
+    Nur GESAGT zaehlt fuer den Echo-Vergleich unten. Was nie gesprochen wurde,
+    war auch nie im Raum und kann darum nicht als mein Echo zurueckkommen --
+    stuende es im Vergleich, wuerde ich Ramzi faelschlich ueberhoeren.
+
+    WARUM ES NICHT REICHT, NUR AUF DEN LAUFENDEN SATZ ZU SCHAUEN -- der Fehler
 
     WARUM ES NICHT REICHT, NUR AUF DEN LAUFENDEN SATZ ZU SCHAUEN -- der Fehler
     vom 03.08.2026, der mir meine eigene Antwort als Auftrag zurückgeschickt
@@ -266,30 +284,42 @@ def merke_gesagt(text):
     if not text:
         return
     jetzt = time.time()
-    try:
-        with open(GESAGT, encoding='utf-8') as f:
-            alt = json.load(f)
-    except Exception:
-        alt = []
-    neu = [e for e in alt if jetzt - e.get('t', 0) < GESAGT_ALTER]
-    neu.append({'t': jetzt, 'text': text})
-    try:
-        # Über eine Zwischendatei, damit der lesende Prozess nie eine halb
-        # geschriebene Datei erwischt -- dort würde json still scheitern und
-        # der Echo-Schutz wäre lautlos aus.
-        h, tmp = tempfile.mkstemp(dir=PROJEKT, suffix='.json')
-        with os.fdopen(h, 'w', encoding='utf-8') as f:
-            json.dump(neu[-40:], f, ensure_ascii=False)
-        os.replace(tmp, GESAGT)
-    except Exception:
-        pass
+    if art == 'GESAGT':
+        try:
+            with open(GESAGT, encoding='utf-8') as f:
+                alt = json.load(f)
+        except Exception:
+            alt = []
+        neu = [e for e in alt if jetzt - e.get('t', 0) < GESAGT_ALTER]
+        neu.append({'t': jetzt, 'text': text})
+        try:
+            # Über eine Zwischendatei, damit der lesende Prozess nie eine halb
+            # geschriebene Datei erwischt -- dort würde json still scheitern und
+            # der Echo-Schutz wäre lautlos aus.
+            h, tmp = tempfile.mkstemp(dir=PROJEKT, suffix='.json')
+            with os.fdopen(h, 'w', encoding='utf-8') as f:
+                json.dump(neu[-40:], f, ensure_ascii=False)
+            os.replace(tmp, GESAGT)
+        except Exception:
+            pass
     # Zum Nachlesen, anhängend und mit Uhrzeit. Darf nie der Grund sein, warum
     # ein Satz nicht gesprochen wird -- deshalb sein eigenes try.
+    #
+    # Der Zeitstempel bleibt vorn und im selben Format: noor-nochmal.ps1 und
+    # noor-protokolle-kuerzen.ps1 lesen diese Datei, und eine Marke am Zeilen-
+    # anfang haette beiden den Boden weggezogen.
     try:
+        einzeilig = ' '.join(text.split())
         with open(GESAGT_LOG, 'a', encoding='utf-8') as f:
-            f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")}  {text}\n')
+            f.write('%s  %-11s %s\n'
+                    % (time.strftime('%Y-%m-%d %H:%M:%S'), art, einzeilig))
     except OSError:
         pass
+
+
+def merke_gesagt(text):
+    """Der alte Name -- es gibt ihn noch, weil voice_output ihn benutzt."""
+    merke(text, 'GESAGT')
 
 
 def _zuletzt_gesagt():

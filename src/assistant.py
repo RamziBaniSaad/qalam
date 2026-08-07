@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import einstellungen                        # noqa: E402
 import oeffnen                              # noqa: E402
 import schliessen                           # noqa: E402
+import sprechzentrale                        # noqa: E402
 import stellschrauben                       # noqa: E402
 import verhoerer                            # noqa: E402
 from voice_output import Sprecher          # noqa: E402
@@ -346,7 +347,7 @@ class Assistent:
         return 'Ich bin da.'
 
     def _still(self):
-        self.sprecher.stoppe()
+        sprechzentrale.stoppe_alles('Zuruf: sei still')
         return None      # nichts sagen -- er will ja gerade Ruhe
 
     def _nochmal(self):
@@ -579,13 +580,21 @@ class Assistent:
     AUFWECKER = re.compile(r'\b(wach auf|aufwachen|wach mal auf|bist du (da|wach)|hallo)\b', re.I)
 
     def _sag(self, text, wer='noor'):
-        """Sprechen UND untertiteln.
+        """Einen Satz in die Sprech-Zentrale werfen. Kehrt sofort zurück.
 
-        Immer beides zusammen, nie nur eins -- sonst driftet das, was zu hören
-        ist, von dem ab, was zu lesen ist."""
-        if text:
+        Der Untertitel wird hier NICHT mehr gesetzt: die Zentrale kann warten,
+        bis Ramzi fertig ist, und ein Streifen, der den Satz eine halbe Minute
+        vor dem Ton zeigt, sagt das Falsche. Beim tatsächlichen Sprechen legt
+        voice_output ihn auf -- dort ist der Ton und die gemessene Dauer.
+
+        `wer` bleibt in der Signatur, weil die Aufrufer sie benutzen; für alles
+        von mir entscheidet die Zentrale."""
+        if not text:
+            return
+        if wer != 'noor':
             _untertitel(text, wer)
-            self.sprecher.sprich_im_hintergrund(text)
+            return
+        sprechzentrale.einwerfen(text, sprechzentrale.RANG_ANTWORT, 'reflex')
 
     def _wach_werden(self):
         """Aufwachen: Ton, Platzhalter, Folgefenster -- auf welchem Weg der Name
@@ -788,8 +797,11 @@ class Assistent:
         # Wenn ich gerade rede und angesprochen werde: erst mal Klappe halten.
         # Das ist die einfache Form vom Unterbrochenwerden -- noch nicht
         # mitten im Wort, aber schon "du hast Vorrang".
-        if self.sprecher.spricht_gerade():
-            self.sprecher.stoppe()
+        #
+        # Über die Zentrale, damit auch das WARTENDE verschwindet: einen Satz
+        # abzubrechen, hinter dem noch drei stehen, ist keine Unterbrechung.
+        if self.sprecher.spricht_gerade() or sprechzentrale.anzahl():
+            sprechzentrale.stoppe_alles('er hat übernommen')
 
         if not endgueltig:
             # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
@@ -1006,6 +1018,10 @@ class Assistent:
         print('[Noor] Lade Modelle …')
         self.ohr.starte()
         self._laeuft.set()
+        # Die Sprech-Zentrale zuerst: ab hier spricht genau ein Faden, und alle
+        # anderen werfen nur ein. Ohne sie würde jeder Aufrufer wieder für sich
+        # losreden -- siehe sprechzentrale.py.
+        sprechzentrale.starte(self.sprecher)
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
         threading.Thread(target=self._sprechpost_wache, daemon=True).start()
         threading.Thread(target=self._befehlswache, daemon=True).start()
@@ -1053,7 +1069,8 @@ class Assistent:
         # unter ~40 Zeichen halluziniert XTTS nachweislich ("Fertig." kam auf
         # 2 von 12 sauber). "Ich bin jetzt da." allein sind 17 Zeichen -- und
         # genau das ist passiert, Ramzi hoerte danach fuenf Sekunden Unsinn.
-        self.sprecher.sprich('Ich bin jetzt da, du kannst mich ansprechen.')
+        sprechzentrale.einwerfen('Ich bin jetzt da, du kannst mich ansprechen.',
+                                 sprechzentrale.RANG_ANTWORT, 'start')
 
     def _stimmen_wache(self):
         """Den Umschalter auf der Tafel befolgen -- ohne Neustart.
@@ -1087,9 +1104,8 @@ class Assistent:
         worueber er sich beschwert hat.
         """
         try:
-            if self.sprecher.spricht_gerade():
-                self.sprecher.stoppe()
-                print('[Stimme] unterbrochen -- Ramzi hat uebernommen.', flush=True)
+            if self.sprecher.spricht_gerade() or sprechzentrale.anzahl():
+                sprechzentrale.stoppe_alles('unterbrochen -- Ramzi hat übernommen')
         except Exception:
             pass
 
@@ -1101,22 +1117,26 @@ class Assistent:
         kurzlebiger Aufruf wie noor-sprich.ps1 kann es nicht selbst laden --
         er wirft seinen Satz ein und ist fertig, ich spreche ihn.
 
-        Die Warteschlange-Regeln gelten unveraendert: `sprich()` wartet von
-        selbst, wenn Ramzi gerade redet. Ich hole hier also nur ab.
+        Diese Wache SPRICHT nicht mehr selbst, sie leert nur den Ordner in die
+        Sprech-Zentrale. Das ist der Unterschied, an dem Ramzis "die Antworten
+        kommen eine Minute zu spaet und dann alle am Stueck" haengt: vorher
+        blockierte jeder abgeholte Satz diese Schleife, bis er zu Ende
+        gesprochen war -- vier eingeworfene Saetze standen also hintereinander
+        in der Warteschlange, jeder mit eigener Wartezeit, und keiner konnte
+        verfallen. Jetzt ist der Ordner in Millisekunden leer, und die Zentrale
+        entscheidet mit Rang und Verfallsdatum, was davon noch etwas nuetzt.
         """
         import sprechpost
         while self._laeuft.is_set():
             try:
                 sprechpost.bereit_melden()
-                text = sprechpost.abholen()
-                if text:
-                    # Die zweite Hälfte der Messung zu Ramzis Befund vom
-                    # 05.08.2026 (die erste steht in warteschlange.py). Zwischen
-                    # diesen beiden Zeilen liegt das Warten -- fehlt die zweite
-                    # im Protokoll, ist der Satz nicht bloß spät, sondern hängt.
-                    print(f'[Sprechpost] abgeholt: {text[:50]!r}', flush=True)
-                    self.sprecher.sprich(text)
-                    print('[Sprechpost] gesprochen', flush=True)
+                post = sprechpost.abholen()
+                if post:
+                    text, rang = post
+                    sprechzentrale.einwerfen(
+                        text,
+                        sprechzentrale.RANG_ZWISCHEN if rang is None else rang,
+                        'briefkasten')
                 else:
                     time.sleep(0.25)
             except Exception:
@@ -1163,7 +1183,7 @@ class Assistent:
     def _befehl_ausfuehren(self, befehl):
         print(f'[Befehl] {befehl}', flush=True)
         if befehl == 'stopp':
-            self.sprecher.stoppe()
+            sprechzentrale.stoppe_alles('Stopp-Knopf auf der Tafel')
         elif befehl == 'weckwort':
             # Umschalten und nicht "an"/"aus": der Knopf weiss zwar, was er
             # anzeigt, aber zwischen Anzeige und Druck kann sich der Zustand
@@ -1172,11 +1192,13 @@ class Assistent:
             schlaeft = not self.ohr.schlaeft
             self.ohr.schlaeft = schlaeft
             if not schlaeft:
-                self.sprecher.sprich('Ich bin da.')
+                sprechzentrale.einwerfen('Ich bin da.',
+                                         sprechzentrale.RANG_ANTWORT, 'knopf')
 
     def stoppe(self):
         self._laeuft.clear()
         self.ohr.stoppe()
+        sprechzentrale.beenden()
         self.sprecher.stoppe()
         if getattr(self, '_abbruch_listener', None):
             self._abbruch_listener.stop()
