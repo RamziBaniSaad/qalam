@@ -428,7 +428,22 @@ class Sprecher:
     def __init__(self, stimme=STANDARD_STIMME):
         self.stimme_name = stimme
         self._stimme = None
-        self._stop = threading.Event()
+        # EIN ZAEHLER, KEIN SCHALTER -- Ramzis Befund vom 07.08.2026: "die
+        # Stopptaste funktioniert nicht, ich kann dich nicht unterbrechen."
+        #
+        # Vorher stand hier ein Event, und `stoppe()` setzte es, wartete auf
+        # `self._thread` und loeschte es wieder. Das ging genau so lange gut,
+        # wie jeder Satz aus `sprich_im_hintergrund()` kam. Seit dem
+        # Briefkasten spricht aber ein FREMDER Faden -- `self._thread` ist dann
+        # tot oder None, das Warten kehrt sofort zurueck, und das Loeschen
+        # passierte, bevor der redende Faden den Schalter je gesehen hatte.
+        # Der Stopp fiel lautlos aus.
+        #
+        # Ein Zaehler kann nicht zurueckgesetzt werden und braucht darum kein
+        # Warten: jeder redende Faden merkt sich beim Start seinen Stand und
+        # hoert auf, sobald der nicht mehr stimmt -- egal, aus welchem Faden
+        # gestoppt wurde und wie viele gerade reden.
+        self._abbruch = 0
         self._thread = None
         # Wie viele Aufrufer gerade in sprich() stehen -- siehe spricht_gerade().
         self._reden = 0
@@ -456,6 +471,12 @@ class Sprecher:
         saetze = in_saetze(text)
         if not saetze:
             return
+
+        # Der Stand, gegen den ab jetzt geprüft wird -- und zwar VOR dem
+        # Warten, nicht erst vor dem ersten Ton: ein Stopp, während ich noch
+        # darauf warte, dass Ramzi fertig wird, muss diesen Satz genauso
+        # verwerfen wie einen laufenden.
+        mein_stand = self._abbruch
 
         # ERST sein Platz in der Warteschlange, DANN meiner.
         #
@@ -549,7 +570,6 @@ class Sprecher:
             _t_gefragt = time.time()
             stimme = None if motor == 'xtts' else self.stimme
             rate = xtts_rate if motor == 'xtts' else stimme.config.sample_rate
-            self._stop.clear()
             klang = _klangvorgaben()
 
             # Anzeigen bilden und EINE im Voraus erzeugen.
@@ -669,9 +689,29 @@ class Sprecher:
             # Ein Strom für alle Sätze: sonst knackt es bei jedem Satzwechsel.
             strom = sd.OutputStream(samplerate=rate, channels=1, dtype='int16')
             strom.start()
+            # In kleine Stücke schreiben statt eine Anzeige am Stück.
+            #
+            # `strom.write()` kehrt erst zurück, wenn alles abgegeben ist, und
+            # eine Anzeige sind zwei Sätze -- mehrere Sekunden, in denen nichts
+            # dazwischenkommen konnte. Genau das steckt hinter Ramzis "ich kann
+            # dich nicht unterbrechen": geprüft wurde nur an der Satzgrenze.
+            # 0,15 s ist klein genug, dass er es als "sofort still" erlebt, und
+            # groß genug, dass die Prüfung selbst nichts kostet (zwei Blicke auf
+            # Dateizeiten).
+            BLOCK = max(1, int(rate * 0.15))
+            abgebrochen = False
+
+            def _abspielen(ton):
+                """Ein Tonstück abgeben. False heißt: hier wurde abgebrochen."""
+                for i in range(0, len(ton), BLOCK):
+                    if self._abbruch != mein_stand or _er_hat_uebernommen():
+                        return False
+                    strom.write(ton[i:i + BLOCK])
+                return True
+
             try:
                 while True:
-                    if self._stop.is_set():
+                    if self._abbruch != mein_stand:
                         break
                     # Und zwischen JEDEM Satz noch einmal nachsehen.
                     #
@@ -707,7 +747,9 @@ class Sprecher:
                         # bleibt stehen. XTTS liefert viele kleine Tonstücke zu
                         # EINER Anzeige -- die je Stück neu zu setzen würde den
                         # Streifen flackern lassen.
-                        strom.write(ton)
+                        if not _abspielen(ton):
+                            abgebrochen = True
+                            break
                         continue
                     if motor == 'xtts':
                         # Keine Wort-Hervorhebung: sie wird aus der Zeichenzahl
@@ -721,7 +763,9 @@ class Sprecher:
                     else:
                         _untertitel(text, _wortzeiten(text, dauer),
                                     time.time(), dauer)
-                    strom.write(ton)
+                    if not _abspielen(ton):
+                        abgebrochen = True
+                        break
             finally:
                 schluss.set()
                 # Den Platz freimachen, damit der Erzeuger nicht ewig wartend
@@ -751,11 +795,18 @@ class Sprecher:
         return self._thread
 
     def stoppe(self):
-        """Bricht das Sprechen ab -- die Grundlage fürs Unterbrochenwerden."""
-        self._stop.set()
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=2)
-        self._stop.clear()
+        """Bricht das Sprechen ab -- aus JEDEM Faden, nicht nur aus meinem.
+
+        Nur den Zähler hochsetzen und kurz nachsehen, ob es gewirkt hat. Wer
+        gerade redet, prüft alle 0,15 s -- ein Warten von zwei Sekunden auf
+        einen bestimmten Faden wie früher braucht es dafür nicht, und es wäre
+        auch falsch: gestoppt wird oft aus der Tastenwache heraus, und die darf
+        Ramzis Tastatur nicht blockieren.
+        """
+        self._abbruch += 1
+        ende = time.time() + 1.5
+        while self.spricht_gerade() and time.time() < ende:
+            time.sleep(0.02)
 
     def spricht_gerade(self):
         """Rede ich gerade -- egal aus welchem Faden.

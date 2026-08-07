@@ -1030,6 +1030,35 @@ class Weckwort:
             if (ich_rede and im_gespraech
                     and not warteschlange.ist_mein_echo(vorlaeufig, kurz_erlaubt=True)):
                 warteschlange.redet_merken(True)
+
+            # EIN STOPPWORT WIRKT IMMER -- auch ohne meinen Namen davor.
+            #
+            # Ramzis Beschwerde vom 07.08.2026 hatte zwei Haelften. Die eine
+            # war der Echo-Schutz (geloest in warteschlange.ist_stoppwort);
+            # die andere ist diese: unterbrochen wurde bisher NUR, wenn das
+            # Weckwort im Fetzen stand. Ein blosses "stopp" oder "hoer auf",
+            # mitten in meinen Satz gerufen, lief also ins Leere -- und genau
+            # so ruft man, wenn es schnell gehen soll.
+            #
+            # Nur waehrend ich rede. Sonst waere jedes "warte mal" in einem
+            # Diktat ein Abbruch.
+            #
+            # UND NUR, WENN ICH DAS WORT NICHT SELBST GERADE SAGE. Genau
+            # dieselbe Falle wie beim Weckwort ein paar Zeilen weiter unten
+            # ("du unterbrichst dich selber, wenn du ein Wort wie Noor sagst"),
+            # nur schaerfer: fuer Stoppwoerter ist der Echo-Schutz absichtlich
+            # ausser Kraft -- sonst kaeme sein Zuruf nicht durch. Damit wuerde
+            # aber jedes "warte" oder "halt" in meinem eigenen Satz ueber den
+            # Lautsprecher zurueckkommen und mich abwuergen. Ein verpasster
+            # Zuruf ist billiger: Ramzi kann noch einmal rufen, ich nicht.
+            if (ich_rede and warteschlange.ist_stoppwort(vorlaeufig)
+                    and not warteschlange.ist_stoppwort(
+                        warteschlange._mein_satz() or '')):
+                print('[Weckwort] Stoppwort gehoert: %r' % vorlaeufig[:40],
+                      flush=True)
+                warteschlange.redet_merken(True)
+                self._melde(self.beim_unterbrechen)
+
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True
                 self._melde(self.beim_erkennen)

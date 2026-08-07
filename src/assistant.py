@@ -481,7 +481,7 @@ class Assistent:
         return an
 
     def _abbruch_taste_starten(self):
-        """Die rechte Strg-Taste: einmal pausieren, zweimal abbrechen.
+        """Die rechte Strg-Taste: stoppen, rufen, pausieren, abbrechen.
 
         Die RECHTE Strg-Taste, allein. Ramzis Wahl vom 31.07.2026 aus vier
         Vorschlägen: "ich benutze immer die linke für alles, was es braucht --
@@ -494,12 +494,16 @@ class Assistent:
         nicht." Eine Sonderbehandlung für einen Fall, den es nicht gibt, wäre
         Code, den niemand je wieder versteht.
 
-        DIE BELEGUNG hängt am Zustand -- eine Taste, drei Bedeutungen, und
+        DIE BELEGUNG hängt am Zustand -- eine Taste, vier Bedeutungen, und
         jede gilt genau dann, wenn die anderen sinnlos wären:
 
+            ich rede gerade      ->  STOPP (sofort still, Warteschlange leer)
             hört mir niemand zu  ->  RUFEN (wecken, wie das Weckwort)
             ich höre zu, 1x      ->  anhalten
             ich höre zu, 2x kurz ->  abbrechen
+
+        Der Stopp steht oben und kam am 07.08.2026 dazu. Er verdrängt nichts:
+        rede ich, ergibt keine der drei anderen Bedeutungen einen Sinn.
 
         Die Doppelbelegung darunter ist vom 01.08.2026, seine Idee und sein
         erster Vorschlag: dieselbe Taste für beides, weil beides zur selben
@@ -528,6 +532,33 @@ class Assistent:
                 if taste != keyboard.Key.ctrl_r:
                     return
                 jetzt = time.time()
+
+                # REDE ICH GERADE? Dann ist die Taste der STOPP -- vor allem
+                # anderen und ohne Doppeldruck.
+                #
+                # Ramzis Befund vom 07.08.2026: "die Stopptaste funktioniert
+                # nicht, ich kann dich nicht unterbrechen." Er hatte wörtlich
+                # recht: die Taste war nie dafür gebaut. Drückte er sie,
+                # während ich redete, tat sie das Falsche -- war das
+                # Folgefenster zu, WECKTE sie mich; war es offen, pausierte sie
+                # sein Diktat. Von Stoppen stand nichts darin.
+                #
+                # Ganz oben, weil die Frage in dem Moment eindeutig ist: wer
+                # eine Taste drückt, während ich rede, will nicht gerufen und
+                # nicht pausiert haben. Und ohne Doppeldruck, weil ein Stopp,
+                # der zweimal gedrückt werden will, keiner ist.
+                #
+                # Im eigenen Faden: `stoppe_alles` wartet, bis wirklich Ruhe
+                # ist, und pynput hält den Tastatur-Listener an, solange dieser
+                # Rückruf läuft -- das darf seine Tastatur nicht blockieren.
+                if self.sprecher.spricht_gerade() or sprechzentrale.anzahl():
+                    # Zurücksetzen, damit ein gleich folgender zweiter Druck
+                    # nicht als Abbruch der Kette gilt.
+                    self._letzter_tastendruck = 0.0
+                    threading.Thread(
+                        target=sprechzentrale.stoppe_alles,
+                        args=('rechte Strg',), daemon=True).start()
+                    return
 
                 # HÖRT MIR GERADE NIEMAND ZU? Dann ist die Taste der RUF.
                 #

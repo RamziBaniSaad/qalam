@@ -22,6 +22,7 @@ nur um nachzusehen, ob gerade Stille ist.
 """
 import json
 import os
+import re
 import tempfile
 import time
 
@@ -182,6 +183,42 @@ def _worte(text):
         c.lower() if c.isalnum() or c.isspace() else ' ' for c in text).split() if len(w) > 2}
 
 
+# --- Der Notausgang darf nie als Echo gelten -------------------------------
+#
+# Ramzis Befund vom 07.08.2026: "Noor, stopp" kam nicht durch. Der Grund steht
+# unten in ist_mein_echo -- `kurz_erlaubt` hebt genau dann, wenn ich spreche,
+# die Regel "unter fünf Wörtern ist nie Echo" auf. Das musste sein (mein
+# eigener Lautsprecher würgt mir sonst den Satz ab), macht aber kurze Zurufe
+# unmöglich, und "stopp" ist der kürzeste und wichtigste davon. Habe ich das
+# Wort in der letzten Minute selbst gesagt, war sein Zuruf rechnerisch mein
+# Echo.
+#
+# Bewusst eine Ausnahmeliste und KEIN Aufweichen der 60-Prozent-Schwelle: die
+# Schwelle ist gemessen und richtig. Sie darf nur nicht über den Notausgang
+# entscheiden. Die Liste bleibt klein und wörtlich -- was hier steht, kommt
+# immer durch, und das soll nachlesbar sein.
+#
+# Wortgrenzen sind Pflicht: ohne sie träfe "halt" auch "Inhalt" und "enthält",
+# und dann wäre jeder zweite Satz vom Echo-Schutz ausgenommen.
+_STOPPWORT = re.compile(
+    r'\b(stopp?t?|halt|sei still|hoer auf|hor auf|aufhoren|ruhe|warte)\b')
+
+
+def _ohne_umlaute(text):
+    for a, b in (('ä', 'a'), ('ö', 'o'), ('ü', 'u'), ('ß', 'ss')):
+        text = text.replace(a, b)
+    return text
+
+
+def ist_stoppwort(gehoert):
+    """Ist das ein Zuruf, mit dem er mich anhalten will?"""
+    if not gehoert:
+        return False
+    flach = _ohne_umlaute(gehoert.lower())
+    flach = ''.join(c if c.isalnum() or c.isspace() else ' ' for c in flach)
+    return bool(_STOPPWORT.search(' '.join(flach.split())))
+
+
 def ist_mein_echo(gehoert, kurz_erlaubt=False):
     """Ist das, was das Ohr gehört hat, in Wahrheit meine eigene Stimme?
 
@@ -192,6 +229,13 @@ def ist_mein_echo(gehoert, kurz_erlaubt=False):
     """
     if not gehoert:
         return False
+
+    # Der Notausgang zuerst -- siehe ist_stoppwort(). Lieber einmal mein
+    # eigenes Echo als Stopp missverstehen (dann bin ich kurz still, und das
+    # kostet ihn nichts) als seinen Zuruf überhören, während ich rede.
+    if ist_stoppwort(gehoert):
+        return False
+
     g = _worte(gehoert)
     if not g:
         return False
