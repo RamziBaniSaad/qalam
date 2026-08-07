@@ -144,37 +144,6 @@ ohr = None
 ohr_log = None
 schrift = None
 
-try:
-    # Unter pythonw gibt es keine Konsole: ein Fehler beim Laden der Modelle
-    # verschwindet spurlos, der Prozess laeuft weiter und hoert trotzdem nichts.
-    # Genau diese Sorte Fehler ist teuer, also bekommt das Ohr ein Protokoll.
-    if IST_WINDOWS:
-        # Anhaengen, nicht ueberschreiben. Das Protokoll ist der einzige Ort, an
-        # dem steht, wie lange die Modelle wirklich brauchen -- und am
-        # 31.07.2026 hat genau ein Neustart des Ohrs die Messwerte fast
-        # gekostet, die die Verzoegerung erklaeren sollten. Ein Protokoll, das
-        # ein Neustart loescht, ist bei einem Fehler, der nur manchmal auftritt,
-        # nutzlos.
-        ohr_log = open(im_projekt('ohr.log'),
-                       'a', encoding='utf-8', buffering=1)
-        ohr_log.write(f'\n===== Ohr gestartet {time.strftime("%Y-%m-%d %H:%M:%S")} =====\n')
-        ohr = subprocess.Popen([sys.executable, '-u', im_projekt('src', 'assistant.py')],
-                               stdout=ohr_log, stderr=subprocess.STDOUT)
-        print('Weckwort laeuft mit (Protokoll: ohr.log).')
-    else:
-        print('Weckwort ausgelassen -- nur unter Windows.')
-except Exception as e:
-    print(f'Weckwort nicht gestartet: {e}')
-
-# Die Untertitel gehoeren dazu: sie zeigen, was gehoert und was gesagt wurde.
-# Eigener Prozess, weil auch der Stop-Hook (PowerShell) sie beschriften koennen
-# muss -- die beiden teilen sich eine Datei, keinen Kanal.
-try:
-    if IST_WINDOWS:
-        schrift = subprocess.Popen([sys.executable, im_projekt('src', 'untertitel.py')])
-        print('Untertitel laufen mit.')
-except Exception as e:
-    print(f'Untertitel nicht gestartet: {e}')
 
 def _schon_da():
     """Läuft main.py schon? Dann gibt es hier keine zweite.
@@ -186,6 +155,13 @@ def _schon_da():
 
     Es ist dieselbe Falle wie am 31.07., nur eine Ebene höher: damals stritten
     zwei Ohren um dasselbe Mikrofon, und danach hörte keines mehr etwas.
+
+    GEFRAGT WIRD, BEVOR IRGENDETWAS STARTET. Das ist keine Kosmetik: wird das
+    Ohr vorher aufgemacht und danach festgestellt, dass schon eine Instanz
+    läuft, dann wartet dieser Prozess auf die andere -- und nimmt beim
+    Aufräumen sein eigenes, frisch gestartetes Ohr mit. Genau so ist Qalam am
+    07.08.2026 um 02:39 stumm geworden: ein Neustart, bei dem die alte Instanz
+    noch eine Sekunde am Sterben war, hat die neue mit in den Tod gerissen.
 
     WARTEN und nicht überspringen: der Aufruf unten bestimmt die Lebensdauer
     dieses Prozesses — endet er, räumt der finally-Zweig Ohr und Untertitel mit
@@ -202,9 +178,19 @@ def _schon_da():
         return []
     ziel = os.path.join('src', 'main.py').lower()
     treffer = []
-    for p in psutil.process_iter(['pid', 'cmdline']):
+    for p in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             if p.info['pid'] == os.getpid():
+                continue
+            # NUR echte Python-Prozesse. Der Vergleich lief vorher gegen JEDE
+            # Befehlszeile, in der die beiden Wörter vorkommen -- und damit
+            # gegen jede Shell, die gerade etwas über Qalam tut. Am 07.08.2026
+            # hat sich Qalam genau daran selbst blockiert: ein Neustartskript
+            # nannte in seiner eigenen Befehlszeile den Pfad `src\main.py`,
+            # run.py hielt dieses Skript für eine laufende Instanz, wartete auf
+            # sein Ende -- und nahm dabei das eben gestartete Ohr mit.
+            # Ein Prozess, der ÜBER Qalam redet, IST kein Qalam.
+            if not (p.info['name'] or '').lower().startswith('python'):
                 continue
             zeile = ' '.join(p.info['cmdline'] or []).lower()
             if ziel in zeile and 'qalam' in zeile:
@@ -214,8 +200,43 @@ def _schon_da():
     return treffer
 
 
+_laufende = _schon_da()
+
 try:
-    _laufende = _schon_da()
+    # Unter pythonw gibt es keine Konsole: ein Fehler beim Laden der Modelle
+    # verschwindet spurlos, der Prozess laeuft weiter und hoert trotzdem nichts.
+    # Genau diese Sorte Fehler ist teuer, also bekommt das Ohr ein Protokoll.
+    if IST_WINDOWS and not _laufende:
+        # Anhaengen, nicht ueberschreiben. Das Protokoll ist der einzige Ort, an
+        # dem steht, wie lange die Modelle wirklich brauchen -- und am
+        # 31.07.2026 hat genau ein Neustart des Ohrs die Messwerte fast
+        # gekostet, die die Verzoegerung erklaeren sollten. Ein Protokoll, das
+        # ein Neustart loescht, ist bei einem Fehler, der nur manchmal auftritt,
+        # nutzlos.
+        ohr_log = open(im_projekt('ohr.log'),
+                       'a', encoding='utf-8', buffering=1)
+        ohr_log.write(f'\n===== Ohr gestartet {time.strftime("%Y-%m-%d %H:%M:%S")} =====\n')
+        ohr = subprocess.Popen([sys.executable, '-u', im_projekt('src', 'assistant.py')],
+                               stdout=ohr_log, stderr=subprocess.STDOUT)
+        print('Weckwort laeuft mit (Protokoll: ohr.log).')
+    elif _laufende:
+        print('Weckwort ausgelassen -- Qalam laeuft schon, das Ohr auch.')
+    else:
+        print('Weckwort ausgelassen -- nur unter Windows.')
+except Exception as e:
+    print(f'Weckwort nicht gestartet: {e}')
+
+# Die Untertitel gehoeren dazu: sie zeigen, was gehoert und was gesagt wurde.
+# Eigener Prozess, weil auch der Stop-Hook (PowerShell) sie beschriften koennen
+# muss -- die beiden teilen sich eine Datei, keinen Kanal.
+try:
+    if IST_WINDOWS and not _laufende:
+        schrift = subprocess.Popen([sys.executable, im_projekt('src', 'untertitel.py')])
+        print('Untertitel laufen mit.')
+except Exception as e:
+    print(f'Untertitel nicht gestartet: {e}')
+
+try:
     if _laufende:
         print(f'Qalam läuft schon ({len(_laufende)} Prozess(e)) -- '
               f'ich starte keine zweite und warte.')

@@ -666,6 +666,18 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
 
     Rückgabe: (geklappt, meldung) — die Meldung ist so formuliert, dass sie
     vorgelesen werden kann, falls es schiefging."""
+    # Gemessen wird ab hier, und die Abschnitte einzeln.
+    #
+    # Ohne Zahlen ist "die Brücke fühlt sich träge an" nicht zu beheben --
+    # dann wird an der Pause gedreht, die zufällig auffällt, statt an der, die
+    # kostet. Die Zeilen stehen in ohr.log; sie kosten nichts und sind der
+    # einzige Weg, eine Kürzung zu belegen statt zu behaupten.
+    _angefangen = time.monotonic()
+    _marken = []
+
+    def _marke(was):
+        _marken.append((was, time.monotonic() - _angefangen))
+
     auftrag = ' '.join((auftrag or '').split())
     if not auftrag:
         return False, 'Da war kein Auftrag dabei.'
@@ -754,9 +766,11 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
                 return False, ('Ich bekomme das Claude-Fenster nicht nach vorn. '
                                'Dein Satz liegt in der Zwischenablage.')
             return False, 'Ich bekomme das Claude-Fenster nicht nach vorn.'
+        _marke('nach vorn')
         time.sleep(0.2)
 
         getroffen, leer, seiner = fokussiere_eingabefeld(hwnd, tastatur)
+        _marke('Feld gefunden')
         if not getroffen:
             _merker_weg()
             # `seiner` ist hier nicht leer, wenn die Prüfung etwas aus einem
@@ -788,6 +802,7 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
             return False, 'Ich komme an die Zwischenablage nicht heran.'
 
         _einfuegen_und_senden(tastatur)
+        _marke('abgeschickt')
         # Und jetzt sein eigener Text zurück ins leere Feld -- ohne Enter.
         #
         # Ramzis Wunsch, wortgetreu: er will nicht, dass sein gesprochener
@@ -802,17 +817,26 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         # (Win+V) nötig, der oft gar nicht eingeschaltet ist.
         _zurueckschreiben(tastatur, leer, seiner)
     finally:
-        # Zwischenablage zurückgeben -- Ramzi hat da oft etwas drin, das er
-        # gleich braucht. Kurz warten, sonst überhole ich das eigene Einfügen.
-        # Liegt dort aber eine Rettung, bleibt sie liegen: einen verlorenen Satz
-        # wiederherzustellen ist wichtiger, als eine Zwischenablage aufzuräumen.
-        time.sleep(0.4)
-        if vorher is not None and not behalten:
-            _zwischenablage_schreiben(vorher)
+        # DER FOKUS ZUERST, die Aufräumarbeit danach.
+        #
+        # Ramzis Begründung vom 07.08.2026, und sie ist der ganze Grund für
+        # diese Reihenfolge: er redet mit mir, WÄHREND er spielt. Zwischen
+        # "er hört auf zu sprechen" und "sein Spiel nimmt wieder Tasten an"
+        # liegt die Sekunde, in der er stirbt. Alles, was den Fokus nicht
+        # braucht, hat in dieser Sekunde nichts verloren -- und die
+        # Zwischenablage zurückzugeben braucht ihn nicht: das ist ein Aufruf
+        # an Windows, nicht an ein Fenster.
+        #
+        # Die kurze Pause hier bleibt und ist kein Rest: der Enter aus
+        # _einfuegen_und_senden ist gerade erst abgeschickt. Ein
+        # Fensterwechsel im selben Moment stellte ihn dem NEUEN Vordergrund
+        # zu -- der Auftrag käme nie an, und im Spiel wäre stattdessen eine
+        # Taste gedrückt worden.
+        time.sleep(0.12)
 
-        # Und den Fokus zurück, wo er war -- damit Ramzis Vollbildspiel nicht
-        # zubleibt. Ganz am Ende und im `finally`: auch ein Fehlschlag soll ihn
-        # nicht aus dem Spiel werfen.
+        # Den Fokus zurück, wo er war -- damit Ramzis Vollbildspiel nicht
+        # zubleibt. Im `finally`: auch ein Fehlschlag soll ihn nicht aus dem
+        # Spiel werfen.
         #
         # Nur wenn das Fenster noch existiert. Zwischen dem Merken und hier
         # liegen ein paar Sekunden, in denen es geschlossen worden sein kann --
@@ -856,6 +880,26 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
                 threading.Thread(target=_nachsehen, daemon=True).start()
             except Exception:
                 pass
+
+        # Zwischenablage zurückgeben -- Ramzi hat da oft etwas drin, das er
+        # gleich braucht. Nebenher und erst nach kurzer Wartezeit: sonst
+        # überhole ich das eigene Einfügen. Liegt dort aber eine Rettung,
+        # bleibt sie liegen -- einen verlorenen Satz wiederherzustellen ist
+        # wichtiger, als eine Zwischenablage aufzuräumen.
+        def _zwischenablage_zurueckgeben():
+            time.sleep(0.4)
+            if vorher is not None and not behalten:
+                _zwischenablage_schreiben(vorher)
+
+        try:
+            threading.Thread(target=_zwischenablage_zurueckgeben, daemon=True).start()
+        except Exception:
+            pass
+
+        _marke('Fokus zurück')
+        print(f'[{time.strftime("%H:%M:%S")}] [Brücke] Zeiten: '
+              + ', '.join(f'{was} {wann:.2f}' for was, wann in _marken)
+              + ' s', flush=True)
 
     return True, None
 
