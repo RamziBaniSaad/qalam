@@ -803,6 +803,82 @@ def _merker_weg():
         pass
 
 
+# --- Ist das, was da abgeschickt werden soll, in Wahrheit mein Echo? -------
+#
+# ZWEI Netze, weil das eine allein nachweislich durchgelassen hat.
+#
+# Das erste ist der gewohnte Wortvergleich (warteschlange.ist_mein_echo) mit
+# dem Rueckblick auf die letzte Minute -- er greift, wenn das Gehoerte
+# ueberwiegend aus meinen Woertern besteht.
+#
+# Das zweite ist haerter und deckt genau den Fall ab, der dreimal durchkam:
+# eine woertliche Wortfolge von acht oder mehr Woertern, die so in
+# noor-gesagt.log der letzten zwei Minuten steht. Acht Woerter am Stueck sagt
+# niemand zufaellig genauso -- und mein Echo war jedes Mal ein langes
+# woertliches Stueck. Der Wortvergleich verfehlte es, weil Ramzis eigener Satz
+# drumherum den Anteil unter die Schwelle drueckte.
+ECHO_FOLGE = 8
+ECHO_RUECKBLICK = 120.0
+
+
+def _worte_flach(text):
+    return [w for w in ''.join(
+        c.lower() if c.isalnum() or c.isspace() else ' ' for c in text).split()]
+
+
+def _woertlich_von_mir(text):
+    """Steht eine Folge von >= ECHO_FOLGE Woertern so in meinem Protokoll?"""
+    worte = _worte_flach(text)
+    if len(worte) < ECHO_FOLGE:
+        return False
+    try:
+        import warteschlange
+        pfad = warteschlange.GESAGT_LOG
+    except Exception:
+        return False
+    grenze = time.strftime('%Y-%m-%d %H:%M:%S',
+                           time.localtime(time.time() - ECHO_RUECKBLICK))
+    meine = []
+    try:
+        with open(pfad, encoding='utf-8') as f:
+            # Nur das Ende der Datei -- sie waechst mit jeder Sitzung, und zwei
+            # Minuten sind hoechstens ein paar Dutzend Zeilen.
+            for zeile in f.readlines()[-200:]:
+                if len(zeile) < 20 or zeile[:19] < grenze:
+                    continue
+                # Zeitstempel und Marke abschneiden, nur der Text zaehlt.
+                rest = zeile[19:].strip()
+                teil = rest.split(None, 1)
+                if teil and teil[0] in ('GESAGT', 'UNGESAGT', 'ABGEBROCHEN'):
+                    rest = teil[1] if len(teil) > 1 else ''
+                meine.append(rest)
+    except OSError:
+        return False
+    if not meine:
+        return False
+    meins = ' ' + ' '.join(_worte_flach(' '.join(meine))) + ' '
+    for i in range(len(worte) - ECHO_FOLGE + 1):
+        if ' ' + ' '.join(worte[i:i + ECHO_FOLGE]) + ' ' in meins:
+            return True
+    return False
+
+
+def _ist_mein_echo(text):
+    try:
+        import warteschlange
+        if warteschlange.ist_mein_echo(text):
+            print('[Brücke] als mein Echo erkannt (Wortvergleich): %r'
+                  % text[:60], flush=True)
+            return True
+    except Exception:
+        pass
+    if _woertlich_von_mir(text):
+        print('[Brücke] als mein Echo erkannt (%d Wörter wörtlich): %r'
+              % (ECHO_FOLGE, text[:60]), flush=True)
+        return True
+    return False
+
+
 def sende(auftrag, fenster_titel=FENSTER_TITEL):
     """Auftrag in die laufende Claude-Sitzung schreiben und abschicken.
 
@@ -825,6 +901,23 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
         return False, 'Da war kein Auftrag dabei.'
     if not IS_WINDOWS:
         return False, 'Die Brücke gibt es bisher nur unter Windows.'
+
+    # DIE LETZTE PRUEFUNG VOR DEM ABSCHICKEN: war das in Wahrheit ich selbst?
+    #
+    # Am 07.08.2026 dreimal passiert -- ein Satz, den ich gerade gesprochen
+    # hatte, kam als SEINE Nachricht bei mir an. Der Echo-Schutz sitzt im Ohr,
+    # aber offenbar nicht auf jedem Weg, den die Bruecke nimmt: zwischen dem
+    # Hoeren und dem Abschicken liegen mehrere Schritte, und der gesammelte
+    # Satz kann unterwegs aus mehreren Stuecken zusammengewachsen sein.
+    #
+    # Hier ist die letzte Stelle, an der es noch etwas kostet, sich zu irren.
+    #
+    # Und dann STILL verwerfen, ohne Meldung: eine gesprochene Absage waere
+    # neuer Ton aus meinem Lautsprecher -- also frisches Futter fuer genau das
+    # Echo, das hier gerade aufgefallen ist. Im Protokoll steht, was passiert
+    # ist; das reicht.
+    if _ist_mein_echo(auftrag):
+        return False, ''
 
     hwnd = finde_fenster(fenster_titel)
     if not hwnd:

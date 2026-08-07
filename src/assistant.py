@@ -1011,8 +1011,13 @@ class Assistent:
             ok, meldung = sende(auftrag)
             print(f'[{time.strftime("%H:%M:%S")}] [Brücke] '
                   + ('angekommen' if ok else f'FEHLSCHLAG -- {meldung}'))
-            if not ok:
-                self._sag(meldung or 'Das hat nicht geklappt.')
+            if not ok and meldung is not None and meldung != '':
+                self._sag(meldung)
+            elif not ok and meldung is None:
+                self._sag('Das hat nicht geklappt.')
+            # Eine LEERE Meldung heisst: die Bruecke hat still verworfen (mein
+            # eigenes Echo). Dazu sage ich nichts -- das waere neuer Ton aus
+            # meinem Lautsprecher und damit neues Echo.
             # Bei Erfolg sage ich hier NICHTS. Die eigentliche Antwort spricht
             # der Stop-Hook, sobald sie steht -- eine Zwischenansage wuerde sich
             # bei kurzen Antworten mit ihr ins Wort fallen.
