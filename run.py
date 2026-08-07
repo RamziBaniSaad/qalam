@@ -145,6 +145,65 @@ ohr_log = None
 schrift = None
 
 
+def _protokoll_anhaengend(pfad):
+    """ohr.log so öffnen, dass JEDER Schreibvorgang am Dateiende landet.
+
+    Warum nicht einfach open(pfad, 'a'): das 'a' der Python-Laufzeit ist
+    nachgebaut — vor jedem Schreiben springt sie selbst ans Ende. Diesen
+    Nachbau hat aber nur DIESER Prozess. Das Ohr ist ein Kindprozess und
+    bekommt den blanken Windows-Griff mit gemeinsamer Schreibposition.
+
+    Kürzt jemand die Datei — `werkzeuge/noor-protokolle-kuerzen.ps1` im
+    Noor-Ordner tut das jetzt bei jedem Sitzungsstart —, schreibt das Ohr
+    trotzdem an der alten, weit hinten liegenden Position weiter, und Windows
+    füllt alles davor mit Null-Bytes auf. Am 07.08.2026 genau so gemessen: 257
+    Null-Bytes mitten im Protokoll, und das Kürzen hatte kein einziges Byte
+    gespart.
+
+    FILE_APPEND_DATA ist das echte Anhängen: Windows setzt bei jedem Schreiben
+    selbst ans Dateiende, egal wo der Griff steht. Klappt das nicht, geht es
+    mit dem alten Weg weiter — ein Protokoll ist viel wert, aber nicht so viel,
+    dass Qalam daran nicht startet.
+    """
+    if not IST_WINDOWS:
+        return open(pfad, 'a', encoding='utf-8', buffering=1)
+    try:
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        FILE_APPEND_DATA = 0x0004
+        FILE_SHARE_READ = 0x0001
+        FILE_SHARE_WRITE = 0x0002
+        OPEN_ALWAYS = 4
+
+        class _Sicherheit(ctypes.Structure):
+            _fields_ = [('nLength', wintypes.DWORD),
+                        ('lpSecurityDescriptor', wintypes.LPVOID),
+                        ('bInheritHandle', wintypes.BOOL)]
+
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                                         wintypes.DWORD, ctypes.c_void_p,
+                                         wintypes.DWORD, wintypes.DWORD,
+                                         wintypes.HANDLE]
+        kernel32.CreateFileW.restype = wintypes.HANDLE
+
+        # Erbbar, damit das Ohr denselben Griff bekommt.
+        sa = _Sicherheit(ctypes.sizeof(_Sicherheit), None, True)
+        griff = kernel32.CreateFileW(str(pfad), FILE_APPEND_DATA,
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                     ctypes.byref(sa), OPEN_ALWAYS, 0, None)
+        if griff == ctypes.c_void_p(-1).value:
+            raise OSError(ctypes.get_last_error(), 'CreateFileW fuer ohr.log')
+        fd = msvcrt.open_osfhandle(griff, os.O_APPEND)
+        return os.fdopen(fd, 'w', encoding='utf-8', buffering=1)
+    except Exception as fehler:
+        print(f'[Protokoll] echtes Anhaengen nicht moeglich ({fehler}) -- '
+              f'normaler Anhaenge-Modus.')
+        return open(pfad, 'a', encoding='utf-8', buffering=1)
+
+
 def _schon_da():
     """Läuft main.py schon? Dann gibt es hier keine zweite.
 
@@ -213,8 +272,7 @@ try:
         # gekostet, die die Verzoegerung erklaeren sollten. Ein Protokoll, das
         # ein Neustart loescht, ist bei einem Fehler, der nur manchmal auftritt,
         # nutzlos.
-        ohr_log = open(im_projekt('ohr.log'),
-                       'a', encoding='utf-8', buffering=1)
+        ohr_log = _protokoll_anhaengend(im_projekt('ohr.log'))
         ohr_log.write(f'\n===== Ohr gestartet {time.strftime("%Y-%m-%d %H:%M:%S")} =====\n')
         ohr = subprocess.Popen([sys.executable, '-u', im_projekt('src', 'assistant.py')],
                                stdout=ohr_log, stderr=subprocess.STDOUT)
