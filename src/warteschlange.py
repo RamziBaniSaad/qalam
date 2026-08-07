@@ -418,12 +418,36 @@ def ruhig_seit():
         return 1e9
 
 
-def er_ist_fertig(nachlauf=NACHLAUF):
+# Wie lange seine Stille dauern muss, bevor ich sie als "fertig" lese.
+#
+# Ramzis Befund vom 08.08.2026 bei Test 3: "ich habe aufgehoert zu reden und
+# darauf gewartet, dass es abschickt. Aber weil ich meine Redepause auf mehrere
+# Sekunden habe, muss ich halt warten -- und genau da hast du mir
+# reingesprochen, obwohl das noch nicht abgeschickt war."
+#
+# Das ist der Kern: seine Stille ist NICHT das Ende seines Zuges. Qalam sammelt
+# nach dem letzten Wort noch `stille_ms` lang, bevor die Aeusserung ueberhaupt
+# abgeschickt wird. In diesem Fenster ist er dran, auch wenn kein Ton kommt --
+# er wartet ja selbst darauf. Mit festen 0,6 s musste ich hineinfallen, und
+# zwar umso sicherer, je groesser er den Regler stellt.
+#
+# Also folgt der Nachlauf seinem eigenen Regler, plus dem alten Puffer fuer die
+# Zeit vom Abschicken bis zum Ankommen.
+def noetige_ruhe():
+    try:
+        import einstellungen
+        stille = float(einstellungen.hole('stille_ms') or 0) / 1000.0
+    except Exception:
+        stille = 0.0
+    return max(NACHLAUF, stille + NACHLAUF)
+
+
+def er_ist_fertig(nachlauf=None):
     """Darf ich jetzt anfangen -- ist er still UND war es lange genug still?"""
-    return ruhig_seit() >= nachlauf
+    return ruhig_seit() >= (noetige_ruhe() if nachlauf is None else nachlauf)
 
 
-def warte_bis_er_fertig_ist(nachlauf=NACHLAUF):
+def warte_bis_er_fertig_ist(nachlauf=None):
     """Blockiert, bis Ramzi seinen Platz in der Warteschlange abgegeben hat.
 
     Gibt True zurück, wenn er wirklich fertig ist, und False, wenn ein Merker
