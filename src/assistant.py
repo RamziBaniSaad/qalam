@@ -284,7 +284,10 @@ class Assistent:
             (['wach auf', 'aufwachen', 'wach mal auf', 'bist du da', 'bist du wach'],
              lambda: self._aufwachen()),
 
-            (['hor auf', 'sei mal still', 'ruhe', 'stopp reden', 'nicht weiter reden'],
+            # Der ausdrückliche Stopp -- er räumt auch das Wartende weg, anders
+            # als das blosse Anfangen zu reden (siehe _unterbrich_mich).
+            (['hor auf', 'sei mal still', 'sei still', 'ruhe', 'stopp',
+              'nicht weiter reden', 'halt die klappe'],
              lambda: self._still()),
 
             # Das Gegenstück zum Unterbrechen. Ramzi unterbricht mich oft --
@@ -829,10 +832,10 @@ class Assistent:
         # Das ist die einfache Form vom Unterbrochenwerden -- noch nicht
         # mitten im Wort, aber schon "du hast Vorrang".
         #
-        # Über die Zentrale, damit auch das WARTENDE verschwindet: einen Satz
-        # abzubrechen, hinter dem noch drei stehen, ist keine Unterbrechung.
-        if self.sprecher.spricht_gerade() or sprechzentrale.anzahl():
-            sprechzentrale.stoppe_alles('er hat übernommen')
+        # Über die Zentrale, damit auch die Bühne (Video, Dämpfung) sauber
+        # freigegeben wird. Nur der laufende Satz -- was wartet, wartet weiter.
+        if self.sprecher.spricht_gerade():
+            sprechzentrale.unterbrich()
 
         if not endgueltig:
             # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
@@ -1038,6 +1041,13 @@ class Assistent:
                     continue
                 if self.sprecher.spricht_gerade():
                     continue
+                # Auch dann noch gedämpft lassen, wenn zwischen zwei Sätzen
+                # gerade niemand redet: die Zentrale hat den nächsten schon
+                # in der Hand. Sonst springt die Musik zwischen je zwei
+                # Aufträgen kurz hoch -- genau das Zucken, das Ramzi am
+                # Video gesehen hat.
+                if sprechzentrale.anzahl():
+                    continue
                 from wake_word import qalam_nimmt_auf
                 if qalam_nimmt_auf():
                     continue        # Ramzi diktiert -- das dämpft selbst
@@ -1128,15 +1138,19 @@ class Assistent:
             time.sleep(2.0)
 
     def _unterbrich_mich(self):
-        """Ramzi hat mitten in meinem Satz meinen Namen gesagt -- aufhoeren.
+        """Ramzi hat mitten in meinem Satz übernommen -- aufhoeren.
 
         Bewusst hart und ohne Ausklingen: er hat Vorrang, und ein Satz, der
         noch zu Ende gesprochen wird, fuehlt sich fuer ihn genau wie das an,
         worueber er sich beschwert hat.
+
+        Aber NUR der laufende Satz. Was noch wartet, wartet weiter -- das
+        Wegwerfen gehoert dem ausdruecklichen Stopp (Taste, "sei still",
+        Knopf auf der Tafel), nicht dem blossen Anfangen zu reden.
         """
         try:
-            if self.sprecher.spricht_gerade() or sprechzentrale.anzahl():
-                sprechzentrale.stoppe_alles('unterbrochen -- Ramzi hat übernommen')
+            if self.sprecher.spricht_gerade():
+                sprechzentrale.unterbrich()
         except Exception:
             pass
 

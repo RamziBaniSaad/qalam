@@ -171,11 +171,37 @@ def stoppe_alles(grund='Stopp'):
             _sprecher.stoppe()
     except Exception:
         pass
+    # Sofort und nicht erst beim nächsten Durchgang: er hat gestoppt, also
+    # soll sein Video in derselben Sekunde weiterlaufen.
+    _buehne(False)
     for a in offen:
         _verworfen(a, 'geleert')
     print('[Zentrale] %s -- %d Auftraege verworfen.' % (grund, len(offen)),
           flush=True)
     return len(offen)
+
+
+def unterbrich(grund='Ramzi hat übernommen'):
+    """Nur den LAUFENDEN Satz abbrechen -- was wartet, wartet weiter.
+
+    Der Unterschied zu stoppe_alles() ist Absicht und wichtig: fängt er mitten
+    in meinem Satz an zu reden, will er diesen Satz weghaben, nicht alles.
+    Würde die Liste dabei geleert, verlöre jede Zwischenmeldung, die während
+    seines Satzes eingeht, sofort ihren Sinn -- die Zentrale soll auf ihn
+    warten, nicht wegwerfen. Geleert wird nur, wenn er es ausdrücklich sagt
+    ("sei still", Stopp-Taste, Stopp-Knopf).
+    """
+    global _abbruch_stand
+    with _sperre:
+        _abbruch_stand += 1
+    try:
+        if _sprecher is not None:
+            _sprecher.stoppe()
+    except Exception:
+        pass
+    _buehne(False)
+    print('[Zentrale] unterbrochen (%s) -- %d Aufträge warten weiter.'
+          % (grund, anzahl()), flush=True)
 
 
 def _darf_jetzt(auftrag, stand):
@@ -210,11 +236,38 @@ def _darf_jetzt(auftrag, stand):
     return 'gestoppt'
 
 
+_buehne_gehalten = False
+
+
+def _buehne(an):
+    """Video anhalten bzw. weiterlaufen lassen -- für den GANZEN Redezug.
+
+    Ramzis Befund vom 07.08.2026: "nach einer bestimmten Zeit geht das Video
+    einfach weiter, obwohl du gerade noch redest." Das Anhalten hing am
+    einzelnen Satz, und sobald mehrere Aufträge hintereinander kommen, lief das
+    Video zwischen je zwei Sätzen kurz an.
+
+    Hier gehalten, weil hier der Zug bekannt ist: die Zentrale weiß, ob noch
+    etwas wartet, `_sprich()` weiß das nicht. Losgelassen wird erst, wenn die
+    Liste leer ist -- oder sofort beim Stopp.
+    """
+    global _buehne_gehalten
+    if an == _buehne_gehalten:
+        return
+    try:
+        import voice_output
+        voice_output.buehne_an() if an else voice_output.buehne_aus()
+        _buehne_gehalten = an
+    except Exception:
+        pass
+
+
 def _lauf():
     while _laeuft.is_set():
         _aufraeumen()
         auftrag = _bestes()
         if auftrag is None:
+            _buehne(False)
             time.sleep(0.08)
             continue
 
@@ -229,17 +282,25 @@ def _lauf():
         if was == 'gestoppt':
             continue
 
+        _buehne(True)
         try:
-            _sprecher.sprich(auftrag['text'])
+            ergebnis = _sprecher.sprich(auftrag['text'])
         except Exception as e:
             print('[Zentrale] Sprechen fehlgeschlagen: %s' % e, flush=True)
             continue
-        # Abgebrochen worden? Dann steht der Satz nur zum Teil im Raum, und der
-        # Rest fehlt ihm. Aufgeschrieben wird der GANZE Text -- wo genau der Ton
-        # abgeschnitten wurde, weiss niemand (der Sprecher gibt Ton an die Karte
-        # und stoppt den Strom, es gibt keine Marke "bis hierher gehoert"). Von
-        # vorn zu wiederholen ist ehrlich; ein "weiter ab Wort 14" waere geraten.
-        if stand != _abbruch_stand:
+
+        # Was ist daraus geworden? Der Sprecher sagt es selbst.
+        #
+        # ABGEBROCHEN heisst: der Satz stand zum Teil im Raum, der Rest fehlt
+        # ihm. Aufgeschrieben wird der GANZE Text -- wo genau der Ton
+        # abgeschnitten wurde, weiss niemand (der Sprecher gibt Ton an die
+        # Karte und stoppt den Strom, es gibt keine Marke "bis hierher
+        # gehoert"). Von vorn zu wiederholen ist ehrlich; ein "weiter ab
+        # Wort 14" waere geraten. Genau so hat Ramzi es selbst vorgeschlagen.
+        if ergebnis == 'ungesagt':
+            _verworfen(auftrag, 'nicht gesprochen')
+        elif ergebnis == 'abgebrochen' or stand != _abbruch_stand:
+            print('[Zentrale] abgebrochen: %r' % auftrag['text'][:50], flush=True)
             try:
                 import warteschlange
                 warteschlange.merke(auftrag['text'], 'ABGEBROCHEN')

@@ -222,6 +222,54 @@ def _videos_abwarten():
         pass
 
 
+# --- Die Bühne: leiser stellen und Video anhalten, EINMAL für den Redezug ---
+#
+# Ramzis Befund vom 07.08.2026, während dieses Umbaus: "nach einer bestimmten
+# Zeit geht das Video einfach weiter, obwohl du gerade noch redest."
+#
+# Der Grund war die Zuständigkeit, nicht die Zeit. Anhalten und Fortsetzen
+# hingen am EINZELNEN Satz: jedes `_sprich()` hielt beim Betreten an und ließ
+# beim Verlassen wieder laufen. Solange eine lange Antwort ein einziger Aufruf
+# war, fiel das nicht auf. Sobald mehrere Aufträge hintereinander kommen --
+# und genau das macht die Sprech-Zentrale --, lief das Video zwischen je zwei
+# Sätzen kurz an. Für ihn sah es aus, als hätte ich mittendrin aufgegeben.
+#
+# Also ein Zähler: der erste, der die Bühne betritt, hält das Video an; erst
+# wenn der letzte sie verlässt, läuft es weiter. Die Zentrale hält sie über
+# den ganzen Zug, die einzelnen Sätze nur der Vollständigkeit halber -- damit
+# es auch dann stimmt, wenn ein Satz ohne Zentrale gesprochen wird (Qalam
+# allein, ohne laufendes Ohr).
+_buehne_zahl = 0
+_buehne_sperre = threading.Lock()
+
+
+def buehne_an():
+    """Musik dämpfen und Video anhalten -- und mitzählen, wer sie hält."""
+    global _buehne_zahl
+    with _buehne_sperre:
+        _buehne_zahl += 1
+        if _buehne_zahl > 1:
+            return
+    _leiser(True)
+    _videos(True)
+
+
+def buehne_aus():
+    """Loslassen. Das Video läuft erst weiter, wenn niemand mehr redet."""
+    global _buehne_zahl
+    with _buehne_sperre:
+        if _buehne_zahl <= 0:
+            return
+        _buehne_zahl -= 1
+        if _buehne_zahl > 0:
+            return
+    # Fortgesetzt wird nur, was ich selbst angehalten habe (videos.py). Das
+    # Zurückstellen der Lautstärke gehört dem Wächter im Assistenten -- hier
+    # nur das Netz für den Fall, dass es den nicht gibt.
+    _videos(False)
+    _notbremse_lautstaerke()
+
+
 def _notbremse_lautstaerke():
     """Zurückstellen, falls es sonst niemand tut.
 
@@ -392,6 +440,26 @@ def _untertitel(text, worte, start, dauer):
         pass
 
 
+def _er_diktiert():
+    """Hat er die Diktat-Taste gedrückt, während ich rede?
+
+    Der einzige Grund, aus dem der SPRECHER von sich aus abbricht -- und zwar
+    weil er der einzige eindeutige ist: die Aufnahme-Sperre entsteht durch
+    einen Tastendruck, mein eigener Lautsprecher kann sie nicht auslösen.
+
+    Über alles andere ("er hat mitten in meinem Satz übernommen") entscheidet
+    das OHR und meldet es als Abbruch. Dort liegen die Beweise -- der gehörte
+    Text und mein eigener Satz zum Vergleichen. Hier lag früher eine zweite,
+    schlechter informierte Meinung darüber, und die hat mich mitten im Satz
+    verstummen lassen, wenn mein eigenes Echo den Merker gesetzt hatte.
+    """
+    try:
+        import warteschlange
+        return warteschlange.qalam_nimmt_auf()
+    except Exception:
+        return False
+
+
 def _er_hat_uebernommen():
     """Hat Ramzi den Platz in der Warteschlange genommen, WÄHREND ich rede?
 
@@ -455,7 +523,15 @@ class Sprecher:
         return self._stimme
 
     def sprich(self, text):
-        """Spricht den Text, Satz für Satz. Blockiert bis zum Ende."""
+        """Spricht den Text, Satz für Satz. Blockiert bis zum Ende.
+
+        Gibt zurück, was daraus geworden ist -- die Sprech-Zentrale schreibt es
+        so ins Protokoll, und "nochmal" holt daraus das Fehlende:
+
+            'fertig'       ganz gesprochen
+            'abgebrochen'  lief, wurde aber mitten im Satz gestoppt
+            'ungesagt'     kam gar nicht erst heraus (keine Stimme geladen)
+        """
         import sounddevice as sd
         # Ein Zähler und kein Schalter: es kann mehr als einen Aufrufer geben
         # (Briefkasten, Reflex, Stop-Hook), und ein Schalter waere beim Ende des
@@ -470,7 +546,7 @@ class Sprecher:
 
         saetze = in_saetze(text)
         if not saetze:
-            return
+            return 'fertig'
 
         # Der Stand, gegen den ab jetzt geprüft wird -- und zwar VOR dem
         # Warten, nicht erst vor dem ersten Ton: ein Stopp, während ich noch
@@ -508,10 +584,10 @@ class Sprecher:
             # die Reflexe des Ohrs und der Sprech-Hook, der meine Chat-Antwort
             # vorliest -- und der ist ein eigener Prozess. Deshalb liegt der
             # Merker der alten Lautstärken in einer Datei, siehe lautstaerke.py.
-            _leiser(True)
-            # Videos gleich mit anstoßen -- abgewartet wird erst kurz vor dem
-            # ersten Ton, siehe _videos_abwarten().
-            _videos(True)
+            # Beides zusammen und über einen Zähler -- siehe buehne_an().
+            # Angestoßen wird hier, abgewartet erst kurz vor dem ersten Ton
+            # (_videos_abwarten), damit das Anhalten nichts kostet.
+            buehne_an()
             # Welcher Motor spricht: XTTS (Ludvig) oder Piper.
             #
             # XTTS klingt deutlich menschlicher -- Ramzi hat es am 02.08.2026
@@ -554,7 +630,11 @@ class Sprecher:
                         print('[Stimme] Ludvig noch nicht bereit -- dieser Satz '
                               'bleibt ungesprochen: %r' % (' '.join(saetze))[:60],
                               flush=True)
-                        return
+                        # Die Bühne wieder hergeben: hier wird nichts gesagt,
+                        # und ein Video, das dafür stehen bleibt, wäre der
+                        # ärgerlichste Fall von allen.
+                        buehne_aus()
+                        return 'ungesagt'
                 except Exception:
                     motor = 'piper'
 
@@ -704,7 +784,7 @@ class Sprecher:
             def _abspielen(ton):
                 """Ein Tonstück abgeben. False heißt: hier wurde abgebrochen."""
                 for i in range(0, len(ton), BLOCK):
-                    if self._abbruch != mein_stand or _er_hat_uebernommen():
+                    if self._abbruch != mein_stand or _er_diktiert():
                         return False
                     strom.write(ton[i:i + BLOCK])
                 return True
@@ -712,6 +792,7 @@ class Sprecher:
             try:
                 while True:
                     if self._abbruch != mein_stand:
+                        abgebrochen = True
                         break
                     # Und zwischen JEDEM Satz noch einmal nachsehen.
                     #
@@ -726,7 +807,8 @@ class Sprecher:
                     #
                     # Der Satz ist die richtige Körnung: ich höre an einer
                     # natürlichen Stelle auf, nicht mitten im Wort.
-                    if _er_hat_uebernommen():
+                    if _er_diktiert():
+                        abgebrochen = True
                         break
 
                     text, ton = fertig.get()
@@ -776,16 +858,8 @@ class Sprecher:
                     pass
                 strom.stop()
                 strom.close()
-                # Das Video wieder anlaufen lassen. Anders als bei der
-                # Dämpfung gehört das HIER hin und nicht dem Wächter im
-                # Assistenten: der weiß nichts davon, und ein stehendes Video
-                # wäre schlimmer als leise Musik -- Ramzi säße vor einem Bild,
-                # das nicht weitergeht. Fortgesetzt wird nur, was ich selbst
-                # angehalten habe (videos.py).
-                _videos(False)
-                # Das Zurückstellen gehört dem Wächter im Assistenten -- hier
-                # nur das Netz für den Fall, dass es den nicht gibt.
-                _notbremse_lautstaerke()
+                buehne_aus()
+        return 'abgebrochen' if abgebrochen else 'fertig'
 
     def sprich_im_hintergrund(self, text):
         """Startet das Sprechen und kehrt sofort zurück."""

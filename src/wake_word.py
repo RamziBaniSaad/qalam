@@ -1030,6 +1030,19 @@ class Weckwort:
             if (ich_rede and im_gespraech
                     and not warteschlange.ist_mein_echo(vorlaeufig, kurz_erlaubt=True)):
                 warteschlange.redet_merken(True)
+                # UND ES AUCH SAGEN, nicht nur den Merker setzen.
+                #
+                # Bis zum 07.08.2026 stand hier nur der Merker, und der
+                # Sprecher sah selbst nach, ob er gesetzt ist. Damit gab es
+                # zwei Stellen, die ueber "Ramzi hat uebernommen" entschieden
+                # haben -- und die zweite kannte den Echo-Schutz nicht, sondern
+                # nur eine Datei, die auch mein eigener Lautsprecher setzen
+                # kann. Ramzis Erlebnis dazu: "dann ist deine Stimme weg."
+                #
+                # Entschieden wird jetzt genau hier, wo die Beweise liegen (der
+                # gehoerte Text und mein eigener Satz zum Vergleichen). Der
+                # Sprecher gehorcht nur noch.
+                self._melde(self.beim_unterbrechen)
 
             # EIN STOPPWORT WIRKT IMMER -- auch ohne meinen Namen davor.
             #
