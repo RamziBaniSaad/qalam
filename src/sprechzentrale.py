@@ -312,9 +312,17 @@ def starte(sprecher):
     """Die Zentrale in Gang setzen. Nur der Assistent ruft das."""
     global _faden, _sprecher
     _sprecher = sprecher
+    # ERST den Schalter, DANN nachsehen, ob schon jemand laeuft.
+    #
+    # Andersherum gab es eine Luecke, die der Selbsttest gefunden hat: wird
+    # starte() gerufen, waehrend ein alter Faden gerade noch einen Satz zu Ende
+    # spricht, sah die Pruefung "lebt noch" und kehrte zurueck -- ohne den
+    # Schalter je gesetzt zu haben. Der alte Faden lief danach aus, ein neuer
+    # kam nie, und die Zentrale war lautlos tot. In dieser Reihenfolge macht
+    # der alte Faden einfach mit dem neuen Sprecher weiter.
+    _laeuft.set()
     if _faden is not None and _faden.is_alive():
         return _faden
-    _laeuft.set()
     _faden = threading.Thread(target=_lauf, name='sprechzentrale', daemon=True)
     _faden.start()
     return _faden
