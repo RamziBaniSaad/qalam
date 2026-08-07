@@ -244,7 +244,23 @@ def zurueck_zu(hwnd):
                 vorn = _user32.GetForegroundWindow()
                 if vorn and not _gleich(vorn, ziel):
                     _user32.ShowWindow(ctypes.c_void_p(int(vorn)), 6)   # SW_MINIMIZE
-            if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), ziel), 0.15):
+            # Die Wartezeit gehört an die Stufe, die WIRKT -- nicht an die
+            # erste.
+            #
+            # Gemessen am 07.08.2026 mit Minecraft im Vollbild: die Rückgabe
+            # meldete jedes Mal Stufe '' (also alle drei durch, Fehlschlag),
+            # und im selben Moment lag Minecraft wieder vorn. Erst hat es
+            # nach der falschen Erklärung ausgesehen -- „der Wechsel kommt nur
+            # später als meine Uhr" --, also bekam `switch` 0,70 s. Es wurde
+            # dadurch NICHT besser, sondern langsamer (2,73 s → 3,36 s). Damit
+            # ist bewiesen: `switch` und `anhaengen` kommen bei einem
+            # Vollbildspiel gar nicht durch, es wirkt allein `zuklappen`.
+            #
+            # Also kurz nachsehen bei den beiden, die nur manchmal reichen,
+            # und lange bei der, die es am Ende tut. Nachsehen kostet im
+            # Erfolgsfall nichts: es bricht ab, sobald das Fenster vorn ist.
+            if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), ziel),
+                          0.50 if stufe == 'zuklappen' else 0.12):
                 return stufe
         except Exception:
             continue
@@ -265,6 +281,30 @@ def hole_nach_vorn(hwnd):
     if _gleich(vorn, hwnd):
         return True
 
+    # ZUERST der einfache Weg mit ALT-Tipp, DANN erst der Anhäng-Weg.
+    #
+    # Gemessen am 07.08.2026 mit Minecraft im Vollbild, dreimal dasselbe Bild:
+    # der Anhäng-Weg (AttachThreadInput) kam NIE durch -- jedes Mal wurden die
+    # vollen 0,35 s vergeblich nachgesehen, und erst die ALT-Stufe danach hat
+    # gewechselt. Einen ALT-Tipp zusätzlich davorzusetzen half nicht
+    # (0,44 s → 0,50 s, also nur teurer): es liegt nicht am fehlenden
+    # Tastendruck, sondern am Anhängen selbst.
+    #
+    # Die 0,06 s nach dem Tipp sind Pflicht: Windows muss ihn verarbeitet
+    # haben, sonst gilt er beim folgenden SetForegroundWindow noch nicht als
+    # "dieser Prozess hat gerade Eingabe erzeugt". ALT allein löst in keiner
+    # Anwendung etwas aus, kostet also nichts, wenn es nicht hilft.
+    try:
+        VK_MENU, KEYEVENTF_KEYUP = 0x12, 0x0002
+        _user32.keybd_event(VK_MENU, 0, 0, 0)
+        _user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.06)
+        _user32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+    if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), hwnd), 0.25):
+        return True
+
     mein = _user32.GetWindowThreadProcessId(vorn, None)
     sein = _user32.GetWindowThreadProcessId(hwnd, None)
     if mein and sein and mein != sein:
@@ -279,7 +319,7 @@ def hole_nach_vorn(hwnd):
     # 31.07.2026: der Aufruf sagte True, vorn stand weiterhin ein anderes
     # Fenster, und der Text landete in dessen Eingabefeld. Ein falsches "hat
     # geklappt" ist hier teurer als ein ehrliches "hat nicht geklappt".
-    if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), hwnd), 0.35):
+    if _warte_bis(lambda: _gleich(_user32.GetForegroundWindow(), hwnd), 0.25):
         return True
 
     # --- Die Vordergrundsperre ---------------------------------------------
