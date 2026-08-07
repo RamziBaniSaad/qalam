@@ -244,6 +244,20 @@ def zurueck_zu(hwnd):
                 vorn = _user32.GetForegroundWindow()
                 if vorn and not _gleich(vorn, ziel):
                     _user32.ShowWindow(ctypes.c_void_p(int(vorn)), 6)   # SW_MINIMIZE
+                # Und dann AKTIV holen, statt darauf zu warten, dass Windows
+                # von selbst das nächste Fenster nach vorn schiebt.
+                #
+                # Gemessen am 07.08.2026, 02:55: das Zuklappen allein brauchte
+                # rund eine halbe Sekunde, bis Ramzis Spiel wieder vorn lag --
+                # die ganze Zeit hat nur jemand darauf gewartet, dass Windows
+                # sich entscheidet. Der ALT-Tipp ist derselbe Griff, der auf
+                # dem Hinweg 0,44 s auf 0,08 s gebracht hat; hier gilt er
+                # genauso, denn die Vordergrundsperre ist dieselbe.
+                VK_MENU, KEYEVENTF_KEYUP = 0x12, 0x0002
+                _user32.keybd_event(VK_MENU, 0, 0, 0)
+                _user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+                time.sleep(0.06)
+                _user32.SetForegroundWindow(ziel)
             # Die Wartezeit gehört an die Stufe, die WIRKT -- nicht an die
             # erste.
             #
@@ -807,7 +821,12 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
                                'Dein Satz liegt in der Zwischenablage.')
             return False, 'Ich bekomme das Claude-Fenster nicht nach vorn.'
         _marke('nach vorn')
-        time.sleep(0.2)
+        # Kurz durchatmen lassen, bevor getippt wird. Die Zahl ist klein
+        # gehalten und nicht null: hinter ihr steht kein dokumentierter
+        # Fehlschlag, aber die Prüfung danach ist auch keine blinde -- sie
+        # tippt ein Zeichen und sieht nach, ob es ankam. Wäre es zu früh,
+        # meldet sie das und klickt, statt etwas kaputtzumachen.
+        time.sleep(0.08)
 
         getroffen, leer, seiner = fokussiere_eingabefeld(hwnd, tastatur)
         _marke('Feld gefunden')
