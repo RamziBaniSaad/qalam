@@ -166,6 +166,19 @@ def stoppe_alles(grund='Stopp'):
         _abbruch_stand += 1
         offen = list(_auftraege)
         _auftraege.clear()
+    # UND den Briefkasten -- sonst ist der Stopp nur halb.
+    #
+    # Ramzis Befund vom 08.08.2026: er rief "stopp", der laufende Satz brach
+    # ab, und ich machte mit dem naechsten weiter; erst das zweite "stopp"
+    # wirkte. Die Liste hier oben war naemlich leer, die noch ungelesenen
+    # Zettel lagen aber in qalam/.sprechpost und wurden gleich darauf
+    # abgeholt. Nach "nochmal" liegen dort regelmaessig mehrere.
+    nachpost = 0
+    try:
+        import sprechpost
+        nachpost = sprechpost.leeren()
+    except Exception:
+        pass
     try:
         if _sprecher is not None:
             _sprecher.stoppe()
@@ -176,8 +189,10 @@ def stoppe_alles(grund='Stopp'):
     _buehne(False)
     for a in offen:
         _verworfen(a, 'geleert')
-    print('[Zentrale] %s -- %d Auftraege verworfen.' % (grund, len(offen)),
-          flush=True)
+    print('[Zentrale] %s -- %d Auftraege verworfen, %d Zettel aus dem Kasten.'
+          % (grund, len(offen), nachpost), flush=True)
+    # Bewusst nur die Auftraege: das ist die Zahl, die der Aufrufer meint
+    # ("wie viel habe ich dir weggenommen"). Die Zettel sind Aufraeumarbeit.
     return len(offen)
 
 
@@ -292,18 +307,22 @@ def _lauf():
         # Was ist daraus geworden? Der Sprecher sagt es selbst.
         #
         # ABGEBROCHEN heisst: der Satz stand zum Teil im Raum, der Rest fehlt
-        # ihm. Aufgeschrieben wird der GANZE Text -- wo genau der Ton
-        # abgeschnitten wurde, weiss niemand (der Sprecher gibt Ton an die
-        # Karte und stoppt den Strom, es gibt keine Marke "bis hierher
-        # gehoert"). Von vorn zu wiederholen ist ehrlich; ein "weiter ab
-        # Wort 14" waere geraten. Genau so hat Ramzi es selbst vorgeschlagen.
+        # ihm. Aufgeschrieben wird NUR der Rest -- also ab dem Satz, der beim
+        # Stopp gerade lief. Alles davor steht schon einzeln als GESAGT da,
+        # weil der Sprecher jeden Teilsatz vermerkt, waehrend er ihn spricht.
+        #
+        # Vorher stand hier der ganze Auftragstext, und das war Ramzis Befund
+        # vom 08.08.2026: "nochmal" las ihm alles von vorn vor, auch das schon
+        # Gehoerte -- zwangslaeufig, denn es nimmt die Nicht-GESAGT-Zeilen, und
+        # die enthielten den kompletten Text ein zweites Mal.
         if ergebnis == 'ungesagt':
             _verworfen(auftrag, 'nicht gesprochen')
         elif ergebnis == 'abgebrochen' or stand != _abbruch_stand:
-            print('[Zentrale] abgebrochen: %r' % auftrag['text'][:50], flush=True)
+            rest = getattr(_sprecher, '_nicht_gesagt', '') or auftrag['text']
+            print('[Zentrale] abgebrochen, es fehlt: %r' % rest[:50], flush=True)
             try:
                 import warteschlange
-                warteschlange.merke(auftrag['text'], 'ABGEBROCHEN')
+                warteschlange.merke(rest, 'ABGEBROCHEN')
             except Exception:
                 pass
 

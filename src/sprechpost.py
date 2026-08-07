@@ -112,3 +112,34 @@ def abholen():
     except Exception:
         pass
     return None
+
+
+def leeren():
+    """Alles wegwerfen, was noch im Kasten liegt. Gibt die Anzahl zurueck.
+
+    Ramzis Befund vom 08.08.2026 bei der Abnahme: er rief "stopp", ich brach
+    den laufenden Satz ab -- und machte mit dem naechsten weiter. Erst das
+    zweite "stopp" wirkte ganz.
+
+    Der Grund war diese Datei. `sprechzentrale.stoppe_alles()` leert die Liste
+    im Speicher, aber die noch ungelesenen Zettel liegen HIER auf der Platte;
+    der naechste Durchgang holt sie ab, als waere nichts gewesen. Besonders
+    sichtbar nach "nochmal", das mehrere Zettel auf einmal einwirft.
+
+    Ein Stopp muss beide Seiten treffen, sonst ist er keiner.
+    """
+    weg = 0
+    try:
+        if not os.path.isdir(KASTEN):
+            return 0
+        for n in os.listdir(KASTEN):
+            if not n.endswith('.txt'):
+                continue
+            try:
+                os.remove(os.path.join(KASTEN, n))
+                weg += 1
+            except OSError:
+                pass
+    except Exception:
+        pass
+    return weg

@@ -261,11 +261,65 @@ def _im_protokoll(art, stueck):
     return any(art in zeile and stueck in zeile for zeile in zeilen)
 
 
+# --- 10. Der Stopp leert auch den Briefkasten ------------------------------
+def fall_briefkasten_leeren():
+    print('\n10. Ein Stopp raeumt auch den Briefkasten')
+    import sprechpost
+    # Ramzis Befund vom 08.08.2026: er rief "stopp", ich brach ab und machte
+    # mit dem naechsten Satz weiter. Die Liste im Speicher war leer, die
+    # ungelesenen Zettel lagen aber noch auf der Platte -- nach "nochmal"
+    # regelmaessig mehrere auf einmal.
+    for i in range(3):
+        sprechpost.einwerfen('zettel %d' % i)
+    da = sprechpost.abholen()
+    pruefe(da is not None, 'die Zettel liegen wirklich im Kasten')
+    z.stoppe_alles('Test Briefkasten')
+    pruefe(sprechpost.abholen() is None,
+           'nach dem Stopp ist der Kasten leer')
+
+
+# --- 11. Saetze liegen der Reihe nach im Gesamttext ------------------------
+def fall_satzstellen():
+    print('\n11. Die Stelle des abgebrochenen Satzes ist auffindbar')
+    # Darauf beruht der Rest-Text bei ABGEBROCHEN: voice_output sucht die
+    # laufende Anzeige mit find() im zusammengesetzten Text und schneidet dort
+    # ab. Das geht nur auf, wenn die Saetze dort der Reihe nach und
+    # unveraendert vorkommen -- genau das wird hier festgenagelt.
+    # Das echte Modul unter eigenem Namen laden: in sys.modules steht fuer
+    # diesen Test die Attrappe (kein Ton, kein Lautsprecher), und die kennt
+    # in_saetze nicht.
+    import importlib.util
+    pfad = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'src', 'voice_output.py')
+    spec = importlib.util.spec_from_file_location('_echtes_voice_output', pfad)
+    echt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(echt)
+    text = ('Satz eins ist hier. Satz zwei kommt danach! Satz drei fragt? '
+            'Satz vier macht Schluss.')
+    saetze = echt.in_saetze(text)
+    pruefe(len(saetze) == 4, 'vier Saetze erkannt (%d)' % len(saetze))
+    ganzer = ' '.join(saetze)
+    stelle = 0
+    ok = True
+    for s in saetze:
+        wo = ganzer.find(s, stelle)
+        if wo < 0:
+            ok = False
+            break
+        stelle = wo + len(s)
+    pruefe(ok, 'jeder Satz ist der Reihe nach im Gesamttext zu finden')
+    # Und der Rest ab Satz drei ist genau das, was fehlen wuerde.
+    ab = ganzer.find(saetze[2])
+    pruefe(ganzer[ab:] == 'Satz drei fragt? Satz vier macht Schluss.',
+           'der Rest ab dem abgebrochenen Satz stimmt: %r' % ganzer[ab:])
+
+
 def main():
     print('Sprachweg-Selbsttest -- ohne Mikrofon, ohne Lautsprecher')
     for fall in (fall_reihenfolge, fall_verfallen, fall_stopp,
                  fall_unterbrechen, fall_nicht_reinreden, fall_nachlauf,
-                 fall_buehne, fall_stoppwoerter, fall_echo_bruecke):
+                 fall_buehne, fall_stoppwoerter, fall_echo_bruecke,
+                 fall_briefkasten_leeren, fall_satzstellen):
         fall()
     z.beenden()
     shutil.rmtree(_ABLAGE, ignore_errors=True)

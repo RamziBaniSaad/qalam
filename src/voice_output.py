@@ -533,6 +533,11 @@ class Sprecher:
             'ungesagt'     kam gar nicht erst heraus (keine Stimme geladen)
         """
         import sounddevice as sd
+        # Was bei einem Abbruch NICHT mehr herauskam -- die Zentrale schreibt
+        # genau das als ABGEBROCHEN ins Protokoll, und "nochmal" holt es.
+        # Hier zurueckgesetzt, damit nie der Rest eines frueheren Satzes
+        # stehen bleibt.
+        self._nicht_gesagt = ''
         # Ein Zähler und kein Schalter: es kann mehr als einen Aufrufer geben
         # (Briefkasten, Reflex, Stop-Hook), und ein Schalter waere beim Ende des
         # ersten schon wieder aus, obwohl der zweite noch redet.
@@ -781,6 +786,36 @@ class Sprecher:
             BLOCK = max(1, int(rate * 0.15))
             abgebrochen = False
 
+            # WIE WEIT BIN ICH GEKOMMEN?
+            #
+            # Ramzis Befund vom 08.08.2026 bei der Abnahme: "nochmal" hat ihm
+            # alles von vorn vorgelesen, auch das, was er schon gehoert hatte.
+            # Der Grund stand im Protokoll: jeder Teilsatz wird beim Sprechen
+            # einzeln als GESAGT vermerkt, beim Abbruch schrieb die Zentrale
+            # aber den GANZEN Auftragstext noch einmal als ABGEBROCHEN dazu.
+            # Damit stand das Gehoerte doppelt drin, und "nochmal" nimmt genau
+            # die Nicht-GESAGT-Zeilen.
+            #
+            # Der alte Kommentar sagte, man wisse nicht, wo abgeschnitten
+            # wurde. Das stimmt fuer das einzelne WORT -- fuer den SATZ nicht:
+            # es ist der, dessen Anzeige zuletzt aufgelegt wurde. Diese Koernung
+            # hat Ramzi selbst vorgeschlagen ("dann liest du einfach den ganzen
+            # Absatz nochmal von vorne"), und sie ist ehrlich, weil sie nichts
+            # raet.
+            ganzer = ' '.join(saetze)
+            gelesen_bis = 0          # alles davor ist sicher heraus
+            laufend_ab = None        # Beginn der Anzeige, die gerade laeuft
+            laufend_len = 0
+
+            def _anzeige_beginnt(anzeige):
+                """Merken, wo im Gesamttext die neue Anzeige anfaengt."""
+                nonlocal gelesen_bis, laufend_ab, laufend_len
+                if laufend_ab is not None:
+                    gelesen_bis = laufend_ab + laufend_len
+                wo = ganzer.find(anzeige, gelesen_bis)
+                laufend_ab = gelesen_bis if wo < 0 else wo
+                laufend_len = len(anzeige)
+
             def _abspielen(ton):
                 """Ein Tonstück abgeben. False heißt: hier wurde abgebrochen."""
                 for i in range(0, len(ton), BLOCK):
@@ -833,6 +868,7 @@ class Sprecher:
                             abgebrochen = True
                             break
                         continue
+                    _anzeige_beginnt(text)
                     if motor == 'xtts':
                         # Keine Wort-Hervorhebung: sie wird aus der Zeichenzahl
                         # geschätzt, und XTTS dehnt und pausiert zu
@@ -859,6 +895,13 @@ class Sprecher:
                 strom.stop()
                 strom.close()
                 buehne_aus()
+
+            # Was ihm fehlt: ab dem Satz, der gerade lief. Lief keiner mehr
+            # (Abbruch genau zwischen zwei Anzeigen), dann ab der naechsten
+            # Stelle -- dann hat er alles Bisherige wirklich gehoert.
+            if abgebrochen:
+                ab = laufend_ab if laufend_ab is not None else gelesen_bis
+                self._nicht_gesagt = ganzer[ab:].strip()
         return 'abgebrochen' if abgebrochen else 'fertig'
 
     def sprich_im_hintergrund(self, text):
