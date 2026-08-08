@@ -18,6 +18,7 @@ sagt, wo die Schwelle hingehoert.
 """
 import os
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
@@ -30,19 +31,47 @@ RATE = lachen.RATE
 
 
 def nimm_auf(sekunden):
-    """Vom Mikrofon aufnehmen, mit hoerbarem Countdown davor.
+    """Vom Mikrofon aufnehmen, mit Countdown davor.
 
     Der Countdown ist nicht Zierde: ohne ihn druecke ich auf Start und Ramzi
     lacht in die Sekunde, in der die Aufnahme noch gar nicht laeuft.
+
+    UND ICH HALTE SOLANGE DEN MUND. Sonst misst diese Probe am Ende MEINE
+    Stimme mit -- sein Lautsprecher steht neben seinem Mikrofon, und ein Satz
+    von mir mitten in seinen sechs Sekunden macht die Messung wertlos, ohne
+    dass man es der Zahl ansieht. Genau das waere die Sorte Fehler, gegen die
+    diese Probe ueberhaupt gebaut ist.
+
+    Der Weg dafuer ist schon da: `warteschlange.redet_merken(True)` ist die
+    Markierung "Ramzi hat gerade das Wort", und meine Sprech-Zentrale wartet
+    darauf. Sie verfaellt von selbst (REDET_ALTER), muss also aufgefrischt
+    werden -- und kann bei einem Absturz dieser Probe nicht dauerhaft
+    haengenbleiben. Deshalb Auffrischen statt einmal Setzen.
     """
     import sounddevice as sd
-    for rest in (3, 2, 1):
-        print(f'   {rest} ...', flush=True)
-        time.sleep(0.7)
-    print(f'\n>>> JETZT -- {sekunden:.0f} Sekunden <<<\n', flush=True)
-    daten = sd.rec(int(sekunden * RATE), samplerate=RATE, channels=1,
-                   dtype='float32')
-    sd.wait()
+
+    import warteschlange
+
+    schluss = threading.Event()
+
+    def _platz_halten():
+        while not schluss.is_set():
+            warteschlange.redet_merken(True)
+            schluss.wait(0.3)
+
+    wache = threading.Thread(target=_platz_halten, daemon=True)
+    wache.start()
+    try:
+        for rest in (3, 2, 1):
+            print(f'   {rest} ...', flush=True)
+            time.sleep(0.7)
+        print(f'\n>>> JETZT -- {sekunden:.0f} Sekunden <<<\n', flush=True)
+        daten = sd.rec(int(sekunden * RATE), samplerate=RATE, channels=1,
+                       dtype='float32')
+        sd.wait()
+    finally:
+        schluss.set()
+        warteschlange.redet_merken(False)
     return np.ascontiguousarray(daten[:, 0])
 
 
