@@ -887,7 +887,34 @@ class Weckwort:
                     # ploetzlich statt seiner eigenen Redepause gegriffen. Genau
                     # das hat Ramzi gefunden: "trotz 10 Sekunden nach ca. 2
                     # Sekunden abgeschickt."
-                    kurz = gesamt_sprach <= KURZ_SPRACH_FRAMES or self._kurz_erwartet
+                    # DIE KURZE SCHWELLE GILT NUR FUER EINEN RUF, NIE MITTEN IM
+                    # GESPRAECH.
+                    #
+                    # Ramzi am 08.08.2026: "manchmal schickt es von alleine ab",
+                    # und er konnte es nicht reproduzieren. Das Protokoll schon:
+                    # um 14:57:21 kam "Also ich habe jetzt ein bisschen
+                    # recherchiert" an -- 1,4 s Sprache, also UNTER
+                    # KURZ_SPRACH_FRAMES (1,5 s). Damit galt dieser Satzanfang
+                    # als kurzer Ruf, die Schwelle fiel von seinen eingestellten
+                    # 2000 ms auf 800 ms, und sein naechster Atemzug hat
+                    # abgeschickt. Der Rest der Aeusserung war weg.
+                    #
+                    # Dieselbe Falle wie bei "trotz 10 Sekunden nach ca. 2
+                    # Sekunden abgeschickt", nur ueber einen anderen Weg: nicht
+                    # `sprach` statt `gesamt_sprach`, sondern ein kurzer ERSTER
+                    # Satz in einem laufenden Gespraech.
+                    #
+                    # Zwei Lagen schliessen die Abkuerzung jetzt aus:
+                    #   stueck_offen -- er ist mitten in einer Aeusserung
+                    #   im_gespraech -- wir reden schon, er ruft nicht erst
+                    # In beiden Faellen ist erwiesen, dass er nicht bloss "Noor"
+                    # sagt. Der ausdrueckliche `_kurz_erwartet` bleibt
+                    # unberuehrt: den setze ich, wenn ich wirklich nur ein Ja
+                    # oder Nein erwarte.
+                    im_gespraech = time.time() < self.folge_bis
+                    kurz = ((gesamt_sprach <= KURZ_SPRACH_FRAMES
+                             and not stueck_offen and not im_gespraech)
+                            or self._kurz_erwartet)
                     schwelle = (min(KURZE_STILLE_FRAMES, self.stille_frames) if kurz
                                 else self.stille_frames)
 
