@@ -20,6 +20,7 @@ gebraucht wird sie von JEDEM Prozess, der sprechen will -- auch vom Sprech-Hook,
 der bei jeder Antwort neu startet und nicht erst numpy/sounddevice laden soll,
 nur um nachzusehen, ob gerade Stille ist.
 """
+import collections
 import json
 import os
 import re
@@ -171,7 +172,11 @@ def _mein_satz():
     # ein Stück Vergangenheit an.
     if not (start - 0.3 <= time.time() <= start + dauer + 1.0):
         return None
-    return d.get('text') or None
+    text = d.get('text') or None
+    # Nebenbei ins Kurzgedaechtnis. Hier und nur hier, damit es genau die
+    # Saetze enthaelt, die auch wirklich ueber den Lautsprecher gegangen sind.
+    _satz_merken(text)
+    return text
 
 
 def noor_spricht_gerade():
@@ -181,6 +186,59 @@ def noor_spricht_gerade():
 def _worte(text):
     return {w for w in ''.join(
         c.lower() if c.isalnum() or c.isspace() else ' ' for c in text).split() if len(w) > 2}
+
+
+# --- Was ich in den letzten Sekunden gesagt habe ---------------------------
+#
+# Ramzi am 08.08.2026, zweimal kurz hintereinander erlebt: ich breche mitten
+# im Satz ab, ohne dass er etwas gesagt hat. Gemessen sind es ZWEI Fehler, die
+# erst zusammen wirken.
+#
+#   1. Mein eigenes Wort wird zum Stoppwort verhoert. "Zurueckgenommen" kam
+#      als "zur RUHE genommen" zurueck, "Inhaltlich" als "in HALT lich" --
+#      genau die Luecke, gegen die im Muster oben extra Wortgrenzen stehen,
+#      nur setzt das Modell die Luecke diesmal selbst hinein.
+#   2. Das Echo kommt zu SPAET. Geprueft wurde gegen den Satz, den ich GERADE
+#      spreche -- das Echo gehoert aber zum vorigen. Verglichen wurde also mit
+#      dem falschen Text, und der war natuerlich sauber.
+#
+# Deshalb ein kurzes Gedaechtnis: die Saetze der letzten Sekunden, nicht nur
+# der laufende. Es fuellt sich von selbst, weil die Lauschschleife _mein_satz()
+# ohnehin staendig aufruft -- kein zweiter Erzeuger, der auseinanderlaufen
+# koennte.
+_ECHO_FENSTER = 12.0          # Sekunden zurueck
+_letzte_saetze = collections.deque(maxlen=8)
+
+
+def _satz_merken(text):
+    if not text:
+        return
+    if _letzte_saetze and _letzte_saetze[-1][1] == text:
+        return
+    _letzte_saetze.append((time.time(), text))
+
+
+def war_kuerzlich_mein_satz(gehoert, schwelle=0.5):
+    """Ist das Gehoerte das Echo von etwas, das ich eben gesagt habe?
+
+    Wie ist_mein_echo, aber ueber ein Zeitfenster statt nur ueber den
+    laufenden Satz -- und OHNE dessen Notausgang fuer Stoppwoerter. Genau
+    darum geht es hier: ob ein Stoppwort aus meinem eigenen Lautsprecher kam.
+
+    Die Schwelle liegt niedriger als die 60 % von ist_mein_echo, weil ein
+    gehoerter Fetzen ueber zwei meiner Saetze laufen kann und dann mit jedem
+    einzelnen nur teilweise uebereinstimmt. Sein echter Zuruf bleibt klar
+    darunter: "stopp" oder "Noor, warte" teilen mit meinem Satz nichts.
+    """
+    g = _worte(gehoert or '')
+    if not g:
+        return False
+    jetzt = time.time()
+    treffer = set()
+    for zeit, text in _letzte_saetze:
+        if jetzt - zeit <= _ECHO_FENSTER:
+            treffer |= (g & _worte(text))
+    return len(treffer) / len(g) >= schwelle
 
 
 # --- Der Notausgang darf nie als Echo gelten -------------------------------

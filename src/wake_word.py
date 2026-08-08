@@ -1064,9 +1064,20 @@ class Weckwort:
             # aber jedes "warte" oder "halt" in meinem eigenen Satz ueber den
             # Lautsprecher zurueckkommen und mich abwuergen. Ein verpasster
             # Zuruf ist billiger: Ramzi kann noch einmal rufen, ich nicht.
+            # Die zweite Bedingung allein reichte nicht -- Ramzi hat es am
+            # 08.08.2026 zweimal in fuenf Minuten erlebt. Sie fragt "steht das
+            # Stoppwort in meinem LAUFENDEN Satz". Das Echo gehoert aber zum
+            # VORIGEN, und das Stoppwort entsteht ohnehin erst durchs Verhoeren
+            # ("Zurueckgenommen" -> "zur Ruhe genommen", "Inhaltlich" ->
+            # "in halt lich"). In meinem Text stand es also nie.
+            #
+            # Deshalb zusaetzlich die Frage, auf die es wirklich ankommt: kam
+            # das ueberhaupt aus meinem eigenen Lautsprecher? Sein echter Zuruf
+            # teilt mit meinen letzten Saetzen keine Woerter.
             if (ich_rede and warteschlange.ist_stoppwort(vorlaeufig)
                     and not warteschlange.ist_stoppwort(
-                        warteschlange._mein_satz() or '')):
+                        warteschlange._mein_satz() or '')
+                    and not warteschlange.war_kuerzlich_mein_satz(vorlaeufig)):
                 print('[Weckwort] Stoppwort gehoert: %r' % vorlaeufig[:40],
                       flush=True)
                 warteschlange.redet_merken(True)
