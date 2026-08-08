@@ -796,6 +796,30 @@ class Assistent:
         # noch Stille kam (siehe wake_word.abgeben -- der Freeze-Bug). Ist dann
         # aber auch nichts gesammelt, gaebe es einen leeren Auftrag. Das darf
         # nicht lautlos passieren, deshalb steht es im Protokoll.
+        # WAR DAS EBEN MEIN EIGENES ECHO -- und habe ich mich dafuer gestoppt?
+        #
+        # Die zweite Stelle fuer Ramzis Weiterreden vom 08.08.2026, und ohne sie
+        # ist es an genau dem Fall blind, der ihn heute Nachmittag zweimal
+        # getroffen hat. Der Stoppwort-Pfad im Ohr wirkt auch AUSSERHALB eines
+        # Gespraechs; dann sammelt niemand einen Satz, die Bruecke wird nie
+        # gerufen, und ihre Echo-Pruefung -- die einzige, die bisher weiterreden
+        # liess -- kommt gar nicht vor. Ich bliebe stumm stehen.
+        #
+        # `war_kuerzlich_mein_satz` ist hier die richtige Frage und nicht
+        # `ist_mein_echo`: gefragt ist nur, ob das aus meinem Lautsprecher kam.
+        # Ob es ausserdem ein Stoppwort enthielt, ist gerade der Punkt.
+        #
+        # Die Zentrale entscheidet selbst, ob es ueberhaupt etwas nachzuholen
+        # gibt: hat sie keinen frischen Abbruch liegen, passiert hier nichts.
+        if endgueltig and text:
+            try:
+                import warteschlange as _w
+                if _w.war_kuerzlich_mein_satz(text):
+                    import sprechzentrale as _z
+                    _z.weiterreden_nach_fehlalarm('Ohr')
+            except Exception:
+                pass
+
         if endgueltig and not text and not self._sammelsatz:
             print(f'[{time.strftime("%H:%M:%S")}] [Noor] fertig, aber nichts '
                   f'gesammelt -- nichts abzuschicken')

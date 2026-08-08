@@ -393,6 +393,56 @@ def _lauf():
                     _letzter_abbruch['rang'] = auftrag['rang']
 
 
+# Die Bremse gegen die Rueckkopplung. Was ich nachspreche, geht wieder ins
+# Mikrofon -- ohne Zaehlung koennte sich das aufschaukeln. Zweimal in einer
+# Minute reicht: wer beim dritten Anlauf wieder abgewuergt wird, hat kein
+# Echo-Problem mehr, sondern ein anderes, und dann ist Stille ehrlicher.
+_WEITER_FENSTER = 60.0
+_WEITER_HOECHSTENS = 2
+_weiter_versuche = []
+
+
+def weiterreden_nach_fehlalarm(woher=''):
+    """Den abgebrochenen Rest zurueckholen -- der Anrufer hat den Fehlalarm
+    bereits festgestellt.
+
+    Es gibt ZWEI Stellen, an denen sich ein Abbruch nachtraeglich als mein
+    eigenes Echo herausstellt, und beide brauchen dieselbe Reaktion:
+
+      * die Bruecke, wenn ein fertiger Auftrag als mein Echo verworfen wird
+      * der Assistent, wenn ueberhaupt nichts abgeschickt wird -- das ist der
+        Fall, den der Stoppwort-Pfad im Ohr erzeugt: der wirkt auch AUSSERHALB
+        eines Gespraechs, und dann sammelt niemand einen Satz, den die Bruecke
+        pruefen koennte. Genau so bin ich mich am 08.08.2026 zweimal selbst
+        losgeworden.
+
+    Deshalb steht das Handeln hier und nicht bei einem der beiden Anrufer.
+    Gibt zurueck, ob wirklich weitergeredet wird.
+    """
+    try:
+        import einstellungen
+        if not einstellungen.hole('echo_weiterreden'):
+            return False
+    except Exception:
+        return False
+    jetzt = time.time()
+    _weiter_versuche[:] = [t for t in _weiter_versuche
+                           if jetzt - t < _WEITER_FENSTER]
+    if len(_weiter_versuche) >= _WEITER_HOECHSTENS:
+        print('[Zentrale] Fehlalarm (%s), aber schon %dx weitergeredet -- '
+              'ich bleibe still.' % (woher or '-', _WEITER_HOECHSTENS),
+              flush=True)
+        return False
+    rest, rang = hole_abbruch()
+    if not rest:
+        return False
+    _weiter_versuche.append(jetzt)
+    einwerfen(rest, rang=rang, quelle='weiterreden')
+    print('[Zentrale] Fehlalarm (%s) -- ich rede weiter: %r'
+          % (woher or '-', rest[:60]), flush=True)
+    return True
+
+
 def hole_abbruch(hoechstens=_ABBRUCH_FRIST):
     """Den Rest eines Satzes, der eben faelschlich abgebrochen wurde.
 
