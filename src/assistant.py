@@ -244,6 +244,9 @@ class Assistent:
         # Zwischenstücke einer laufenden, langen Äußerung sammeln sich hier,
         # bis die echte Stille kommt -- siehe _geweckt().
         self._sammelsatz = ''
+        # Bis wann nach einem Abbruch nichts mehr angenommen wird -- siehe
+        # _abbrechen() und die Sperre in _geweckt().
+        self._abbruch_bis = 0.0
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
                             beim_mitschreiben=self._mitschreiben,
@@ -446,6 +449,26 @@ class Assistent:
         text = self._sammelsatz
         self._sammelsatz = ''
         self.ohr.folge_bis = 0.0
+        # UND EINE SPERRE HINTERHER -- ohne die hebt sich der Abbruch selbst auf.
+        #
+        # Ramzis Befund vom 08.08.2026, waehrend ein Video lief: "Erst kommt
+        # dieser Sound von diesem Stoppen, und dann geht es aber trotzdem
+        # einfach weiter. Der hoert nicht auf zuzuhoeren."
+        #
+        # Er hatte recht, und die Ursache ist eine Zeile weiter unten in
+        # _geweckt(): JEDES Zwischenstueck setzt `folge_bis` auf zwanzig
+        # Sekunden. Zwischen dem Tastendruck und dem Ende der Uebertragung
+        # liegt aber immer noch Ton in der Leitung -- ein bis drei Sekunden,
+        # je nach Rechenzeit des Modells. Genau dieses Stueck kam nach dem
+        # Abbruch an, riss das Folgefenster wieder auf, und von da an hielt
+        # der naechste Fetzen aus dem Video es offen. Der Abbruch loeschte
+        # also brav, was da war, und das Nachfolgende hat ihn sofort wieder
+        # eingeschaltet.
+        #
+        # Drei Sekunden, weil das die gemessene Obergrenze der Rechenzeit im
+        # Protokoll ist. Sein Weckwort hebt die Sperre sofort auf: wer nach
+        # dem Abbrechen meinen Namen sagt, will wirklich etwas.
+        self._abbruch_bis = time.time() + 3.0
         self.ohr.abbrechen()
 
         try:
@@ -790,6 +813,16 @@ class Assistent:
         # Sprechen und Reaktion wirklich vergeht. Siehe
         # Privat/Ideen/Noor-Ueberall/STAND-Sprachschicht.md, Abschnitt 1.
         print(f'[{time.strftime("%H:%M:%S")}] [Noor] gehört ({"fertig" if endgueltig else "Zwischenstück"}): {text!r}')
+
+        # NACH EINEM ABBRUCH: was jetzt noch hereinkommt, gehoert zu dem, was er
+        # gerade weggeworfen hat. Begruendung in _abbrechen(). Sein Name hebt
+        # die Sperre auf -- alles andere fliegt raus, ohne das Folgefenster
+        # anzufassen.
+        if time.time() < self._abbruch_bis and not WECKWORT.search(text or ''):
+            print(f'[{time.strftime("%H:%M:%S")}] [Noor] nach dem Abbruch -- '
+                  f'verworfen: {(text or "")[:50]!r}')
+            return
+        self._abbruch_bis = 0.0
 
         # Ein "fertig" ohne Text ist seit dem 01.08.2026 ein gueltiger Fall: das
         # Ohr meldet damit "er ist fertig", wenn nach der letzten Satzpause nur

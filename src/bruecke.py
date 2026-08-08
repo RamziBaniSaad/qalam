@@ -863,6 +863,75 @@ def _woertlich_von_mir(text):
     return False
 
 
+# --- Kam das aus einem Video statt aus Ramzis Mund? -----------------------
+#
+# Ramzis Auftrag vom 08.08.2026, nachdem ein YouTube-Video ("Want to Run AI
+# Agents Locally") seinen Ton ins Mikrofon geschickt hat und die Bruecke einen
+# englischen Satz als seinen Auftrag weitergab: "Wenn sagen wir mal achtzig
+# Prozent oder mehr von der Nachricht englisch ist, dann lohnt es sich, das
+# einfach nicht abzuschicken."
+#
+# GEZAEHLT WERDEN NUR FUNKTIONSWOERTER, und das ist der ganze Trick. Nach
+# Fachbegriffen zu gehen waere falsch -- Ramzi sagt staendig "Build", "Repo",
+# "Feature", und das ist deutsche Rede. Was eine Sprache verraet, sind ihre
+# kleinen Woerter: "the", "is", "you" gegen "der", "ist", "du". Sie kommen in
+# jedem natuerlichen Satz vor und lassen sich nicht ausleihen.
+#
+# Woerter, die es in BEIDEN Sprachen gibt, stehen in keiner der Listen -- "in",
+# "an", "so", "was", "will", "hat", "man", "war". Ein mehrdeutiges Wort ist
+# kein Beweis, und ein Beweis, der in beide Richtungen zeigt, ist keiner.
+_ENGLISCH = frozenset("""
+the a an and or but if then than that this these those there here
+is are am was were be been being do does did doesn dont don
+have has had having i you he she it we they me him her us them
+my your his its our their mine yours theirs
+of to for with from into onto about over under between through during
+at on by up down out off again just only also very really too much many
+what which who whom whose when where why how
+can could will would shall should may might must
+not no yes yeah okay ok because so_that while about like get got getting
+make makes making take takes taking go goes going come comes coming
+know knows think thinks want wants need needs use uses using work works
+let lets say says said see sees seen look looks looking
+right now here s t re ve ll d
+""".split())
+
+_DEUTSCH = frozenset("""
+der die das den dem des ein eine einen einem einer eines
+und oder aber wenn dann als dass weil damit obwohl waehrend
+ich du er sie es wir ihr mich dich sich uns euch mir dir ihm ihnen
+mein dein sein unser euer meine deine seine ihre unsere
+ist sind bin bist seid war waren gewesen wird werden wurde wurden
+habe hast hat haben hatte hatten gehabt
+kann kannst koennen konnte koennte muss musst muessen sollte sollten
+darf duerfen mag moechte moechten will wollen wollte
+nicht kein keine nichts noch schon auch mal doch halt eben gerade
+von zu zum zur mit bei nach vor ueber unter zwischen durch fuer ohne gegen
+auf aus seit wegen trotz waehrend
+sehr ganz immer nie oft jetzt heute morgen gestern hier dort da
+wie warum wieso weshalb wann wo wer wen wem welche welcher welches
+machen mach machst macht gemacht gehen geht gehst kommen kommt
+sagen sagt sagst gesagt sehen sieht siehst wissen weiss weisst
+""".split())
+
+# Wie viele eindeutige Woerter mindestens gefunden sein muessen, bevor ueberhaupt
+# gerechnet wird. Bei zwei Treffern ist jedes Verhaeltnis Zufall -- und einen
+# echten Auftrag von Ramzi zu verschlucken ist teurer, als einen Videosatz
+# durchzulassen.
+ENGLISCH_MINDESTENS = 5
+ENGLISCH_ANTEIL = 0.8
+
+
+def _klingt_englisch(text):
+    """Ist das ueberwiegend englische Rede -- also fast sicher nicht Ramzi?"""
+    worte = _worte_flach(text)
+    e = sum(1 for w in worte if w in _ENGLISCH)
+    d = sum(1 for w in worte if w in _DEUTSCH)
+    if e + d < ENGLISCH_MINDESTENS:
+        return False
+    return e / (e + d) >= ENGLISCH_ANTEIL
+
+
 def _ist_mein_echo(text):
     try:
         import warteschlange
@@ -939,6 +1008,16 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
     # ist; das reicht.
     if _ist_mein_echo(auftrag):
         _weiterreden_nach_fehlalarm()
+        return False, ''
+
+    # UND: kam das ueberhaupt aus seinem Mund? Siehe _klingt_englisch().
+    #
+    # Auch hier still verwerfen und nur ins Protokoll schreiben. Eine
+    # gesprochene Absage waere neuer Ton neben einem laufenden Video -- also
+    # genau die Lage, die den Fehler ausgeloest hat.
+    if _klingt_englisch(auftrag):
+        print('[Brücke] klingt englisch, kam wohl aus einem Video -- '
+              'nicht abgeschickt: %r' % auftrag[:80], flush=True)
         return False, ''
 
     hwnd = finde_fenster(fenster_titel)
