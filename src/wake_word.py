@@ -1192,6 +1192,28 @@ class Weckwort:
             return
         audio = np.concatenate(list(puffer)).astype(np.float32) / 32768.0
         dauer_audio = len(puffer) * FRAME_MS / 1000
+
+        # NEBEN der Transkription auf Lachen horchen, nicht davor und nicht
+        # danach. Siehe lachen.py, warum es das ueberhaupt gibt.
+        #
+        # Der eigene Faden ist der ganze Punkt: gemessen kostet die Lach-Pruefung
+        # 12-18 ms je Fenster, bei einer langen Aeusserung also bis zu ~0,2 s.
+        # Whisper braucht auf denselben Ton 0,3-0,9 s. Nacheinander waeren das
+        # 0,2 s, die Ramzi laenger auf seine Antwort wartet -- und wir haben am
+        # 07.08. genau solche Zehntel aus der Bruecke herausgearbeitet. Parallel
+        # kostet es ihn nichts, weil Whisper ohnehin laenger rechnet.
+        _lachen = {}
+
+        def _horch_auf_lachen():
+            try:
+                import lachen
+                _lachen['fund'] = lachen.pruefe(audio)
+            except Exception as e:
+                print(f'[Lachen] Faden fehlgeschlagen: {e}')
+
+        _lach_faden = threading.Thread(target=_horch_auf_lachen, daemon=True)
+        _lach_faden.start()
+
         _start = time.time()
         try:
             # vad_filter + no_speech-Schwelle: dieselbe Absicherung wie beim
@@ -1227,10 +1249,63 @@ class Weckwort:
         # feststellbar, ob es ihn falsch verstanden, gar nichts verstanden oder
         # den Namen nur nicht erkannt hat. Eine Messung ohne das Ergebnis ist
         # keine Messung.
+
+        # Jetzt erst auf die Lach-Pruefung warten -- sie lief die ganze Zeit
+        # nebenher und ist in aller Regel laengst fertig. Der Deckel ist eine
+        # Notbremse und kein erwarteter Fall: haengt das Geraeusch-Modell aus
+        # irgendeinem Grund, wartet Ramzi lieber ohne Lach-Marker als gar nicht.
+        _lach_faden.join(timeout=1.0)
+        fund = _lachen.get('fund')
+
+        lach_marker = ''
+        lach_notiz = ''
+        if fund:
+            wert, klasse, lach_dauer = fund
+            try:
+                import lachen
+                grenze = lachen.schwelle()
+                if wert >= grenze:
+                    lach_marker = lachen.marker(klasse)
+            except Exception:
+                grenze = None
+            # JEDE Pruefung ins Protokoll, mit ihrer Zahl -- auch die 0,00.
+            #
+            # Erst stand hier `if wert > 0.05`, um das Protokoll ruhig zu
+            # halten. Das hat sich in der ERSTEN Minute geraecht: Ramzi hat auf
+            # Zuruf gelacht, im Protokoll stand keine Lach-Zeile, und damit war
+            # nicht zu unterscheiden, ob (a) geprueft und nichts gefunden wurde
+            # oder (b) die Pruefung gar nicht lief. Genau diese beiden Faelle
+            # auseinanderhalten zu koennen ist der einzige Grund, warum hier
+            # ueberhaupt etwas ins Protokoll geht.
+            #
+            # Eine Anzeige, die bei "nichts gefunden" schweigt, sieht genauso
+            # aus wie eine kaputte. Das ist in diesem Ordner schon einmal teuer
+            # geworden (die Tafel, die zwoelf Stunden still alte Zahlen zeigte).
+            lach_notiz = (f' | lachen: {wert:.2f} ({klasse or "nichts"}'
+                          + (f', Grenze {grenze:.2f}' if grenze else '')
+                          + f', {lach_dauer * 1000:.0f} ms)'
+                          + (' TREFFER' if lach_marker else ''))
+        else:
+            # Auch das ist eine Aussage, und zwar eine wichtige: entweder steht
+            # die Schwelle auf 0 (dann ist es Absicht) oder das Modell fehlt.
+            lach_notiz = ' | lachen: -- (nicht geprueft)'
+
         print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] {dauer_audio:.1f}s Audio -> '
               f'{dauer_rechnen:.2f}s Rechenzeit '
               f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")}) '
-              f'| gehoert: {text!r}')
+              f'| gehoert: {text!r}{lach_notiz}')
+
+        # Der Marker haengt sich an den Satz, statt ihn zu ersetzen: „das war
+        # wirklich lustig (lacht)" ist die Information, nicht „(lacht)" allein.
+        #
+        # Und wenn KEIN Wort erkannt wurde, ist der Marker der ganze Inhalt --
+        # genau der Fall, um den es Ramzi geht. Er lacht, sagt nichts dazu, und
+        # bisher kam bei mir gar nichts an. Das gilt aber nur MITTEN IM GESPRAECH
+        # (`im_gespraech` unten): ein Lacher vor dem Fernseher darf mich nicht
+        # anspringen -- dafuer sorgt dieselbe Tuer, durch die auch jedes Wort
+        # muss.
+        if lach_marker:
+            text = f'{text} {lach_marker}'.strip() if text else lach_marker
 
         # Der Folgesatz braucht den Namen nicht mehr.
         #

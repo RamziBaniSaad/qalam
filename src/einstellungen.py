@@ -46,6 +46,20 @@ STANDARD = {
     # 0 = Untertitel ganz aus. Damit ist der Regler gleichzeitig der Schalter.
     'untertitel_sekunden': 10,
 
+    # Ab welchem Wert ein Geräusch als Lachen gilt (0 bis 1). Siehe
+    # `lachen.py` -- das Ohr hört den Ton mit und hängt „(lacht)" an den Satz,
+    # damit Ramzi nicht mehr „haha" dazuschreiben muss.
+    #
+    # DIESER WERT IST EIN STARTWERT UND KEIN MESSERGEBNIS. Auf den Testtönen
+    # des Modells liegt Lachen bei 0,79 und alles andere unter 0,01 -- die 0,35
+    # steht also mit viel Luft in der Mitte. Das sind aber FREMDE Stimmen; wo
+    # Ramzis eigenes Lachen landet und wo sein Räuspern, steht noch nicht fest.
+    # Jede Prüfung landet mit ihrer Zahl in `ohr.log` -- daraus wird die
+    # Schwelle eingestellt, nicht aus dieser Zeile.
+    #
+    # 0 = Lacherkennung ganz aus, wie bei jedem Regler hier.
+    'lach_schwelle': 0.35,
+
     # ------------------------------------------------- Qalam auf der Karte
     # Wie lange das Diktat-Modell nach dem letzten Diktat noch auf der
     # Grafikkarte liegen bleibt. Ramzis Auftrag vom 03.08.2026: es soll nicht

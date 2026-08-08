@@ -161,3 +161,7 @@ src/config.yaml.*
 # Was ich zuletzt gesagt habe -- Arbeitsdatei des Echo-Schutzes.
 .noor-gesagt.json
 noor-gesagt.log
+
+# Geraeusch-Modelle fuer die Lacherkennung: nachladbar per
+# noor/werkzeuge/noor-lachmodell-holen.ps1, gehoeren nicht ins Repo.
+modelle/
