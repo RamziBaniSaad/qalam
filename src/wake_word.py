@@ -1307,28 +1307,22 @@ class Weckwort:
         if lach_marker:
             text = f'{text} {lach_marker}'.strip() if text else lach_marker
 
-            # UND EINMAL AUF DIE INSEL. Ramzis Frage, kaum dass es lief: „Gibt
-            # es dann irgendwo einen Ort, wo ich das erkenne? Bei einem
-            # Untertitel erkenne ich das ja nicht."
+            # BEWUSST KEINE MELDUNG AUF DER INSEL. Es gab sie eine Stunde lang,
+            # weil Ramzi gefragt hatte, wo er das denn erkennen solle -- und er
+            # hat sie sofort wieder abbestellt:
             #
-            # Er hat recht, und der Untertitel ist die falsche Antwort: dort
-            # steht der Marker zwar drin, aber nur solange der Satz noch der
-            # letzte ist und nur wenn Ramzi zufaellig hinsieht. Das ist kein
-            # Ort, das ist Zufall.
+            #   „Kannst du bitte, wenn ich lache, das nicht anzeigen auf der
+            #    Insel? Ist unnötig und nervig, beim Lachen dann auf einmal eine
+            #    Benachrichtigung zu erhalten."
             #
-            # Die Insel ist genau dafuer gebaut („alles was passiert, soll dort
-            # angezeigt werden") und bringt ihren eigenen Ton mit -- damit ist
-            # zugleich Ramzis Grundsatz erfuellt, sichtbares und hoerbares
-            # Feedback nie einzeln zu geben.
+            # Er hat recht, und es ist eine Regel und kein Einzelfall: eine
+            # Meldung UEBER eine beiläufige menschliche Regung unterbricht genau
+            # die Regung, um die es geht. Lachen ist keine erledigte Aufgabe und
+            # kein fertiger Download -- es will nicht quittiert werden.
             #
-            # MIT DER ZAHL, nicht nur mit dem Wort: solange die Schwelle noch
-            # nicht an seiner Stimme eingestellt ist, ist genau diese Zahl das,
-            # was er sehen muss, um mitreden zu koennen.
-            try:
-                import ereignis
-                ereignis.melde(f'Lachen gehört ({wert:.2f})', 'ohr')
-            except Exception:
-                pass
+            # Sichtbar bleibt es trotzdem: der Marker steht im Satz und damit im
+            # Untertitel, und die Zahl steht im Protokoll. Das genügt, weil er
+            # nichts davon BESTAETIGEN muss.
 
         # Der Folgesatz braucht den Namen nicht mehr.
         #
