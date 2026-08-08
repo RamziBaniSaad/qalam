@@ -70,6 +70,26 @@ _sprecher = None
 # ob der andere Faden ihn schon gesehen hat.
 _abbruch_stand = 0
 
+# --- Der letzte Abbruch, damit ein Fehlalarm sich selbst heilen kann --------
+#
+# Ramzis Vorschlag vom 08.08.2026: bricht mein eigener Lautsprecher meinen Satz
+# ab (das Ohr hielt mein Echo fuer seine Uebernahme), erkennt die Bruecke das
+# Stueck kurz darauf als mein Echo und verwirft es still. Genau dann steht
+# fest, dass der Stopp ein Fehlalarm war -- und genau dann soll der Rest
+# zurueckkommen, statt dass Ramzi mich jedes Mal von Hand anstoesst.
+#
+# Hier gemerkt und nicht aus noor-gesagt.log gelesen: die Zentrale weiss den
+# Rest ohnehin (sie schreibt ihn gleich daneben als ABGEBROCHEN ins Protokoll),
+# und ein zweiter Leser derselben Sache waere eine zweite Wahrheit.
+#
+# `erlaubt` ist der wichtige Teil und trennt zwei Abbrueche, die gleich
+# aussehen: `unterbrich()` heisst "Ramzi hat uebernommen" -- eine Vermutung,
+# die sich als Fehlalarm herausstellen kann. `stoppe_alles()` heisst, er hat
+# ausdruecklich Ruhe verlangt (Zuruf, Stopp-Taste, Stopp-Knopf). Was er
+# ausdruecklich gestoppt hat, wird NIE von selbst wieder aufgenommen.
+_ABBRUCH_FRIST = 25.0
+_letzter_abbruch = {'zeit': 0.0, 'rest': '', 'erlaubt': False}
+
 
 def _frist(rang):
     return FRIST.get(rang, FRIST[RANG_ZWISCHEN])
@@ -128,6 +148,20 @@ def _verworfen(auftrag, grund):
         pass
 
 
+def _darf_reden():
+    """Steht der Schalter "Reden" auf der Tafel an?
+
+    Fehlt die Einstellung oder klemmt das Lesen, wird geredet. Ein Werkzeug,
+    das bei einem Lesefehler verstummt, sieht aus wie ein kaputtes Ohr -- und
+    genau danach hat Ramzi schon mehrfach gesucht.
+    """
+    try:
+        import einstellungen
+        return bool(einstellungen.hole('reden'))
+    except Exception:
+        return True
+
+
 def _bestes():
     """Den wichtigsten wartenden Auftrag nehmen -- Rang zuerst, dann Alter."""
     with _sperre:
@@ -164,6 +198,10 @@ def stoppe_alles(grund='Stopp'):
     global _abbruch_stand
     with _sperre:
         _abbruch_stand += 1
+        # Er hat ausdruecklich Ruhe verlangt -- hier gibt es nichts von selbst
+        # weiterzureden. Siehe _letzter_abbruch.
+        _letzter_abbruch['erlaubt'] = False
+        _letzter_abbruch['rest'] = ''
         offen = list(_auftraege)
         _auftraege.clear()
     # UND den Briefkasten -- sonst ist der Stopp nur halb.
@@ -209,6 +247,9 @@ def unterbrich(grund='Ramzi hat übernommen'):
     global _abbruch_stand
     with _sperre:
         _abbruch_stand += 1
+        # Eine Vermutung, kein Befehl: stellt sich gleich heraus, dass das
+        # meine eigene Stimme war, holt die Bruecke den Rest zurueck.
+        _letzter_abbruch['erlaubt'] = True
     try:
         if _sprecher is not None:
             _sprecher.stoppe()
@@ -286,6 +327,21 @@ def _lauf():
             time.sleep(0.08)
             continue
 
+        # DARF ICH UEBERHAUPT REDEN? Der Schalter auf der Tafel.
+        #
+        # Hier und nicht in `einwerfen()`: wer einwirft, soll nicht wissen
+        # muessen, ob gerade jemand zuhoert. Und hier und nicht im Sprecher,
+        # damit es EINE Stelle bleibt -- das war der ganze Grund fuer die
+        # Zentrale.
+        #
+        # Verworfen und nicht aufgestaut: kommt Ramzi nach zwanzig Minuten
+        # zurueck, ist ein Schwall alter Zwischenstaende schlimmer als Stille.
+        # Als UNGESAGT steht alles im Protokoll, "nochmal" holt es.
+        if not _darf_reden():
+            _verworfen(auftrag, 'stumm geschaltet')
+            _buehne(False)
+            continue
+
         stand = _abbruch_stand
         was = _darf_jetzt(auftrag, stand)
         if was == 'verfallen':
@@ -325,6 +381,36 @@ def _lauf():
                 warteschlange.merke(rest, 'ABGEBROCHEN')
             except Exception:
                 pass
+            # Und denselben Rest zum Abholen bereitlegen -- fuer den Fall, dass
+            # sich der Abbruch gleich als mein eigenes Echo herausstellt.
+            with _sperre:
+                if _letzter_abbruch['erlaubt']:
+                    _letzter_abbruch['zeit'] = time.time()
+                    _letzter_abbruch['rest'] = rest
+                    # Der Rang des Auftrags gehoert mit: was als Antwort auf
+                    # einen Zuruf begonnen hat, soll auch als Antwort
+                    # weitergehen und nicht hinter einer Zwischenmeldung warten.
+                    _letzter_abbruch['rang'] = auftrag['rang']
+
+
+def hole_abbruch(hoechstens=_ABBRUCH_FRIST):
+    """Den Rest eines Satzes, der eben faelschlich abgebrochen wurde.
+
+    Gibt `(text, rang)` zurueck -- oder `(None, None)`, wenn es nichts zu holen
+    gibt. Der Rest wird dabei VERBRAUCHT, und das ist die Bremse gegen die
+    Schleife: rede ich weiter, kommt dieselbe Stimme wieder ins Mikrofon, wird
+    wieder als Echo erkannt -- und ohne das Verbrauchen wuerde ich mir denselben
+    Satz endlos selbst vorlesen.
+
+    Die Frist ist die zweite Bremse: was vor einer halben Minute abgebrochen
+    wurde, hat mit dem Echo, das jetzt ankommt, nichts mehr zu tun.
+    """
+    with _sperre:
+        rest = _letzter_abbruch['rest']
+        if not rest or time.time() - _letzter_abbruch['zeit'] > hoechstens:
+            return None, None
+        _letzter_abbruch['rest'] = ''
+        return rest, _letzter_abbruch.get('rang', RANG_ZWISCHEN)
 
 
 def starte(sprecher):

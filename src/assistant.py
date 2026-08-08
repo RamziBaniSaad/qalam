@@ -300,7 +300,7 @@ class Assistent:
             # keine Marke "bis hierher gehört". Ein "weiter ab Wort 14" wäre
             # geraten, und Raten ist teurer als ein paar Sekunden Wiederholung.
             # Ramzi hat genau das selbst vorgeschlagen.
-            # Die Liste ist am 08.08.2026 gewachsen: Ramzi sagte "sag noch mal
+            # Die Liste ist am 08.08.2026 gewachsen: Ramzi sagte "sag nochmal
             # was du gesagt hast" -- die natuerlichste Formulierung ueberhaupt,
             # und keine einzige Wendung hier traf zu. Sie landete als normale
             # Nachricht im Chat, und ich habe von Hand wiederholt.

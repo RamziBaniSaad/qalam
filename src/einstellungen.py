@@ -129,6 +129,34 @@ STANDARD = {
     # weil sie fast nichts kostet und in einem verkauften Produkt fehlen würde.
     'bild_fenster_aus': False,
 
+    # Nach einem Fehlalarm von allein weiterreden.
+    #
+    # Die Lage, die es behebt (Ramzis Vorschlag vom 08.08.2026): mein eigener
+    # Lautsprecher landet im Mikrofon, das Ohr hält das für seine Übernahme und
+    # bricht meinen Satz ab. Erst die Brücke erkennt Sätze später als mein Echo
+    # und verwirft sie -- richtig, aber danach stehe ich stumm da, und er muss
+    # mich von Hand mit "rede weiter" anstoßen. In genau diesem Moment steht
+    # fest, dass der Stopp ein Fehlalarm war; also hole ich den Rest selbst.
+    #
+    # Vorgabe an: die Lage ist eindeutig, und stumm stehenzubleiben ist nie das
+    # Gewünschte. Der Schalter ist trotzdem da, weil ein Automatismus, der
+    # meinen Mund aufmacht, abstellbar sein muss.
+    'echo_weiterreden': True,
+
+    # Darf ich ueberhaupt reden?
+    #
+    # Ramzis Auftrag vom 08.08.2026, waehrend er nach unten zum Kochen ging:
+    # "dann brauchst du auch gar nicht zu reden ... damit du nicht umsonst
+    # redest." Ueber die Lautstaerke auf Null ging das schon; das bleibt auch
+    # so. Er wollte es aber OBEN bei den Knoepfen mit einem Griff erreichen,
+    # statt dafuer zum Regler zu scrollen.
+    #
+    # Der Unterschied zur Lautstaerke Null ist nicht nur der Weg: was hier
+    # abgewiesen wird, steht als UNGESAGT im Protokoll und ist mit "nochmal"
+    # nachzuhoeren. Er verpasst also nichts, waehrend er weg ist -- es wartet
+    # nur, statt in ein leeres Zimmer gesprochen zu werden.
+    'reden': True,
+
     # DIESE ZWEI GEHÖREN HIERHER, auch wenn nur die Tafel sie setzt -- und das
     # ist kein Schönheitsfehler, sondern ein stiller Datenverlust, der hier
     # lauerte:

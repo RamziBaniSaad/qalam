@@ -879,6 +879,57 @@ def _ist_mein_echo(text):
     return False
 
 
+# --- Nach dem Fehlalarm von allein weiterreden ----------------------------
+#
+# Ramzis Vorschlag vom 08.08.2026, und er hat den entscheidenden Punkt gesehen:
+# oben wird still verworfen, und das ist richtig -- aber davor hat mich das Ohr
+# schon mitten im Satz gestoppt, weil es mein eigenes Echo fuer seine
+# Uebernahme hielt. Danach bleibe ich stumm stehen, und er muss mich jedes Mal
+# von Hand mit "rede weiter" anstossen. "Genau da kommt Automation perfekt
+# zustande."
+#
+# Hier ist die Stelle, an der es feststeht: das Gehoerte kam aus meinem eigenen
+# Lautsprecher, also war der Stopp ein Fehlalarm. Der Rest liegt in der
+# Sprech-Zentrale bereit (sprechzentrale.hole_abbruch).
+#
+# ZWEI BREMSEN, weil hier eine Rueckkopplung moeglich ist -- was ich
+# nachspreche, geht wieder ins Mikrofon:
+#   1. Die Zentrale gibt jeden Rest nur EINMAL heraus.
+#   2. Die Zaehlung hier: zweimal in einer Minute reicht. Wer beim dritten
+#      Anlauf wieder abgewuergt wird, hat kein Echo-Problem mehr, sondern ein
+#      anderes -- und dann ist Stille ehrlicher als eine Endlosschleife.
+_WEITER_FENSTER = 60.0
+_WEITER_HOECHSTENS = 2
+_weiter_versuche = []
+
+
+def _weiterreden_nach_fehlalarm():
+    try:
+        import einstellungen
+        if not einstellungen.hole('echo_weiterreden'):
+            return
+    except Exception:
+        return
+    jetzt = time.time()
+    _weiter_versuche[:] = [t for t in _weiter_versuche
+                           if jetzt - t < _WEITER_FENSTER]
+    if len(_weiter_versuche) >= _WEITER_HOECHSTENS:
+        print('[Brücke] Fehlalarm erkannt, aber schon %dx weitergeredet -- '
+              'ich bleibe still.' % _WEITER_HOECHSTENS, flush=True)
+        return
+    try:
+        import sprechzentrale
+        rest, rang = sprechzentrale.hole_abbruch()
+        if not rest:
+            return
+        _weiter_versuche.append(jetzt)
+        sprechzentrale.einwerfen(rest, rang=rang, quelle='weiterreden')
+        print('[Brücke] Fehlalarm -- ich rede weiter: %r' % rest[:60],
+              flush=True)
+    except Exception as e:
+        print('[Brücke] Weiterreden ging nicht: %s' % e, flush=True)
+
+
 def sende(auftrag, fenster_titel=FENSTER_TITEL):
     """Auftrag in die laufende Claude-Sitzung schreiben und abschicken.
 
@@ -917,6 +968,7 @@ def sende(auftrag, fenster_titel=FENSTER_TITEL):
     # Echo, das hier gerade aufgefallen ist. Im Protokoll steht, was passiert
     # ist; das reicht.
     if _ist_mein_echo(auftrag):
+        _weiterreden_nach_fehlalarm()
         return False, ''
 
     hwnd = finde_fenster(fenster_titel)
