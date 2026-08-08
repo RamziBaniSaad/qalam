@@ -1307,6 +1307,29 @@ class Weckwort:
         if lach_marker:
             text = f'{text} {lach_marker}'.strip() if text else lach_marker
 
+            # UND EINMAL AUF DIE INSEL. Ramzis Frage, kaum dass es lief: „Gibt
+            # es dann irgendwo einen Ort, wo ich das erkenne? Bei einem
+            # Untertitel erkenne ich das ja nicht."
+            #
+            # Er hat recht, und der Untertitel ist die falsche Antwort: dort
+            # steht der Marker zwar drin, aber nur solange der Satz noch der
+            # letzte ist und nur wenn Ramzi zufaellig hinsieht. Das ist kein
+            # Ort, das ist Zufall.
+            #
+            # Die Insel ist genau dafuer gebaut („alles was passiert, soll dort
+            # angezeigt werden") und bringt ihren eigenen Ton mit -- damit ist
+            # zugleich Ramzis Grundsatz erfuellt, sichtbares und hoerbares
+            # Feedback nie einzeln zu geben.
+            #
+            # MIT DER ZAHL, nicht nur mit dem Wort: solange die Schwelle noch
+            # nicht an seiner Stimme eingestellt ist, ist genau diese Zahl das,
+            # was er sehen muss, um mitreden zu koennen.
+            try:
+                import ereignis
+                ereignis.melde(f'Lachen gehört ({wert:.2f})', 'ohr')
+            except Exception:
+                pass
+
         # Der Folgesatz braucht den Namen nicht mehr.
         #
         # Ramzi sagt oft erst nur "Noor", wartet auf das Zeichen und redet dann
