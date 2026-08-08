@@ -300,9 +300,23 @@ class Assistent:
             # keine Marke "bis hierher gehört". Ein "weiter ab Wort 14" wäre
             # geraten, und Raten ist teurer als ein paar Sekunden Wiederholung.
             # Ramzi hat genau das selbst vorgeschlagen.
+            # Die Liste ist am 08.08.2026 gewachsen: Ramzi sagte "sag noch mal
+            # was du gesagt hast" -- die natuerlichste Formulierung ueberhaupt,
+            # und keine einzige Wendung hier traf zu. Sie landete als normale
+            # Nachricht im Chat, und ich habe von Hand wiederholt.
+            #
+            # Bewusst NICHT das nackte "nochmal": das steckt in zu vielen
+            # gewoehnlichen Saetzen ("machen wir das nochmal", "probier das
+            # nochmal") und wuerde staendig falsch ausloesen. Lieber ein paar
+            # Wendungen mehr, die eindeutig sind.
             (['rede weiter', 'red weiter', 'sprich weiter', 'sag das nochmal',
-              'nochmal sagen', 'wiederhol', 'nochmal von vorn',
-              'noch mal von vorne', 'mach weiter mit dem satz'],
+              'sag das noch mal', 'nochmal sagen', 'noch mal sagen',
+              'wiederhol', 'nochmal von vorn', 'noch mal von vorne',
+              'mach weiter mit dem satz',
+              'sag noch mal was du gesagt hast',
+              'sag nochmal was du gesagt hast',
+              'sag was du gesagt hast', 'sag es nochmal', 'sag es noch mal',
+              'sags nochmal', 'nochmal bitte', 'noch mal bitte'],
              lambda: self._nochmal()),
 
             # Ramzis Notausgang vom 03.08.2026, nachdem sein Video kaum noch zu
