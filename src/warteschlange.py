@@ -291,7 +291,14 @@ def ist_mein_echo(gehoert, kurz_erlaubt=False):
     # Der Notausgang zuerst -- siehe ist_stoppwort(). Lieber einmal mein
     # eigenes Echo als Stopp missverstehen (dann bin ich kurz still, und das
     # kostet ihn nichts) als seinen Zuruf überhören, während ich rede.
-    if ist_stoppwort(gehoert):
+    #
+    # ABER: nur, wenn es nicht klar mein eigenes Echo ist. Ramzi am
+    # 08.08.2026, zweite Stelle mit demselben Grundfehler wie ist_stoppwort()
+    # weiter unten -- "Jetzt der Test, und ich baue absichtlich genau die"
+    # brach hier ab, obwohl der Fix fuer ist_stoppwort schon griff. Ohne
+    # war_kuerzlich_mein_satz() galt jedes verhoerte Stoppwort im eigenen Text
+    # weiter automatisch als "Ramzi hat übernommen".
+    if ist_stoppwort(gehoert) and not war_kuerzlich_mein_satz(gehoert):
         return False
 
     g = _worte(gehoert)
