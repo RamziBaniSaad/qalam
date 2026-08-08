@@ -21,21 +21,52 @@ GB stürzt Ramzis Rechner bis zur Taskleiste ab (siehe
 `memory/reference_ramzi_machine_constraints.md`). Das Ohr belegt dort schon
 gut 3 GB.
 
-## Warum dieses Modell und nicht das offensichtliche
+## Warum CED und nicht das offensichtliche AST
 
 Gemessen am 08.08.2026 nachts, auf genau diesem Rechner, nicht geschätzt:
 
     AST (86,6 Mio Parameter, das bekannte AudioSet-Modell)
-        voll,  8 Kerne  ->  0,84 s
-        int8,  8 Kerne  ->  0,56 s
-    CED-tiny (5,5 Mio Parameter, hier eingebaut)
-        int8,  1 Kern   ->  0,018 s
-        int8,  4 Kerne  ->  0,012 s
+        int8, 8 Kerne  ->  0,56 s  je Durchgang
+    CED (dieselbe Aufgabe, sherpa-onnx)
+        base, 4 Kerne  ->  0,23 s  für 15 s Ton, also ALLE Fenster zusammen
 
-Rund hundertmal billiger. Das ist der Unterschied zwischen „läuft nebenbei mit"
-und „frisst acht von zwölf Kernen, während er zockt" -- und die halbe Sekunde
-hätte genau die Zeit zurückgeholt, die wir am 07.08. aus der Brücke
-herausgeholt haben (2,50 -> 2,00 s).
+AST hätte pro Äußerung acht von zwölf Kernen belegt, während Ramzi spielt --
+und die halbe Sekunde hätte genau die Zeit zurückgeholt, die am 07.08. aus der
+Brücke herausgearbeitet wurde (2,50 -> 2,00 s).
+
+## Warum das GROSSE CED, obwohl das kleine hundertmal billiger ist
+
+Weil das kleine Ramzis Lachen nicht hört. Das ist der teuerste Befund dieser
+Nacht, und er kam erst heraus, als er selbst widersprochen hat.
+
+Zuerst lief hier CED-tiny (5,5 Mio, 12–18 ms). Auf den Testtönen des Modells
+sah das glänzend aus: Lachen 0,79, alles andere unter 0,01. An Ramzis eigenem
+Lachen kam es auf **0,043** -- und seine 129 ganz normalen Sätze im Protokoll
+lagen bei bis zu 0,02. Sein Lachen lag also MITTEN im Rauschen des Redens; mit
+diesem Modell war keine Schwelle zu ziehen, egal welche.
+
+Meine erste Erklärung war falsch: ich hielt sein Lachen für gestellt. Sein
+Widerspruch war der entscheidende Hinweis -- er lacht wirklich so. Kein
+Lachanfall, sondern ein kurzes, leises Lachen mitten im Reden. AudioSet lernt
+Lachen aus YouTube-Gelächter; genau diese leise Sorte ist dort die Ausnahme.
+
+An SEINEM Lachen gemessen, nicht an den Testtönen:
+
+    Modell     sein Lachen   sein Reden
+    tiny            0,043       0,000
+    mini            0,044       0,000
+    small           0,026       0,000
+    base            0,132       0,000     <- und nur mit kurzen Fenstern
+
+Größer allein reicht nicht (small ist schlechter als tiny). Es ist die
+KOMBINATION aus dem großen Modell und einem kurzen Fenster: sein Lachen dauert
+weniger als eine Sekunde und ersäuft in einem 2-s-Fenster.
+
+**Eine Kaskade wurde gebaut und wieder verworfen** -- tiny sucht die Stelle,
+base urteilt darüber. Sie war schnell (136 ms), lieferte aber nur 0,070 statt
+0,132: tiny sortiert das entscheidende Fenster nicht nach oben, auch nicht
+unter die ersten acht. Es taugt eben nicht einmal zum Finden. Gemessen,
+verworfen, hier notiert -- damit es niemand noch einmal versucht.
 
 ## Die Fenster -- der Punkt, an dem eine naive Fassung scheitert
 
@@ -48,40 +79,33 @@ einmal in Fenstern gemessen:
     in 2-s-Fenstern, bestes     ->  0,79
 
 Es wird also in Fenstern geschaut und das höchste genommen. Größe und Sprung
-sind ausgemessen, nicht geschätzt (08.08.2026, Testtöne des Modells):
+sind an SEINEM Lachen ausgemessen (base, 4 Kerne):
 
-    Fenstergröße        1,0 s   1,5 s   2,0 s   3,0 s
-    Lachen              0,663   0,723   0,789   0,756
-    alles andere        0,000   0,000  ≤0,004  ≤0,004
+    Fenster/Sprung    sein Lachen   sein Reden   max. Gegenprobe   15 s Ton
+    1,0 s / 0,25 s          0,132        0,000             0,003     945 ms
+    1,0 s / 0,50 s          0,132        0,000             0,002     425 ms
+    1,0 s / 1,00 s          0,132        0,000             0,002     226 ms
+    0,75 s / 0,25 s         0,117        0,005             0,006     620 ms
+    0,75 s / 0,50 s         0,093        0,000             0,006     313 ms
 
-    Sprung (bei 2 s)    1,00 s  0,50 s  0,25 s
-    Lachen              0,789   0,794   0,830
-    Katze               0,002   0,006   0,056
-    Baby weint          0,006   0,007   0,104
+**Überlappung bringt nichts.** Der engste Sprung liefert exakt denselben Wert
+wie gar keine Überlappung und kostet das Vierfache. Genommen ist deshalb
+1,0 s ohne Überlappung: 226 ms für eine 15 s lange Äußerung, und die läuft
+neben Whisper her, das auf der Grafikkarte rechnet.
 
-2 s trifft am besten -- kürzere Fenster nehmen dem Modell den Zusammenhang,
-längere verdünnen wieder. Beim Sprung ist 0,25 s trügerisch: das Lachen steigt,
-aber Katze und weinendes Baby steigen MIT, und ein Erkenner, der bei fremden
-Geräuschen mitzieht, wird bei Ramzis Videoton irgendwann falsch anschlagen.
-0,5 s holt fast denselben Gewinn ohne diesen Nebeneffekt.
+Gegenproben bei dieser Einstellung: Gesang, Sprache, Katze, Sirene je 0,000,
+weinendes Baby 0,002. Fremdes lautes Lachen 0,83.
 
-Kosten bei 10 s Ton: rund 170 ms. Immer noch ein Bruchteil eines einzigen
-Durchgangs des großen Modells.
+## Die Schwelle
 
-## Was hier bewusst NICHT entschieden ist
+**0,06**, und die ist an ihm gemessen, nicht geschätzt: sein Lachen 0,132, sein
+Reden 0,000, die höchste Gegenprobe 0,002. Nach beiden Seiten Faktor 20.
 
-Die Schwelle. Der Abstand ist zwar groß -- Lachen 0,79 gegen Gesang 0,010,
-Sprache 0,000, Sirene 0,000 --, aber das sind FREMDE Stimmen aus den Testtönen
-des Modells. Wo Ramzis eigenes Lachen landet und wo sein Räuspern, sein Seufzen
-und sein Fluchen im Spiel, weiß niemand, bevor es jemand an ihm gemessen hat.
-Deshalb:
-
-  * `SCHWELLE_VORGABE` ist ein Startwert, keine Wahrheit,
-  * jede Prüfung landet mit ihrer Zahl im Protokoll,
-  * und `werkzeuge/noor-lachprobe.ps1` zeigt die Zahl sofort.
-
-Erst danach wird die Schwelle festgelegt. Ein geratener Wert, der still daneben
-liegt, wäre genau die Sorte Fehler, die hier schon mehrfach Abende gekostet hat.
+Sie bleibt trotzdem ein Regler, und jede Prüfung landet mit ihrer Zahl im
+Protokoll -- die Messung stützt sich bisher auf EIN aufgenommenes Lachen. Mehr
+Material kommt von selbst, während er redet; `werkzeuge/noor-lachprobe.ps1`
+liefert auf Wunsch mehr (und hebt die Aufnahmen auf, damit nachjustieren ihn
+kein weiteres Lachen kostet).
 
 ## Weich verdrahtet
 
@@ -96,8 +120,17 @@ import time
 import numpy as np
 
 PROJEKT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELL_ORDNER = os.path.join(PROJEKT, 'modelle',
-                             'sherpa-onnx-ced-tiny-audio-tagging-2024-04-19')
+MODELLE = os.path.join(PROJEKT, 'modelle')
+
+# Gearbeitet wird mit dem GROSSEN Modell; `tiny` bleibt nur als Rückfall, falls
+# `base` fehlt. Warum nicht umgekehrt, steht im Kopf dieser Datei.
+SUCHER = 'tiny'
+RICHTER = 'base'
+
+# Vier Kerne sind vertretbar, weil Whisper bei Ramzi auf der GRAFIKKARTE
+# rechnet (`cuda/float16` im Protokoll) -- die CPU steht während der
+# Transkription ohnehin still, und genau dann läuft dieser Faden.
+KERNE = {SUCHER: 1, RICHTER: 4}
 
 RATE = 16000
 
@@ -112,59 +145,65 @@ LACH_KLASSEN = {
 }
 
 # Fenster und Sprung -- beide GEMESSEN, nicht gewählt. Tabelle oben.
-FENSTER_S = 2.0
-SPRUNG_S = 0.5
+# Ohne Überlappung, und das ist kein Sparen an der falschen Stelle: engere
+# Sprünge haben an Ramzis Lachen KEINEN besseren Wert gebracht (0,132 bei
+# 0,25 s wie bei 1,0 s Sprung), nur das Vierfache an Rechenzeit.
+FENSTER_S = 1.0
+SPRUNG_S = 1.0
 
-# Startwert, kein Messergebnis. Siehe oben.
-SCHWELLE_VORGABE = 0.35
+# Gemessen an Ramzis eigenem Lachen. Siehe oben.
+SCHWELLE_VORGABE = 0.06
 
 # Wie viele Klassen sich das Modell je Fenster abholen soll. 20 ist reichlich:
 # steht Lachen nicht unter den zwanzig wahrscheinlichsten Geräuschen, war es
 # keins. Mehr kostet nichts, aber es hilft auch nichts.
 OBEN = 20
 
-_tagger = None
-_tagger_versucht = False
+_tagger = {}
+_versucht = set()
 _schloss = threading.Lock()
 
 
-def _hole_tagger():
-    """Das Modell laden -- einmal, beim ersten Gebrauch, und nie wieder.
+def _ordner(groesse):
+    return os.path.join(MODELLE,
+                        f'sherpa-onnx-ced-{groesse}-audio-tagging-2024-04-19')
+
+
+def _hole_tagger(groesse):
+    """Ein Modell laden -- einmal, beim ersten Gebrauch, und nie wieder.
 
     NICHT beim Import: der Import läuft im Startpfad des Ohrs, und ein Ohr,
-    das wegen eines Geräusch-Erkenners eine Sekunde später zuhört, ist ein
-    schlechter Tausch. Das Laden dauert gemessen ~0,1 s, aber die Regel gilt
-    unabhängig davon.
+    das wegen eines Geräusch-Erkenners später zuhört, ist ein schlechter
+    Tausch.
+
+    `groesse` ist 'tiny' oder 'base' -- siehe die Kaskade in `pruefe()`.
     """
-    global _tagger, _tagger_versucht
     with _schloss:
-        if _tagger is not None or _tagger_versucht:
-            return _tagger
-        _tagger_versucht = True
-        modell = os.path.join(MODELL_ORDNER, 'model.int8.onnx')
-        etiketten = os.path.join(MODELL_ORDNER, 'class_labels_indices.csv')
+        if groesse in _tagger:
+            return _tagger[groesse]
+        if groesse in _versucht:
+            return None
+        _versucht.add(groesse)
+        ordner = _ordner(groesse)
+        modell = os.path.join(ordner, 'model.int8.onnx')
+        etiketten = os.path.join(ordner, 'class_labels_indices.csv')
         if not (os.path.exists(modell) and os.path.exists(etiketten)):
-            print(f'[Lachen] Modell fehlt unter {MODELL_ORDNER} -- '
-                  f'Lacherkennung bleibt aus.')
+            print(f'[Lachen] Modell {groesse} fehlt unter {ordner} -- '
+                  f'{"Lacherkennung bleibt aus" if groesse == SUCHER else "nur der Sucher läuft"}.')
             return None
         try:
             import sherpa_onnx
-            _tagger = sherpa_onnx.AudioTagging(
+            t = sherpa_onnx.AudioTagging(
                 sherpa_onnx.AudioTaggingConfig(
                     model=sherpa_onnx.AudioTaggingModelConfig(
-                        ced=modell,
-                        # EIN Kern. Gemessen kostet ein Fenster damit 18 ms
-                        # statt 12 ms bei vier -- die 6 ms sind es nicht wert,
-                        # Ramzi drei Kerne wegzunehmen, während er spielt.
-                        num_threads=1,
-                        provider='cpu'),
-                    labels=etiketten,
-                    top_k=OBEN))
-            print('[Lachen] CED-tiny geladen -- ich höre jetzt auch den Ton.')
+                        ced=modell, num_threads=KERNE[groesse], provider='cpu'),
+                    labels=etiketten, top_k=OBEN))
+            _tagger[groesse] = t
+            print(f'[Lachen] CED-{groesse} geladen.')
+            return t
         except Exception as e:
-            print(f'[Lachen] Modell nicht ladbar: {e}')
-            _tagger = None
-        return _tagger
+            print(f'[Lachen] Modell {groesse} nicht ladbar: {e}')
+            return None
 
 
 def _fenster(audio):
@@ -188,6 +227,17 @@ def _fenster(audio):
     if anfang < len(audio) - int(0.3 * RATE):
         stuecke.append(audio[-breite:])
     return stuecke
+
+
+def _hoechster(tagger, stueck):
+    """Der höchste Wert aus der Lach-Familie für EIN Fenster."""
+    strom = tagger.create_stream()
+    strom.accept_waveform(RATE, stueck)
+    bester, name = 0.0, ''
+    for ereignis in tagger.compute(strom):
+        if ereignis.name in LACH_KLASSEN and ereignis.prob > bester:
+            bester, name = float(ereignis.prob), ereignis.name
+    return bester, name
 
 
 def pruefe(audio):
@@ -215,20 +265,20 @@ def pruefe(audio):
     # keiner.
     if schwelle() <= 0:
         return None
-    tagger = _hole_tagger()
+    # Erst das große Modell, und nur wenn das fehlt das kleine. Ein fehlendes
+    # `base` darf die Erkennung verschlechtern, aber nicht abstellen -- ein
+    # frisch geklonter Rechner soll nicht stumm dastehen. Umgekehrt würde das
+    # kleine hier sinnlos mitgeladen.
+    tagger = _hole_tagger(RICHTER) or _hole_tagger(SUCHER)
     if tagger is None or audio is None or len(audio) < int(0.3 * RATE):
         return None
     start = time.time()
-    bester = 0.0
-    bester_name = ''
     try:
+        bester, bester_name = 0.0, ''
         for stueck in _fenster(np.ascontiguousarray(audio, dtype=np.float32)):
-            strom = tagger.create_stream()
-            strom.accept_waveform(RATE, stueck)
-            for ereignis in tagger.compute(strom):
-                if ereignis.name in LACH_KLASSEN and ereignis.prob > bester:
-                    bester = float(ereignis.prob)
-                    bester_name = ereignis.name
+            wert, name = _hoechster(tagger, stueck)
+            if wert > bester:
+                bester, bester_name = wert, name
     except Exception as e:
         print(f'[Lachen] Prüfung fehlgeschlagen: {e}')
         return None

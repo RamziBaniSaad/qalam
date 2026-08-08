@@ -165,3 +165,6 @@ noor-gesagt.log
 # Geraeusch-Modelle fuer die Lacherkennung: nachladbar per
 # noor/werkzeuge/noor-lachmodell-holen.ps1, gehoeren nicht ins Repo.
 modelle/
+
+# Aufnahmen aus der Lach-Probe: Ramzis Stimme, gehoert niemandem sonst.
+lachproben/

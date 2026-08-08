@@ -75,8 +75,46 @@ def nimm_auf(sekunden):
     return np.ascontiguousarray(daten[:, 0])
 
 
+PROBEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lachproben')
+
+
+def sichere(audio, was):
+    """Die Aufnahme aufheben -- der wichtigste Teil dieses Werkzeugs.
+
+    ERST OHNE DAS GEBAUT, und der erste Lauf hat sofort gezeigt, warum das
+    falsch war: Ramzis Lachen kam auf 0,034, wo die Testdatei 0,79 erreicht.
+    Damit stand die Frage im Raum, ob das kleine Modell zu klein ist, ob sein
+    Mikrofon zu leise ist oder ob ein Lachen auf Kommando einfach keins ist --
+    und die einzige Art, das zu beantworten, waere gewesen, ihn zwanzigmal
+    lachen zu lassen, einmal je Einstellung.
+
+    Mit einer gespeicherten Aufnahme lacht er EINMAL, und alles Weitere --
+    andere Modellgroessen, andere Fenster, Normalisierung -- probiere ich
+    danach allein durch. Sein Ohr ist die knappe Ressource, nicht meine
+    Rechenzeit.
+    """
+    try:
+        import soundfile as sf
+        os.makedirs(PROBEN, exist_ok=True)
+        pfad = os.path.join(PROBEN, f'{was}-{time.strftime("%Y%m%d-%H%M%S")}.wav')
+        sf.write(pfad, audio, RATE)
+        return pfad
+    except Exception as e:
+        print(f'  (konnte die Aufnahme nicht sichern: {e})')
+        return None
+
+
 def zeige(audio, was):
     """Den Ton durchs Modell schicken und die Zahlen hinschreiben."""
+    # Der PEGEL gehoert dazu und nicht in eine Fussnote: ist die Aufnahme zu
+    # leise, sagt die Lach-Zahl nichts ueber das Modell aus, sondern ueber das
+    # Mikrofon. Zwei Messwerte, die man verwechseln kann, sind schlimmer als
+    # einer -- also stehen beide da.
+    spitze = float(np.abs(audio).max()) if len(audio) else 0.0
+    effektiv = float(np.sqrt(np.mean(audio ** 2))) if len(audio) else 0.0
+    hinweis = '  << sehr leise' if spitze < 0.05 else ''
+    print(f'{was}: Pegel Spitze {spitze:.3f}, Effektivwert {effektiv:.4f}{hinweis}')
+
     fund = lachen.pruefe(audio)
     grenze = lachen.schwelle()
     if fund is None:
@@ -106,6 +144,30 @@ def rate(lach_wert, red_wert):
               'Lachen. So ist keine Schwelle zu ziehen -- bitte nochmal, und '
               'beim Lachen wirklich lachen.')
         return
+
+    # EINE UNTERGRENZE, und sie ist wichtiger als die Rechnung darunter.
+    #
+    # Im ersten echten Lauf kam Ramzis Lachen auf 0,034 und sein Reden auf
+    # 0,000. Der Abstand war also "sauber" -- und der brave Vorschlag daraus
+    # lautete 0,02. Das ist Unsinn: 0,02 liegt im Rauschen, und eine Schwelle
+    # im Rauschen meldet Lachen bei Huesteln, Stuhlknarzen und Videoton. Sie
+    # ist schlimmer als gar keine Erkennung, weil man ihr dann nicht mehr
+    # glauben kann.
+    #
+    # Ein Verhaeltnis allein reicht als Kriterium also nicht; es braucht auch
+    # einen absoluten Boden. Auf den Testtoenen erreicht echtes Lachen 0,79 --
+    # 0,15 ist danach schon sehr grosszuegig.
+    if lach_wert < 0.15:
+        print(f'\nDein Lachen kommt nur auf {lach_wert:.3f}. Das ist zu wenig, '
+              f'um daraus eine Schwelle zu machen --')
+        print('zum Vergleich erreicht der Testton des Modells 0,79. Hier waere '
+              'jede Schwelle im Rauschen,')
+        print('und die meldete dann auch Huesteln und Videoton als Lachen. '
+              'Kein Vorschlag.')
+        print('Die Aufnahme ist gesichert; damit gehe ich der Ursache nach '
+              '(Pegel, Modellgroesse, Fenster).')
+        return
+
     vorschlag = red_wert + (lach_wert - red_wert) * 0.55
     print(f'\nAbstand: {lach_wert - red_wert:.3f}')
     print(f'Vorschlag fuer die Schwelle: {vorschlag:.2f}')
@@ -133,9 +195,18 @@ if __name__ == '__main__':
     print(f'\nSchwelle steht gerade auf {lachen.schwelle()}\n')
 
     print('DURCHGANG 1 von 2:  bitte LACHEN.')
-    lach = zeige(nimm_auf(dauer), 'Lachen ')
+    ton_lach = nimm_auf(dauer)
+    pfad_lach = sichere(ton_lach, 'lachen')
+    lach = zeige(ton_lach, 'Lachen ')
 
     print('\nDURCHGANG 2 von 2:  bitte ganz normal REDEN (irgendein Satz).')
-    reden = zeige(nimm_auf(dauer), 'Reden  ')
+    ton_reden = nimm_auf(dauer)
+    pfad_reden = sichere(ton_reden, 'reden')
+    reden = zeige(ton_reden, 'Reden  ')
 
     rate(lach, reden)
+
+    if pfad_lach or pfad_reden:
+        print(f'\nAufnahmen liegen in: {PROBEN}')
+        print('Damit probiere ich die Einstellungen durch, ohne dass du '
+              'nochmal lachen musst.')
