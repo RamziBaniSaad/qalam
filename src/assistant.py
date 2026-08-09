@@ -322,6 +322,23 @@ class Assistent:
               'sags nochmal', 'nochmal bitte', 'noch mal bitte'],
              lambda: self._nochmal()),
 
+            # Die Umsätze in die Finanzplanung eintragen. Ramzis Auftrag vom
+            # 09.08.2026: er lädt den Export herunter und will danach weder
+            # einen Dateinamen tippen noch auf mich warten -- weder gesagt
+            # noch geklickt soll es mehr als eine Geste sein.
+            #
+            # Wortlisten mit "umsatz"/"umsaetze" reichen hier aus, weil das
+            # Wort in gewöhnlichen Sätzen praktisch nicht vorkommt -- anders
+            # als beim nackten "nochmal" weiter oben. "Tabelle aktualisieren"
+            # ist dazu die Wendung, die er beim Erklären selbst benutzt hat.
+            (['umsatze eintragen', 'umsaetze eintragen', 'umsatze holen',
+              'umsatze aktualisieren', 'umsaetze aktualisieren',
+              'neue umsatze', 'neue umsaetze',
+              'tabelle aktualisieren', 'finanzen aktualisieren',
+              'finanztabelle aktualisieren', 'trag die umsatze ein',
+              'trag die umsaetze ein'],
+             lambda: self._finanzen_eintragen()),
+
             # Ramzis Notausgang vom 03.08.2026, nachdem sein Video kaum noch zu
             # hören war: „Statt dass ich in die Einstellungen gehe, in den
             # Sound, und bei all meinen Apps alles auf 100 Prozent mache, sage
@@ -395,6 +412,33 @@ class Assistent:
         except Exception:
             return 'Das hat nicht geklappt.'
         return None      # der Absatz kommt gleich selbst, kein Zwischenruf
+
+    def _finanzen_eintragen(self):
+        """Den Umsatz-Export in die Finanzplanung eintragen.
+
+        Die Arbeit macht werkzeuge/noor-finanzen-eintragen.ps1 -- dieselbe
+        Datei, die auch der Tafel-Knopf startet. EIN Weg für Sprache und
+        Knopf, damit die beiden nicht auseinanderlaufen; dieselbe Regel wie
+        bei _nochmal.
+
+        Kein Rückgabewert: das Skript sagt sein Ergebnis selbst, und es
+        dauert ein paar Sekunden. Ein Satz hier wäre entweder gelogen ("ist
+        eingetragen", bevor es das ist) oder eine zweite Ansage zu derselben
+        Sache.
+        """
+        skript = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                              'noor-finanzen-eintragen.ps1')
+        if not os.path.exists(skript):
+            return 'Dafür fehlt mir das Skript.'
+        try:
+            subprocess.Popen(
+                ['powershell', '-NoProfile', '-NonInteractive',
+                 '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+                 '-File', skript],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception:
+            return 'Das hat nicht geklappt.'
+        return 'Ich trage die Umsätze ein.'
 
     def _alles_laut(self):
         """Jedes Programm auf volle Lautstärke -- Ramzis Handbremse.
