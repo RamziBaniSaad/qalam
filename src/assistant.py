@@ -565,12 +565,30 @@ class Assistent:
         # abbrechen will, haemmert ohnehin schneller.
         DOPPEL_FENSTER = 1.0
         self._letzter_tastendruck = 0.0
+        # Haengt die Taste noch von einem Druck, der nie losgelassen wurde?
+        #
+        # Windows meldet eine GEHALTENE Taste wiederholt, und pynput reicht
+        # jede Meldung als eigenen Druck durch. Ohne diesen Merker wurde aus
+        # einem halbsekundenlangen Druck eine Kette: erst Stopp, dann
+        # Denkpause AN, dann Abbruch -- alles in derselben Sekunde. Uebrig
+        # blieb eine aktive Denkpause, die niemand wieder ausschaltete.
+        #
+        # Fuer Ramzi sah das aus, als sei das Ohr gestorben: es hoerte nicht
+        # mehr zu, der Pausenton ging im gleichzeitigen Abwuergen der
+        # Tonausgabe unter, und der Abbruch raeumte direkt danach den
+        # Untertitel weg. Also still, ohne Anzeige, mitten im Satz -- und das
+        # ausgerechnet bei der Taste, mit der er mich unterbrechen soll.
+        # Gemessen am 09.08.2026 um 15:59:13: drei Aktionen aus einem Druck.
+        self._taste_haengt = False
         try:
             from pynput import keyboard
 
             def _gedrueckt(taste):
                 if taste != keyboard.Key.ctrl_r:
                     return
+                if self._taste_haengt:
+                    return          # dieselbe Taste, nur Windows' Wiederholung
+                self._taste_haengt = True
                 jetzt = time.time()
 
                 # REDE ICH GERADE? Dann ist die Taste der STOPP -- vor allem
@@ -638,7 +656,16 @@ class Assistent:
                     self._letzter_tastendruck = jetzt
                     self._pause_umschalten()
 
-            self._abbruch_listener = keyboard.Listener(on_press=_gedrueckt)
+            def _losgelassen(taste):
+                # Erst hier gilt der Druck als beendet. Das ist die ganze
+                # Gegenmassnahme: ohne on_release gibt es keinen Zeitpunkt,
+                # an dem ein Druck aufhoert -- und dann ist jede Wiederholung
+                # ein neuer.
+                if taste == keyboard.Key.ctrl_r:
+                    self._taste_haengt = False
+
+            self._abbruch_listener = keyboard.Listener(on_press=_gedrueckt,
+                                                       on_release=_losgelassen)
             self._abbruch_listener.start()
         except Exception as e:
             self._abbruch_listener = None
