@@ -20,6 +20,33 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# --- Die eigene Ausgabe auf UTF-8 zwingen, BEVOR die erste Zeile gedruckt wird
+#
+# Ohne das baut Python unter Windows seine Ausgabe-Kodierung aus der Codepage,
+# also cp1252 -- und dann bringt EIN Zeichen ausserhalb von cp1252 die
+# schreibende Zeile mit UnicodeEncodeError um. Das ist hier kein
+# Schoenheitsfehler: der Faden, der Ramzis Satz an die Bruecke weitergibt,
+# schreibt vorher den Titel des vorne liegenden Fensters mit -- und auf den hat
+# niemand Einfluss. Ein Punkt im VS-Code-Titel (ungespeicherte Datei), ein
+# japanischer Anime-Titel im Browser, ein Zeichen aus Spotify: der Faden stirbt,
+# und Ramzis Satz kommt NIE AN. Gehoert wird weiter, angekommen ist nichts --
+# genau sein Befund "manchmal schickt es gar nicht ab". Nachgewiesen in ohr.log
+# am 12.08.2026: zweimal Fadentod an U+25CF, dazwischen lief es.
+#
+# `noor-ohr-start.py` setzt dafuer PYTHONIOENCODING -- aber nur, wenn das Ohr
+# UEBER DIESEN STARTER hochkommt. Ueber den Autostart tut es das nicht: am
+# 13.08.2026 um 12:04 gestartet, PYTHONIOENCODING nicht gesetzt, der Fehler also
+# live. Deshalb steht es jetzt HIER, im Programm selbst, wo es von keinem
+# Startweg mehr abhaengt.
+#
+# `errors='replace'`: ein unbekanntes Zeichen wird ein Fragezeichen im
+# Protokoll. Ein Fragezeichen ist immer besser als ein toter Faden.
+for _strom in (sys.stdout, sys.stderr):
+    try:
+        _strom.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass          # aelteres Python oder umgelenkter Strom: dann eben nicht
+
 import einstellungen                        # noqa: E402
 import oeffnen                              # noqa: E402
 import schliessen                           # noqa: E402
@@ -247,6 +274,10 @@ class Assistent:
         # Bis wann nach einem Abbruch nichts mehr angenommen wird -- siehe
         # _abbrechen() und die Sperre in _geweckt().
         self._abbruch_bis = 0.0
+        # Der Stand des Folgefensters, den ICH zuletzt gesetzt habe, weil ich
+        # gerade rede. Siehe `_gespraech_offen_halten` und die Stelle in
+        # `_lautstaerke_wache`, die ihn wieder herausrechnet.
+        self._folge_bis_von_mir = 0.0
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
                             beim_mitschreiben=self._mitschreiben,
@@ -1146,13 +1177,34 @@ class Assistent:
                 vorn = b.value[:40]
             except Exception:
                 pass
+            # Das Mitschreiben darf die Uebergabe NICHT umbringen koennen.
+            #
+            # Genau das ist hier passiert (ohr.log, 12.08.2026): der Fenster-
+            # titel enthielt ein Zeichen, das die Ausgabe-Kodierung nicht kennt,
+            # `print` flog, der Faden starb -- und Ramzis Satz war weg, ohne
+            # dass irgendwo ein Fehlschlag stand. Die Kodierung ist oben in
+            # dieser Datei repariert; das hier ist der Guertel zum Hosentraeger.
+            #
+            # Die Reihenfolge ist Absicht: ein Protokoll, das eine Zeile
+            # verliert, kostet Erkenntnis. Eine Uebergabe, die ausfaellt,
+            # kostet Ramzi seinen Satz -- und er merkt es erst, wenn nichts
+            # kommt.
+            def _notiz(text):
+                try:
+                    print(text)
+                except Exception as e:      # niemals nach oben durchlassen
+                    try:
+                        print(f'[Brücke] Protokollzeile nicht schreibbar: {e!r}')
+                    except Exception:
+                        pass
+
             zeit = time.strftime('%H:%M:%S')
-            print(f'[{zeit}] [Brücke] gebe weiter: {len(auftrag)} Zeichen, '
-                  f'vorn liegt {vorn!r}')
+            _notiz(f'[{zeit}] [Brücke] gebe weiter: {len(auftrag)} Zeichen, '
+                   f'vorn liegt {vorn!r}')
 
             ok, meldung = sende(auftrag)
-            print(f'[{time.strftime("%H:%M:%S")}] [Brücke] '
-                  + ('angekommen' if ok else f'FEHLSCHLAG -- {meldung}'))
+            _notiz(f'[{time.strftime("%H:%M:%S")}] [Brücke] '
+                   + ('angekommen' if ok else f'FEHLSCHLAG -- {meldung}'))
             if not ok and meldung is not None and meldung != '':
                 self._sag(meldung)
             elif not ok and meldung is None:
@@ -1165,6 +1217,62 @@ class Assistent:
             # bei kurzen Antworten mit ihr ins Wort fallen.
 
         threading.Thread(target=_lauf, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    def _gespraech_offen_halten(self):
+        """Solange ICH rede, läuft das Folgefenster nicht ab.
+
+        RAMZIS BEFUND (12.08.2026): „Sobald Noor spricht, hört das Ohr auf und
+        nimmt nicht von selbst wieder auf -- ich muss jedes Mal von Hand
+        nachdrücken." Er hat es als „arbeitsbehindernd" bezeichnet, und das ist
+        es auch: es macht häufiges Sprechen zur Last, obwohl er ausdrücklich
+        mehr davon will (siehe CLAUDE.md, 07.08.2026).
+
+        Das Ohr war dabei nie taub -- der einzige harte Riegel ist Qalams
+        Diktat (siehe `wake_word._schleife`). Zu war etwas anderes: das
+        FOLGEFENSTER. Nach einer Antwort zählt sein nächster Satz `folge_
+        sekunden` lang auch OHNE meinen Namen als Auftrag (Standard 15 s).
+        Verlängert wurde dieses Fenster bisher nur, während ER redet
+        (`_mitschreiben`) -- nicht, während ICH rede.
+
+        Damit war die Rechnung: rede ich länger als 15 Sekunden, ist das
+        Fenster schon zu, BEVOR ich ausgeredet habe. Antwortet er dann, hört
+        das Ohr ihn, schreibt ihn ins Protokoll und wirft ihn weg. Für ihn
+        sieht das aus wie ein Ohr, das aufgehört hat. Und seit er lange
+        gesprochene Antworten will, ist das nicht mehr der Ausnahmefall,
+        sondern der Normalfall.
+
+        Die Regel hier ist deshalb bewusst schlicht: **solange ich rede, wird
+        das Fenster vorgeschoben.** Damit steht es, wenn ich fertig bin, noch
+        die vollen `folge_sekunden` offen -- er darf antworten wie in einem
+        Gespräch, ohne meinen Namen und ohne Taste.
+
+        Ein Wächter und kein Aufruf am Ende jedes Satzes, aus demselben Grund
+        wie bei `_lautstaerke_wache`: es gibt zu viele Stellen, an denen ein
+        Redezug endet (fertig, unterbrochen, abgebrochen, Warteschlange leer),
+        und eine vergessene davon ließe ihn wieder ins Leere reden. Ein
+        Wächter, der auf einen ZUSTAND schaut, kann das nicht.
+
+        Was das ausdrücklich NICHT tut: das Ohr aufwecken oder einen Riegel
+        aufmachen. Schlafen bleibt schlafen, Diktat bleibt Vorrang. Es hält
+        nur ein Fenster offen, das ohnehin für ihn gedacht ist."""
+        while self._laeuft.is_set():
+            time.sleep(0.4)
+            try:
+                import warteschlange as _w
+                if not _w.noor_spricht_gerade():
+                    continue
+                neu = max(self.ohr.folge_bis,
+                          time.time() + einstellungen.hole('folge_sekunden'))
+                self.ohr.folge_bis = neu
+                # Mitschreiben, dass DIESES Fenster von mir kommt -- siehe
+                # `_lautstaerke_wache`. Sonst bliebe Ramzis Musik nach jeder
+                # meiner Antworten noch 15 Sekunden leise, und das hat er nicht
+                # bestellt. Das Folgefenster beantwortet "darf er ohne meinen
+                # Namen reden", nicht "laeuft noch ein Gespraech".
+                self._folge_bis_von_mir = neu
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     def _lautstaerke_wache(self):
@@ -1184,7 +1292,15 @@ class Assistent:
                 import lautstaerke
                 if not lautstaerke.gedaempft():
                     continue
-                if time.time() < self.ohr.folge_bis:
+                # Ein Folgefenster, das NUR `_gespraech_offen_halten` offen
+                # haelt, zaehlt hier nicht: es heisst "er darf ohne meinen Namen
+                # antworten", nicht "es laeuft noch ein Gespraech". Sonst bliebe
+                # die Musik nach jeder meiner Antworten 15 Sekunden zu leise --
+                # eine Nebenwirkung, die niemand bestellt hat.
+                folge = self.ohr.folge_bis
+                if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
+                    folge = 0.0
+                if time.time() < folge:
                     continue
                 if self.sprecher.spricht_gerade():
                     continue
@@ -1211,6 +1327,7 @@ class Assistent:
         # losreden -- siehe sprechzentrale.py.
         sprechzentrale.starte(self.sprecher)
         threading.Thread(target=self._lautstaerke_wache, daemon=True).start()
+        threading.Thread(target=self._gespraech_offen_halten, daemon=True).start()
         threading.Thread(target=self._sprechpost_wache, daemon=True).start()
         threading.Thread(target=self._befehlswache, daemon=True).start()
         threading.Thread(target=self._stimmen_wache, daemon=True).start()
