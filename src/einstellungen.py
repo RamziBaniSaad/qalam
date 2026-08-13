@@ -50,15 +50,20 @@ STANDARD = {
     # `lachen.py` -- das Ohr hört den Ton mit und hängt „(lacht)" an den Satz,
     # damit Ramzi nicht mehr „haha" dazuschreiben muss.
     #
-    # DIESER WERT IST EIN STARTWERT UND KEIN MESSERGEBNIS. Auf den Testtönen
-    # des Modells liegt Lachen bei 0,79 und alles andere unter 0,01 -- die 0,35
-    # steht also mit viel Luft in der Mitte. Das sind aber FREMDE Stimmen; wo
-    # Ramzis eigenes Lachen landet und wo sein Räuspern, steht noch nicht fest.
-    # Jede Prüfung landet mit ihrer Zahl in `ohr.log` -- daraus wird die
-    # Schwelle eingestellt, nicht aus dieser Zeile.
+    # STEHT SEIT DEM 13.08.2026 AUF 0, ALSO AUS -- und zwar nicht, weil die
+    # Zahl schlecht gewählt war, sondern weil es keine gute gibt: Ramzis
+    # eigenes Lachen kommt auf 0,13, sein Zimmer im Hintergrund (Spiel, Anime,
+    # Musik) kommt auf bis zu 0,60, und beides in DERSELBEN AudioSet-Klasse
+    # („Snicker"). Über 3091 Messungen im Protokoll: 56 Treffer, davon nach
+    # Ramzis eigener Auskunft kein einziger richtig. Die Rechnung mit allen
+    # Zahlen steht im Kopf von `lachen.py`.
     #
-    # 0 = Lacherkennung ganz aus, wie bei jedem Regler hier.
-    'lach_schwelle': 0.35,
+    # ACHTUNG, hier ist schon einmal Arbeit verpufft: dieser Wert stand
+    # zwischendurch auf 0,35 und hat NIE gewirkt, weil in
+    # `noor-einstellungen.json` weiter 0,06 lag -- und die Datei gewinnt. Was
+    # hier steht, gilt nur für einen Rechner ohne eigene Datei. Wer die
+    # Schwelle wirklich verstellen will, nimmt `einstellungen.setze()`.
+    'lach_schwelle': 0,
 
     # ------------------------------------------------- Qalam auf der Karte
     # Wie lange das Diktat-Modell nach dem letzten Diktat noch auf der

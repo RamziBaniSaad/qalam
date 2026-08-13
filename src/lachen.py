@@ -96,16 +96,83 @@ neben Whisper her, das auf der Grafikkarte rechnet.
 Gegenproben bei dieser Einstellung: Gesang, Sprache, Katze, Sirene je 0,000,
 weinendes Baby 0,002. Fremdes lautes Lachen 0,83.
 
-## Die Schwelle
+## DIESE ERKENNUNG IST AUS (13.08.2026) -- und hier steht, warum
 
-**0,06**, und die ist an ihm gemessen, nicht geschätzt: sein Lachen 0,132, sein
-Reden 0,000, die höchste Gegenprobe 0,002. Nach beiden Seiten Faktor 20.
+`lach_schwelle` steht auf **0**. Damit steigt `pruefe()` ganz oben aus: kein
+Modell wird geladen, keine Rechenzeit verbraucht. Der Regler bleibt liegen, die
+Erkennung kann jederzeit zurückkommen -- aber nicht durch eine andere Zahl.
 
-Sie bleibt trotzdem ein Regler, und jede Prüfung landet mit ihrer Zahl im
-Protokoll -- die Messung stützt sich bisher auf EIN aufgenommenes Lachen. Mehr
-Material kommt von selbst, während er redet; `werkzeuge/noor-lachprobe.ps1`
-liefert auf Wunsch mehr (und hebt die Aufnahmen auf, damit nachjustieren ihn
-kein weiteres Lachen kostet).
+Ramzis Befund vom 13.08.2026, und er ist eindeutig: „nicht einmal richtig
+erkannt und alle Erkennungen bis jetzt waren falsch. Also wir haben
+hundertprozentige falsche Events und das über einen längeren Zeitraum."
+
+Nachgezählt in `ohr.log`, nicht geglaubt:
+
+    Messungen insgesamt                3091
+    davon über der Schwelle 0,06         56
+    davon richtig (seine Auskunft)        0
+
+**Warum keine andere Schwelle hilft.** Seine aufgehobene Lachprobe vom
+08.08.2026 noch einmal durch das große Modell geschickt, diesmal mit ALLEN
+Lach-Klassen einzeln statt nur der höchsten:
+
+    sein echtes Lachen      Snicker            0,132   <- die Spitze
+                            Chuckle, chortle   0,118
+                            Laughter           0,037
+                            Giggle             0,015
+    sein normales Reden     keine Lach-Klasse überhaupt unter den Top 20
+
+Und die 56 Fehltreffer aus dem Betrieb, nach Klasse:
+
+    Snicker      ~50        hinauf bis 0,60
+    Laughter       2
+    Giggle         2
+
+Damit liegt **sein echtes Lachen mit 0,13 MITTEN in dem, was sein Zimmer
+ohnehin produziert** -- die Fehltreffer bei 0,15, 0,22, 0,47, 0,54 und 0,60
+sind alle LAUTER als sein Lachen. Eine Schwelle, die ihn hört, lässt sie alle
+durch; eine, die sie sperrt, sperrt ihn mit. Dazwischen ist nichts.
+
+**Nach Klassen zu filtern hilft auch nicht.** Das ist die naheliegende Idee,
+weil „Snicker" fast alle Fehltreffer stellt -- aber „Snicker" ist eben auch die
+Klasse, in der SEIN Lachen am höchsten steht. Genau die Trennung, auf die man
+setzen würde, gibt es nicht.
+
+**Woher die Fehltreffer kommen.** Fast alle sitzen auf Abschnitten, in denen
+Whisper KEIN einziges Wort gehört hat (`gehoert: ''`) -- also auf Spiel-,
+Anime- und Musikton aus dem Zimmer. Zwischen 13:04 und 13:23 stehen rund
+dreißig Treffer am Stück, keiner mit Sprache dabei. Ein Vorfilter „nur prüfen,
+wenn auch Wörter erkannt wurden" räumte etwa vier Fünftel davon ab -- die
+übrigen waren aber ebenfalls falsch („Ich lach nicht." kam auf 0,080), und an
+der Überlappung oben ändert er nichts.
+
+## Der eigentliche Fehler, damit ihn niemand wiederholt
+
+Die alte Begründung stand hier als „Faktor 20 nach beiden Seiten": sein Lachen
+0,132, sein Reden 0,000, höchste Gegenprobe 0,002. Jede einzelne Zahl stimmt.
+
+Die **Gegenprobe** war trotzdem die falsche. Gemessen wurde gegen Gesang,
+Sprache, Katze, Sirene und ein weinendes Baby -- gegen ausgesuchte
+Beispieltöne also. NICHT gemessen wurde gegen das, was bei ihm tatsächlich im
+Raum läuft, während er redet. Da liegt der Fehler.
+
+Es ist derselbe Merksatz, der weiter oben schon steht -- „an fremden Testtönen
+zu messen beweist nichts über Ramzi". Beim Lachen war er beherzigt, bei der
+Gegenprobe vergessen. **Beide Seiten müssen aus seinem Zimmer kommen, nicht
+nur die eine.**
+
+## Was es bräuchte, damit das je wieder angeht
+
+Nicht eine Zahl, sondern Material: Aufnahmen aus SEINEM Zimmer, während Spiel
+oder Anime läuft und er NICHT lacht, als Negativ-Satz -- dazu mehrere echte
+Lacher von ihm. Erst daran ließe sich prüfen, ob überhaupt ein Merkmal die
+beiden trennt: ein anderes Modell, ein Profil über mehrere Klassen statt nur
+der Spitze, oder die Kopplung an erkannte Sprache. Ohne dieses Material ist
+jede weitere Schwelle geraten -- und geraten haben wir jetzt zweimal.
+
+`werkzeuge/noor-lachprobe.ps1` nimmt auf und hebt die Dateien in
+`qalam/lachproben/` auf. Das ist der Weg dorthin, und er kostet Ramzi einmal
+Zeit statt bei jeder Nachjustierung erneut.
 
 ## Weich verdrahtet
 
@@ -151,8 +218,13 @@ LACH_KLASSEN = {
 FENSTER_S = 1.0
 SPRUNG_S = 1.0
 
-# Gemessen an Ramzis eigenem Lachen. Siehe oben.
-SCHWELLE_VORGABE = 0.06
+# 0 = AUS. Seit dem 13.08.2026, und die Begründung steht ausführlich im Kopf
+# dieser Datei: sein Lachen (0,13) und sein Zimmer im Hintergrund (bis 0,60)
+# liegen in derselben Klasse übereinander, es gibt keine trennende Zahl.
+#
+# Wirksam ist ohnehin der Wert aus `noor-einstellungen.json`; diese Zeile gilt
+# nur für einen Rechner ohne eigene Datei. Beide stehen jetzt auf 0.
+SCHWELLE_VORGABE = 0.0
 
 # Wie viele Klassen sich das Modell je Fenster abholen soll. 20 ist reichlich:
 # steht Lachen nicht unter den zwanzig wahrscheinlichsten Geräuschen, war es
