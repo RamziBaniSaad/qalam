@@ -323,6 +323,13 @@ TABELLE = [
       'ohne zu drucken', 'nachreden', 'weiterreden ohne'],
      'zahl', STIMME, 'gespraech_sekunden'),
 
+    # Geraeuschunterdrueckung -- Ramzis Ventilatoren.
+    (['gerauschunterdruckung', 'gerausch unterdruckung', 'geraeuschunterdrueckung',
+      'rauschunterdruckung', 'rausch unterdruckung', 'unterdruckung',
+      'geraeusche unterdrucken', 'gerausche unterdrucken', 'hintergrundgerausch',
+      'hintergrund gerausch', 'lufter', 'ventilator', 'rauschen'],
+     'zahl', STIMME, 'geraeuschunterdrueckung'),
+
     (['tempo', 'sprechtempo', 'geschwindigkeit', 'schneller reden',
       'langsamer reden', 'schneller sprech', 'langsamer sprech', 'wie schnell du'],
      'zahl', STIMME, 'tempo'),
@@ -434,6 +441,8 @@ GRENZEN = {
     # meinen Namen sagen. Nach oben 120 Sekunden; wer länger als zwei Minuten
     # Nachlauf will, meint eigentlich „immer an", und das gibt es bewusst nicht.
     'gespraech_sekunden': (0, 120, 5),
+    # 0 heisst aus: dann entscheidet allein der Stimmenmelder, wie bisher.
+    'geraeuschunterdrueckung': (0, 100, 5),
     'orange_seconds':     (5, 3600, 1),
     'red_seconds':        (5, 3600, 1),
     'auto_submit_seconds': (10, 3600, 1),
@@ -465,6 +474,17 @@ def _setze_stimme(schluessel, wert, text, worte):
         wert = int(_rasten(_grenzen(wert, klein, gross), schritt))
         einstellungen.setze(stille_ms=wert)
         return f'Redepause steht auf {_sprich_dauer(wert / 1000)}.'
+
+    if schluessel == 'geraeuschunterdrueckung':
+        if einheit == '%' or wert > 100:
+            wert = min(wert, 100)
+        wert = int(_rasten(_grenzen(wert, klein, gross), schritt))
+        einstellungen.setze(geraeuschunterdrueckung=wert)
+        if wert == 0:
+            return ('Geräuschunterdrückung ist aus. Ich nehme alles, was der '
+                    'Stimmenmelder für Sprache hält.')
+        return (f'Geräuschunterdrückung steht auf {wert}. '
+                'Leiseres als deinen Zimmerton lasse ich jetzt weg.')
 
     if schluessel == 'gespraech_sekunden':
         # Immer Sekunden -- "auf eine Minute" darf er trotzdem sagen.
@@ -567,6 +587,8 @@ def _stand():
         f'Tempo {_sprich_zahl(w["tempo"])}',
         f'Lautstärke {int(round(w["lautstaerke"] * 100))} Prozent',
         f'Redepause {_sprich_dauer(w["stille_ms"] / 1000)}',
+        ('Geräuschunterdrückung aus' if not w.get('geraeuschunterdrueckung')
+         else f'Geräuschunterdrückung {w["geraeuschunterdrueckung"]}'),
         ('flüssiges Gespräch aus' if not w.get('gespraech_sekunden')
          else f'flüssiges Gespräch {_sprich_dauer(w["gespraech_sekunden"])}'),
         f'Tonzeichen {"an" if w["toene"] else "aus"}',

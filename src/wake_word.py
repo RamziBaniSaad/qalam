@@ -474,6 +474,10 @@ class Weckwort:
         # Bildern. Gefuehrt von der Aufnahmeschleife, gelesen vom Mitlauscher --
         # der laeuft in einem eigenen Faden und kaeme sonst nicht an die Zahl.
         self._gesamt_sprach = 0
+        # Der Zimmerton: laufend geschaetzter Grundpegel aus den Frames, die
+        # nicht nach Sprache klingen. Siehe die Geraeuschunterdrueckung in
+        # `_schleife`. 0 heisst "noch nichts gemessen".
+        self._grundpegel = 0.0
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -896,6 +900,44 @@ class Weckwort:
                     ist_sprache = self.vad.is_speech(frame.tobytes(), RATE)
                 except Exception:
                     continue
+
+                # GERAEUSCHUNTERDRUECKUNG -- Ramzis Auftrag vom 14.08.2026:
+                # "meine Ventilatoren sind an, ich glaube es kommt zu viel
+                # Rauschen, und dadurch schickt er einfach nicht ab."
+                #
+                # Der Stimmenmelder steht auf der empfindlichsten Stufe und
+                # haelt gleichmaessiges Rauschen fuer Sprache. Damit reisst die
+                # Stille nie ab, die Redepause laeuft nie voll -- und sein Satz
+                # bleibt haengen. Das ist kein Verstaendnisproblem, sondern eine
+                # Schwelle, die zu tief liegt.
+                #
+                # Also eine zweite Bedingung: laut genug muss es AUCH sein.
+                # Gemessen wird nicht absolut, sondern gegen den eigenen
+                # Zimmerton -- die Ventilatoren laufen mal, mal nicht, und ein
+                # fester Wert waere morgen wieder falsch. Der Grundpegel wird
+                # laufend aus den Frames geschaetzt, die der Melder NICHT fuer
+                # Sprache haelt: langsam, damit ein einzelner Huster ihn nicht
+                # verschiebt.
+                #
+                # Der Regler sagt, wie viel lauter Sprache sein muss: 0 = aus
+                # (nur der Melder, wie vorher), 100 = achtzehn Dezibel ueber dem
+                # Grundpegel. Das ist viel -- wer bei 100 fluestert, wird nicht
+                # gehoert. Deshalb ist der Vorschlag 35.
+                pegel = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)) + 1.0)
+                if not ist_sprache:
+                    # Nur wenn nicht gesprochen wird, ist das der Zimmerton.
+                    self._grundpegel = (0.98 * self._grundpegel + 0.02 * pegel
+                                        if self._grundpegel else pegel)
+                staerke = 0
+                try:
+                    from einstellungen import hole as _hole
+                    staerke = _hole('geraeuschunterdrueckung') or 0
+                except Exception:
+                    pass
+                if ist_sprache and staerke > 0 and self._grundpegel:
+                    noetig = self._grundpegel * (10 ** ((staerke / 100.0 * 18.0) / 20.0))
+                    if pegel < noetig:
+                        ist_sprache = False
 
                 if not ist_sprache:
                     # Die Folge reisst bei JEDEM stillen Frame -- auch dann,

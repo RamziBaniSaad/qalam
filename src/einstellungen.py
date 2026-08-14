@@ -62,6 +62,19 @@ STANDARD = {
     # damit gleichzeitig die Zeit weg, nach dem Weckwort loszulegen. Zwei
     # verschiedene Fragen brauchen zwei Werte.
     'gespraech_sekunden': 0,
+    # GERÄUSCHUNTERDRÜCKUNG, 0 bis 100. Wie viel lauter Ramzi sein muss als
+    # sein eigener Zimmerton, damit es als Sprache zählt.
+    #
+    # Sein Auftrag vom 14.08.2026: „meine Ventilatoren sind an, dadurch schickt
+    # er einfach nicht ab." Der Stimmenmelder steht auf der empfindlichsten
+    # Stufe und hält gleichmäßiges Rauschen für Sprache -- damit reißt die
+    # Stille nie ab und die Redepause läuft nie voll.
+    #
+    # 0 = aus (nur der Stimmenmelder, wie vorher). 100 = 18 dB über dem
+    # Grundpegel, das ist sehr viel und schluckt leises Sprechen. 35 ist mein
+    # Vorschlag: rund 6 dB, das trennt Lüfterrauschen sicher von Sprache und
+    # lässt auch eine ruhige Stimme durch.
+    'geraeuschunterdrueckung': 35,
     # Wie lange der Untertitel-Streifen stehen bleibt, in Sekunden.
     # 0 = Untertitel ganz aus. Damit ist der Regler gleichzeitig der Schalter.
     'untertitel_sekunden': 10,
