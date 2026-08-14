@@ -1220,7 +1220,35 @@ class Assistent:
 
     # ------------------------------------------------------------------
     def _gespraech_offen_halten(self):
-        """Solange ICH rede, läuft das Folgefenster nicht ab.
+        """Das flüssige Gespräch: solange ICH rede, läuft sein Fenster nicht ab.
+
+        HÄNGT SEIT DEM 14.08.2026 AN `gespraech_sekunden`, UND DER STEHT AUF 0
+        -- also tut diese Wache normalerweise gar nichts. Warum, steht in der
+        Einstellung selbst; hier steht, was schiefging.
+
+        Der Bau von gestern (13.08., unten beschrieben) hat das Fenster
+        aufgeschoben, wann immer ich rede -- ohne zu fragen, ob überhaupt ein
+        Gespräch lief. Das ist der Fehler, denn nach jedem abgeschickten
+        Auftrag wird das Fenster ausdrücklich zugemacht (`folge_bis = 0.0`,
+        siehe `_geweckt`), und genau danach fange ich an zu reden. Meine eigene
+        Antwort hat das Ohr also jedes Mal wieder aufgeschlossen. Zusammen mit
+        `_mitschreiben`, das bei jedem Zwischenstück erneut verlängert, und
+        einem Fenster von 45 Sekunden in Ramzis Datei ging es nie wieder zu.
+
+        Für ihn sah das so aus (14.08.): „Ich rede da einfach rein und mein
+        Untertitel kommt auf einmal, also als ob ich die ganze Zeit die Taste
+        gedrückt hätte, obwohl ich nichts gedrückt habe." Er hat den ganzen Tag
+        Musik laufen und redet nebenbei -- jedes offene Fenster macht daraus
+        einen Auftrag.
+
+        Die beiden Wünsche stehen sich dabei ehrlich im Weg: gestern wollte er,
+        dass das Ohr nach meiner Antwort offen bleibt, heute will er drücken
+        müssen. Deshalb ist es jetzt ein Regler und keine Entscheidung im Code
+        -- er dreht ihn hoch, wenn keine Musik läuft, und auf 0, wenn doch.
+
+        ---
+        Der ursprüngliche Grund vom 13.08.2026, der bei jedem Wert > 0 weiter
+        gilt:
 
         RAMZIS BEFUND (12.08.2026): „Sobald Noor spricht, hört das Ohr auf und
         nimmt nicht von selbst wieder auf -- ich muss jedes Mal von Hand
@@ -1259,11 +1287,17 @@ class Assistent:
         while self._laeuft.is_set():
             time.sleep(0.4)
             try:
+                # 0 heißt aus, und aus heißt hier: das Fenster wird NICHT
+                # angefasst. Nicht verkürzt, nicht verlängert -- die Wache ist
+                # dann schlicht nicht vorhanden. Ein Regler, der bei 0 immer
+                # noch etwas tut, ist eine Vorschrift und keine Einstellung.
+                dauer = einstellungen.hole('gespraech_sekunden') or 0
+                if dauer <= 0:
+                    continue
                 import warteschlange as _w
                 if not _w.noor_spricht_gerade():
                     continue
-                neu = max(self.ohr.folge_bis,
-                          time.time() + einstellungen.hole('folge_sekunden'))
+                neu = max(self.ohr.folge_bis, time.time() + dauer)
                 self.ohr.folge_bis = neu
                 # Mitschreiben, dass DIESES Fenster von mir kommt -- siehe
                 # `_lautstaerke_wache`. Sonst bliebe Ramzis Musik nach jeder

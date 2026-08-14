@@ -311,6 +311,18 @@ TABELLE = [
       'schweigen darf', 'pause zwischen', 'wartezeit beim reden'],
      'zahl', STIMME, 'stille_ms'),
 
+    # Das flüssige Gespräch. EIGENER Wert, nicht `folge_sekunden` -- der ist
+    # das Fenster nach dem Weckwort und muss bleiben, sonst darf er nach dem
+    # Wach-Ton nicht mehr reden. Hier geht es nur darum, ob er nach MEINER
+    # Antwort ohne Namen weiterreden darf. Ramzi stellt das je nach Lage um:
+    # läuft Musik, will er drücken müssen; sitzt er still davor, ist das
+    # Gespräch schöner. Deshalb ein Regler und keine Entscheidung im Code.
+    (['flussiges gesprach', 'flussige gesprach', 'fliessendes gesprach',
+      'gesprachsfenster', 'gesprach fenster', 'folgefenster', 'folge fenster',
+      'ohne weckwort', 'ohne deinen namen', 'ohne namen reden',
+      'ohne zu drucken', 'nachreden', 'weiterreden ohne'],
+     'zahl', STIMME, 'gespraech_sekunden'),
+
     (['tempo', 'sprechtempo', 'geschwindigkeit', 'schneller reden',
       'langsamer reden', 'schneller sprech', 'langsamer sprech', 'wie schnell du'],
      'zahl', STIMME, 'tempo'),
@@ -418,6 +430,10 @@ GRENZEN = {
     # Tafel nicht darstellen kann, würde beim nächsten Anfassen still
     # zurechtgebogen.
     'mindest_anzeige_sekunden': (0, 120, 1),
+    # Auch hier: 0 ist erlaubt und heißt aus -- dann muss er drücken oder
+    # meinen Namen sagen. Nach oben 120 Sekunden; wer länger als zwei Minuten
+    # Nachlauf will, meint eigentlich „immer an", und das gibt es bewusst nicht.
+    'gespraech_sekunden': (0, 120, 5),
     'orange_seconds':     (5, 3600, 1),
     'red_seconds':        (5, 3600, 1),
     'auto_submit_seconds': (10, 3600, 1),
@@ -449,6 +465,20 @@ def _setze_stimme(schluessel, wert, text, worte):
         wert = int(_rasten(_grenzen(wert, klein, gross), schritt))
         einstellungen.setze(stille_ms=wert)
         return f'Redepause steht auf {_sprich_dauer(wert / 1000)}.'
+
+    if schluessel == 'gespraech_sekunden':
+        # Immer Sekunden -- "auf eine Minute" darf er trotzdem sagen.
+        if einheit == 'min':
+            wert *= 60
+        elif einheit == 'ms':
+            wert /= 1000.0
+        wert = int(_rasten(_grenzen(wert, klein, gross), schritt))
+        einstellungen.setze(gespraech_sekunden=wert)
+        if wert == 0:
+            return ('Flüssiges Gespräch ist aus. Sag meinen Namen oder drück '
+                    'die Taste, sonst höre ich weg.')
+        return (f'Flüssiges Gespräch steht auf {_sprich_dauer(wert)}. '
+                'So lange darfst du nach meiner Antwort einfach weiterreden.')
 
     if schluessel == 'tempo':
         if einheit == '%' or wert > 3:
@@ -537,6 +567,8 @@ def _stand():
         f'Tempo {_sprich_zahl(w["tempo"])}',
         f'Lautstärke {int(round(w["lautstaerke"] * 100))} Prozent',
         f'Redepause {_sprich_dauer(w["stille_ms"] / 1000)}',
+        ('flüssiges Gespräch aus' if not w.get('gespraech_sekunden')
+         else f'flüssiges Gespräch {_sprich_dauer(w["gespraech_sekunden"])}'),
         f'Tonzeichen {"an" if w["toene"] else "aus"}',
         f'Aufnahme-Timer {"an" if _yaml_hole("enabled", True) else "aus"}',
         f'orange nach {_sprich_dauer(_yaml_hole("orange_seconds", 60))}',

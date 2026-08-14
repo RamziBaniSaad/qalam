@@ -40,8 +40,28 @@ STANDARD = {
     # Wie lange Ramzi schweigen darf, ohne dass der Satz als beendet gilt.
     # 600 ms waren viel zu wenig -- er konnte keinen Satz zu Ende sprechen.
     'stille_ms': 1600,
-    # Wie lange nach einer Antwort ein Folgesatz OHNE Weckwort gilt.
+    # Wie lange nach dem WECKEN ein Satz OHNE Weckwort gilt. Das ist das
+    # Fenster, das ihm Zeit gibt, nach dem Ton überhaupt loszulegen -- und das
+    # `_mitschreiben` verlängert, solange er redet. Ohne dieses Fenster könnte
+    # er nach dem Wach-Ton gar nichts mehr sagen.
     'folge_sekunden': 15,
+    # Das FLÜSSIGE GESPRÄCH: wie lange nach MEINER Antwort sein nächster Satz
+    # ohne Weckwort und ohne Taste als Auftrag gilt. **0 = aus**, und aus heißt
+    # hier wirklich aus (siehe `assistant._gespraech_offen_halten`).
+    #
+    # STEHT AUF 0, AUF RAMZIS AUSDRÜCKLICHEN WUNSCH VOM 14.08.2026: „Ich will
+    # das eigentlich eher so haben, dass ich das drücken muss." Der Grund ist
+    # nicht, dass ihm das Gespräch nicht gefällt -- es gefällt ihm sogar („das
+    # ist wirklich das flüssige Gespräch") -- sondern die MUSIK. Er hat den
+    # ganzen Tag Musik laufen und redet nebenbei im Raum. Jedes offene Fenster
+    # macht daraus einen Auftrag an mich.
+    #
+    # Warum es diesen Wert getrennt von `folge_sekunden` gibt: bis zum
+    # 14.08.2026 war beides EIN Wert, und daran ist die Sache
+    # auseinandergefallen. Wer das flüssige Gespräch abschalten wollte, nahm
+    # damit gleichzeitig die Zeit weg, nach dem Weckwort loszulegen. Zwei
+    # verschiedene Fragen brauchen zwei Werte.
+    'gespraech_sekunden': 0,
     # Wie lange der Untertitel-Streifen stehen bleibt, in Sekunden.
     # 0 = Untertitel ganz aus. Damit ist der Regler gleichzeitig der Schalter.
     'untertitel_sekunden': 10,
