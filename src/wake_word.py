@@ -414,6 +414,30 @@ class Weckwort:
         # erst nur den Namen, wartet auf das Zeichen und redet dann weiter --
         # dieser zweite Satz enthält den Namen naturgemäß nicht mehr.
         self.folge_bis = 0.0
+        # LÄUFT GERADE EIN SATZ VON IHM? Also: ist schon ein Zwischenstück
+        # angenommen worden, ohne dass danach ein „fertig" kam.
+        #
+        # RAMZIS REGEL VOM 14.08.2026, und sie ist absolut gemeint: „Er soll,
+        # wenn ich rede, niemals von alleine abbrechen. Entweder ich stoppe das
+        # selber, oder die Redepause verjährt und es wird abgeschickt. Andere
+        # Fälle gibt es hier eigentlich gar nicht."
+        #
+        # Vorher hing genau das an einer Uhr, und damit an einem Wettlauf: das
+        # Fenster (`folge_bis`) wurde bei jedem Zwischenstück und von jedem
+        # Mitlausch-Treffer neu vorgeschoben. Kam beides eine Weile nicht --
+        # weil das genaue Modell noch rechnete, weil ein Stück zu wenig Ton
+        # hatte, weil Qalam dazwischen diktierte --, lief das Fenster mitten in
+        # seinem Satz ab. Der Rest fiel unten in `_auswerten` lautlos durch,
+        # der gesammelte Anfang blieb im Assistenten stehen. Für ihn sah das
+        # aus wie eine Maximaldauer: „ich darf nicht länger als das reden,
+        # sonst bricht er von alleine ab -- drücke ich nochmal, nimmt er den
+        # Text mit und macht weiter."
+        #
+        # Ein ZUSTAND kann das nicht. Sobald sein Satz angefangen hat, ist er
+        # angefangen, egal wie lange er redet und wie viel dazwischen rechnet.
+        # Beendet wird er nur von seiner eigenen Redepause (dem einzigen
+        # Regler, der das entscheiden soll) oder von ihm selbst.
+        self.satz_laeuft = False
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -987,7 +1011,10 @@ class Weckwort:
             # seinem Mikrofon, das Ohr hört mich also mit und hielte das für ihn.
             # In diesem Fall wird erst unten entschieden, wenn der Text da ist
             # und sich sagen lässt, ob er von ihm stammt oder von mir.
-            im_gespraech = erkannt or time.time() < self.folge_bis
+            # `satz_laeuft` mit dazu, aus demselben Grund wie unten in
+            # `_auswerten`: hat sein Satz einmal angefangen, laeuft er, bis er
+            # fertig ist -- keine Uhr darf ihn mittendrin fuer beendet erklaeren.
+            im_gespraech = erkannt or self.satz_laeuft or time.time() < self.folge_bis
             ich_rede = warteschlange.noor_spricht_gerade()
             if im_gespraech and not ich_rede:
                 warteschlange.redet_merken(True)
@@ -1030,19 +1057,31 @@ class Weckwort:
             if (ich_rede and im_gespraech
                     and not warteschlange.ist_mein_echo(vorlaeufig, kurz_erlaubt=True)):
                 warteschlange.redet_merken(True)
-                # UND ES AUCH SAGEN, nicht nur den Merker setzen.
+                # DER MERKER JA, DAS ABWUERGEN NEIN.
                 #
-                # Bis zum 07.08.2026 stand hier nur der Merker, und der
-                # Sprecher sah selbst nach, ob er gesetzt ist. Damit gab es
-                # zwei Stellen, die ueber "Ramzi hat uebernommen" entschieden
-                # haben -- und die zweite kannte den Echo-Schutz nicht, sondern
-                # nur eine Datei, die auch mein eigener Lautsprecher setzen
-                # kann. Ramzis Erlebnis dazu: "dann ist deine Stimme weg."
+                # Ramzis Entscheidung vom 14.08.2026: „Waehrend du redest, kann
+                # ich dich niemals einfach so unterbrechen -- ausser mit Stopp
+                # oder Hoer auf, mit der Taste oder mit dem Knopf auf dem
+                # Dashboard. Wenn ich normal rede, soll das dich nicht
+                # unterbrechen."
                 #
-                # Entschieden wird jetzt genau hier, wo die Beweise liegen (der
-                # gehoerte Text und mein eigener Satz zum Vergleichen). Der
-                # Sprecher gehorcht nur noch.
-                self._melde(self.beim_unterbrechen)
+                # Und sein Grund dafuer ist der bessere: solange mein eigener
+                # Lautsprecher mitlaeuft, hoere ich mich selbst. Jeder
+                # Fehlalarm des Echo-Schutzes wurde damit zu einem Abbruch
+                # mitten in meinem Satz -- „dass du dich dann selber die ganze
+                # Zeit hoerst und dich selber unterbrichst". Ein Zuruf, der
+                # gemeint ist, ist billig zu erkennen (Stoppwort, mein Name);
+                # ein Nebensatz im Zimmer ist es nicht.
+                #
+                # Der MERKER bleibt trotzdem, und das ist kein Widerspruch: er
+                # beantwortet „faengt sie einen NEUEN Satz an, waehrend er
+                # redet" -- und das soll ich weiterhin nicht. Was hier faellt,
+                # ist nur das Abwuergen des laufenden.
+                #
+                # Die beiden Wege, die weiter unterbrechen, stehen direkt
+                # darunter: das Stoppwort und mein Name. Dazu die Taste und der
+                # Knopf auf der Tafel, beide ausserhalb dieser Datei.
+                # Kein `beim_unterbrechen` an dieser Stelle -- Begruendung oben.
 
             # EIN STOPPWORT WIRKT IMMER -- auch ohne meinen Namen davor.
             #
@@ -1330,7 +1369,13 @@ class Weckwort:
         # weiter. Dieser zweite Satz enthält den Namen naturgemäß nicht -- ohne
         # diese Regel wäre er verloren, und genau das hat sich für ihn angefühlt
         # wie "sie hört mir nicht mehr zu".
-        im_gespraech = time.time() < self.folge_bis
+        #
+        # ODER es läuft schon ein Satz von ihm -- dann zählt die Uhr gar nicht
+        # mehr mit. Ein angefangener Satz wird zu Ende gehört, egal wie lange
+        # er dauert; Schluss ist erst bei seinem „fertig". Siehe `satz_laeuft`
+        # im Kopf dieser Klasse: das ist Ramzis Regel vom 14.08.2026 und der
+        # Grund, warum es hier ein Zustand ist und keine Frist.
+        im_gespraech = time.time() < self.folge_bis or self.satz_laeuft
 
         # Nichts verstanden. Bei einem Zwischenstueck ist das folgenlos -- bei
         # einem FERTIG mitten im Gespraech nicht: dann haengt der gesammelte
@@ -1341,10 +1386,20 @@ class Weckwort:
                 print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig ohne '
                       f'erkannten Text -- gesammelter Satz wird abgeschickt')
                 self._melde(self.beim_wecken, '', True)
+            if endgueltig:
+                self.satz_laeuft = False
             return
 
         if WECKWORT.search(text) or im_gespraech:
             self._melde(self.beim_wecken, text, endgueltig)
+            # Ab hier ist sein Satz angefangen -- und ab hier kann ihn keine
+            # ablaufende Uhr mehr wegnehmen. Ein „fertig" schliesst ihn wieder.
+            self.satz_laeuft = not endgueltig
+        elif endgueltig:
+            # Nicht angenommen und trotzdem fertig: das war jemand anders im
+            # Raum oder der Fernseher. Der Merker darf davon nicht haengen
+            # bleiben, sonst waere die naechste Bemerkung im Zimmer ein Auftrag.
+            self.satz_laeuft = False
 
 
 # --------------------------------------------------------------------------

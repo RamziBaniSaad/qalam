@@ -1012,7 +1012,14 @@ class Assistent:
 
         if not endgueltig:
             # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
-            self.ohr.folge_bis = time.time() + 20.0
+            #
+            # `max` und keine Zuweisung: eine feste Zahl hier hat ein längeres
+            # Fenster VERKÜRZT. Wer gerade erst geweckt hat, hätte damit mitten
+            # in seinem ersten Satz weniger Luft gehabt als eingestellt. Das
+            # Offenhalten selbst hängt ohnehin nicht mehr an dieser Zahl,
+            # sondern an `ohr.satz_laeuft` -- das hier ist nur noch der Puffer
+            # für alles, was nach seinem Satz kommt.
+            self.ohr.folge_bis = max(self.ohr.folge_bis, time.time() + 20.0)
             return
 
         # Echte Stille -- er hat seinen Platz in der Warteschlange abgegeben.
@@ -1335,6 +1342,14 @@ class Assistent:
                 if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
                     folge = 0.0
                 if time.time() < folge:
+                    continue
+                # Ein angefangener Satz von ihm haelt die Musik leise, ganz
+                # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
+                # mitten in seinem Satz wieder hoch, und zwar aus demselben
+                # Grund wie das Abbrechen selbst: hier stand nur eine Frist,
+                # und die lief ab, waehrend er noch redete. Ein Zustand kann
+                # das nicht (siehe `wake_word.satz_laeuft`).
+                if getattr(self.ohr, 'satz_laeuft', False):
                     continue
                 if self.sprecher.spricht_gerade():
                     continue
