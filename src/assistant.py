@@ -332,6 +332,7 @@ class Assistent:
             'weiterreden':        lambda: self._nochmal(),
             'umsaetze-eintragen': lambda: self._finanzen_eintragen(),
             'alles-laut':         lambda: self._alles_laut(),
+            'songtext':           lambda: self._songtext(),
             'musik':              lambda: self._musik(),
             'naechstes-lied':     lambda: 'Okay.' if _medien('next') else 'Das hat nicht geklappt.',
             'voriges-lied':       lambda: 'Okay.' if _medien('previous') else 'Das hat nicht geklappt.',
@@ -484,6 +485,29 @@ class Assistent:
             return 'Das Fenster ist auf. Füg den Pfad ein.'
         return ('Ich gehe durch deine Unterlagen. Was noch keine geschwärzte '
                 'Fassung hat, bekommt eine.')
+
+    def _songtext(self):
+        """Den Text zum gerade laufenden Lied aufmachen.
+
+        Ramzis Idee vom 14.08.2026: bei Spotify stehen die Lyrics daneben, bei
+        einem Musikvideo im Browser nicht -- und dann tippt er den Titel von
+        Hand in eine Suche. Ein Knopf statt drei Handgriffen.
+
+        Dasselbe Skript wie hinter dem Tafel-Knopf, aus demselben Grund wie bei
+        `_finanzen_eintragen`: ein Weg fuer Sprache und Knopf.
+        """
+        skript = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                              'noor-songtext.ps1')
+        if not os.path.exists(skript):
+            return 'Dafür fehlt mir das Skript.'
+        try:
+            subprocess.Popen(
+                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                 '-WindowStyle', 'Hidden', '-File', skript],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception:
+            return 'Das hat nicht geklappt.'
+        return 'Ich mach dir den Text auf.'
 
     def _alles_laut(self):
         """Jedes Programm auf volle Lautstärke -- Ramzis Handbremse.
