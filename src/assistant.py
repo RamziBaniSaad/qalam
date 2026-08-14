@@ -318,6 +318,20 @@ class Assistent:
             (['wach auf', 'aufwachen', 'wach mal auf', 'bist du da', 'bist du wach'],
              lambda: self._aufwachen()),
 
+            # Schwärzen. Der EINZELNE steht VOR dem Rundumschlag, und das ist
+            # kein Zufall: "schwärz einen Zettel" enthält "schwärz", und die
+            # Liste wird von oben nach unten geprüft. Stünde der Rundumschlag
+            # oben, käme man an den einzelnen nie heran.
+            (['schwarz einen', 'schwarze einen', 'schwarz mal einen',
+              'schwarz eine datei', 'schwarze eine datei', 'schwarz ein zettel',
+              'schwarze ein zettel', 'schwarz diesen', 'einen zettel schwarz'],
+             lambda: self._schwaerzen(einzeln=True)),
+
+            (['schwarz alles', 'schwarze alles', 'alles schwarz',
+              'schwarz die unterlagen', 'schwarze die unterlagen',
+              'unterlagen schwarz', 'schwarz meine unterlagen'],
+             lambda: self._schwaerzen()),
+
             # Der ausdrückliche Stopp -- er räumt auch das Wartende weg, anders
             # als das blosse Anfangen zu reden (siehe _unterbrich_mich).
             (['hor auf', 'sei mal still', 'sei still', 'ruhe', 'stopp',
@@ -470,6 +484,34 @@ class Assistent:
         except Exception:
             return 'Das hat nicht geklappt.'
         return 'Ich trage die Umsätze ein.'
+
+    def _schwaerzen(self, einzeln=False):
+        """Unterlagen unkenntlich machen, bevor ich sie lese.
+
+        Zwei Wege, weil Ramzi zwei Lagen hat (14.08.2026): nach dem Einscannen
+        will er EINMAL ueber alles gehen, und zwischendurch mal einen einzelnen
+        Zettel. Der einzelne braucht ein Fenster, weil er dort einen Pfad
+        einfuegt -- das erledigt `noor-schwaerzen-fragen.ps1`.
+
+        Dasselbe Skript wie hinter den Tafel-Knoepfen, aus demselben Grund wie
+        bei `_finanzen_eintragen`: ein Weg fuer Sprache und Knopf, sonst laufen
+        die beiden auseinander.
+        """
+        name = ('noor-schwaerzen-fragen.ps1' if einzeln else 'noor-schwaerzen.ps1')
+        skript = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge', name)
+        if not os.path.exists(skript):
+            return 'Dafür fehlt mir das Skript.'
+        try:
+            subprocess.Popen(
+                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                 '-WindowStyle', 'Hidden', '-File', skript],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception:
+            return 'Das hat nicht geklappt.'
+        if einzeln:
+            return 'Das Fenster ist auf. Füg den Pfad ein.'
+        return ('Ich gehe durch deine Unterlagen. Was noch keine geschwärzte '
+                'Fassung hat, bekommt eine.')
 
     def _alles_laut(self):
         """Jedes Programm auf volle Lautstärke -- Ramzis Handbremse.
