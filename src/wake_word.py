@@ -112,6 +112,38 @@ BLICKE_JE_AEUSSERUNG = 6
 KURZ_SPRACH_FRAMES = int(1.5 * 1000 / FRAME_MS)
 KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 
+# Bis zu wie viel GESPROCHENER Zeit etwas ueberhaupt ein kurzer Befehl sein kann.
+#
+# DAS IST DIE GRENZE, DIE GEFEHLT HAT, und ihr Fehlen ist Ramzis Fehler
+# "manchmal schickt es mitten im fliessenden Reden ab, obwohl die Redepause auf
+# vier Sekunden steht" (11.-13.08.2026).
+#
+# Der Mitlauscher fragt `ist_kurzbefehl` -- aber er fragt es nicht ueber die
+# ganze Aeusserung, sondern immer nur ueber einen Ausschnitt von BLICK_FRAMES,
+# also DREI SEKUNDEN. In drei Sekunden aus einem langen Vortrag steckt frueher
+# oder spaeter irgendein Bruchstueck, das nach einem Befehl aussieht. Nachgemessen
+# am 14.08.2026 an Ramzis echten Saetzen desselben Tages: von acht typischen
+# Dreisekunden-Ausschnitten loesten SECHS aus. Beispiele aus seinem eigenen Mund:
+#
+#   "sondern halt nur mit dem Stopp oder Hoer auf"   -> 'stopp', 'hor auf'
+#   "wenn ich das auf vier Sekunden habe, die Redepause" -> Stellschraube
+#   "das ist ja nicht mal eine Loesung, lass mich in Ruhe damit" -> 'ruhe'
+#
+# Er REDET ueber Befehle, er gibt keine. Und der Merker blieb danach stehen, bis
+# der Satz fertig war -- ab diesem Moment galten fuer den ganzen Rest seines
+# Vortrags 0,8 s statt seiner 4 s, und die naechste Atempause hat abgeschickt.
+#
+# Es ist derselbe Fehlertyp, den `_geweckt` fuer die AUSFUEHRUNG von Reflexen
+# laengst kennt (REFLEX_MAX_WOERTER, "die Liste ist bewusst grosszuegig, und
+# genau diese Grosszuegigkeit wird bei langem Text zur Falle"). Fuer die
+# SCHWELLE fehlte er.
+#
+# Vier Sekunden reine Sprache sind reichlich: "Noor, mach mir bitte mal die
+# Verhoerer auf" sind knapp zweieinhalb. Wer laenger am Stueck redet, gibt
+# keinen kurzen Befehl mehr -- und dann wird der Merker auch wieder geloescht,
+# nicht nur nicht mehr gesetzt.
+KURZBEFEHL_MAX_SPRACH = int(4.0 * 1000 / FRAME_MS)
+
 # Ab wann etwas ueberhaupt ein Wort sein kann.
 #
 # Der Stimmenmelder steht auf der empfindlichsten Stufe und schlaegt auch bei
@@ -438,6 +470,10 @@ class Weckwort:
         # Beendet wird er nur von seiner eigenen Redepause (dem einzigen
         # Regler, der das entscheiden soll) oder von ihm selbst.
         self.satz_laeuft = False
+        # Wie viel er in der laufenden Aeusserung schon gesprochen hat, in
+        # Bildern. Gefuehrt von der Aufnahmeschleife, gelesen vom Mitlauscher --
+        # der laeuft in einem eigenen Faden und kaeme sonst nicht an die Zahl.
+        self._gesamt_sprach = 0
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -797,6 +833,7 @@ class Weckwort:
                     in_sprache = False
                     sprach = 0
                     gesamt_sprach = 0
+                    self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
                     with self._schloss:
@@ -813,6 +850,7 @@ class Weckwort:
                     stille = 0
                     sprach = 0
                     gesamt_sprach = 0
+                    self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
                     with self._schloss:
@@ -878,6 +916,19 @@ class Weckwort:
                         stille = 0
                     sprach += 1
                     gesamt_sprach += 1
+                    # Wie viel er insgesamt schon gesprochen hat, auch fuer den
+                    # Mitlauscher sichtbar: der laeuft in einem eigenen Faden und
+                    # sieht diese Zaehler sonst nicht. Er braucht die Zahl, um
+                    # gar nicht erst zu fragen, ob ein Dreisekunden-Ausschnitt
+                    # nach einem kurzen Befehl aussieht.
+                    self._gesamt_sprach = gesamt_sprach
+                    # UND DER MERKER GEHT WIEDER WEG, sobald klar ist, dass das
+                    # kein kurzer Befehl mehr sein kann. Nicht nur "nicht mehr
+                    # setzen": gesetzt wird er schon nach zwei Sekunden, und dann
+                    # redet er noch drei Minuten weiter. Ohne diese Zeile bliebe
+                    # die 0,8-Sekunden-Schwelle den ganzen Vortrag ueber stehen.
+                    if self._kurz_erwartet and gesamt_sprach > KURZBEFEHL_MAX_SPRACH:
+                        self._kurz_erwartet = False
                     puffer.append(frame)
                     # Nur einen Ausschnitt hinlegen, damit der Mitlauscher in
                     # seinem eigenen Faden etwas zu tun hat. Kopieren, nicht
@@ -947,11 +998,28 @@ class Weckwort:
 
                     if stille >= schwelle:
                         # echte Stille -- er ist fertig
+                        #
+                        # UND ES STEHT IM PROTOKOLL, WELCHE SCHWELLE GEGOLTEN
+                        # HAT. Genau das hat drei Wochen gefehlt: Ramzis Befund
+                        # "es schickt mitten im Reden ab, obwohl die Redepause
+                        # auf vier Sekunden steht" war nirgends nachpruefbar --
+                        # das Protokoll zeigte den Satz, aber nicht, WARUM er
+                        # als beendet galt. Eine Zeile je fertigem Satz ist
+                        # billig; sie nicht zu haben hat gekostet.
+                        print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig '
+                              f'nach {stille * FRAME_MS / 1000:.1f}s Stille '
+                              f'(Schwelle {schwelle * FRAME_MS / 1000:.1f}s, '
+                              f'{"kurz" if kurz else "Redepause"}; gesprochen '
+                              f'{gesamt_sprach * FRAME_MS / 1000:.1f}s, '
+                              f'Kurzbefehl erwartet: '
+                              f'{"ja" if self._kurz_erwartet else "nein"})',
+                              flush=True)
                         abgeben(endgueltig=True, gesprochene_bilder=sprach)
                         in_sprache = False
                         stille = 0
                         sprach = 0
                         gesamt_sprach = 0
+                        self._gesamt_sprach = 0
                         self._kurz_erwartet = False
 
     def _melde(self, rueckruf, *args):
@@ -1158,7 +1226,15 @@ class Weckwort:
                 self._melde(self.beim_mitschreiben, vorlaeufig)
                 # Steckt in dem, was bisher zu hören war, schon ein kurzer
                 # Befehl? Dann muss auf keine Denkpause gewartet werden.
-                if self.ist_kurzbefehl and not self._kurz_erwartet:
+                #
+                # Aber nur, solange die Äußerung ÜBERHAUPT noch kurz sein kann.
+                # `vorlaeufig` ist ein Ausschnitt von drei Sekunden, nicht der
+                # ganze Satz -- ohne diese Grenze sagt irgendein Bruchstück aus
+                # einem langen Vortrag „das war ein Befehl", und ab da gilt die
+                # kurze Schwelle für den ganzen Rest. Begründung und Messung
+                # stehen bei KURZBEFEHL_MAX_SPRACH.
+                if (self.ist_kurzbefehl and not self._kurz_erwartet
+                        and self._gesamt_sprach <= KURZBEFEHL_MAX_SPRACH):
                     try:
                         if self.ist_kurzbefehl(vorlaeufig):
                             self._kurz_erwartet = True
