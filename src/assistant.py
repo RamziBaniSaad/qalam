@@ -11,12 +11,18 @@ Start:
     python -m src.assistant --stimme de_DE-thorsten-medium
 """
 import datetime
+import json
 import os
 import re
 import subprocess
 import sys
 import threading
 import time
+
+# Wo die Ausloesewoerter stehen. NICHT im Code -- Ramzis Befund vom
+# 14.08.2026, Begruendung bei der Eigenschaft `reflexe` weiter unten.
+REFLEXE_DATEI = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                             'noor-reflexe.json')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -302,122 +308,88 @@ class Assistent:
         # ("mach mal das Ding aus") kann erst das kleine lokale Modell aus
         # Stufe 2 -- solange das nicht läuft, ist eine großzügige Liste die
         # ehrlichere Lösung als ein enges Muster, das oft danebengreift.
-        self.reflexe = [
-            (['wie spat', 'wie spaet', 'uhrzeit', 'viel uhr', 'uhr haben', 'uhr ist',
-              'zeit haben', 'welche zeit', 'spat ist', 'sag mir die zeit', 'zeit sag'],
-             lambda: _sag_uhrzeit()),
+        # Die HANDLER -- was passiert. Die WOERTER stehen nicht mehr hier,
+        # sondern in noor/werkzeuge/noor-reflexe.json unter `_reflexe`.
+        #
+        # RAMZIS BEFUND VOM 14.08.2026: er hat den Reflex "Weiterreden" im
+        # Katalog gesucht, weil er dachte, dort stehen alle Ausloeser -- und
+        # nichts gefunden. Seine Erwartung war richtig und die alte Aufteilung
+        # falsch: Ausloesewoerter sind DATEN. Er muss Synonyme selbst
+        # dazuschreiben koennen, ohne mich zu fragen und ohne Neustart, genau
+        # wie bei den Verhoerern.
+        #
+        # Was hier bleibt, ist das, was nicht in eine Datei passt: der Code,
+        # der laeuft. Verbunden sind beide ueber die `id` aus der Datei --
+        # die darf sich deshalb nicht aendern, alles andere schon.
+        self._reflex_handler = {
+            'uhrzeit':            lambda: _sag_uhrzeit(),
+            'datum':              lambda: _sag_datum(),
+            'schlafen':           lambda: self._schlafen(),
+            'aufwachen':          lambda: self._aufwachen(),
+            'schwaerzen-eine':    lambda: self._schwaerzen(einzeln=True),
+            'schwaerzen-alle':    lambda: self._schwaerzen(),
+            'stopp':              lambda: self._still(),
+            'weiterreden':        lambda: self._nochmal(),
+            'umsaetze-eintragen': lambda: self._finanzen_eintragen(),
+            'alles-laut':         lambda: self._alles_laut(),
+            'musik':              lambda: self._musik(),
+            'naechstes-lied':     lambda: 'Okay.' if _medien('next') else 'Das hat nicht geklappt.',
+            'voriges-lied':       lambda: 'Okay.' if _medien('previous') else 'Das hat nicht geklappt.',
+        }
+        self._reflex_stand = {'zeit': None, 'liste': []}
 
-            (['welcher tag', 'welchen tag', 'welches datum', 'wievielte', 'datum',
-              'fur ein tag', 'wochentag', 'heute fur ein'],
-             lambda: _sag_datum()),
+    # ------------------------------------------------------------------
+    @property
+    def reflexe(self):
+        """(Wortliste, Handler) je Reflex -- gelesen aus noor-reflexe.json.
 
-            (['schlaf', 'sei still', 'sei ruhig', 'halt die klappe', 'lass mich in ruhe',
-              'pause machen', 'mach pause'],
-             lambda: self._schlafen()),
+        Neu gelesen nur, wenn die Datei sich geändert hat: dieselbe Bauart wie
+        `einstellungen.alle()` und `oeffnen.katalog()`, und aus demselben Grund.
+        Ramzi soll ein Synonym dazuschreiben und es SOFORT sagen können, ohne
+        dass irgendetwas neu startet.
 
-            (['wach auf', 'aufwachen', 'wach mal auf', 'bist du da', 'bist du wach'],
-             lambda: self._aufwachen()),
+        Die Reihenfolge aus der Datei bleibt erhalten -- geprüft wird von oben
+        nach unten, und daran hängt zum Beispiel, dass „schwärz einen Zettel"
+        nicht vom Rundumschlag abgefangen wird.
 
-            # Schwärzen. Der EINZELNE steht VOR dem Rundumschlag, und das ist
-            # kein Zufall: "schwärz einen Zettel" enthält "schwärz", und die
-            # Liste wird von oben nach unten geprüft. Stünde der Rundumschlag
-            # oben, käme man an den einzelnen nie heran.
-            (['schwarz einen', 'schwarze einen', 'schwarz mal einen',
-              'schwarz eine datei', 'schwarze eine datei', 'schwarz ein zettel',
-              'schwarze ein zettel', 'schwarz diesen', 'einen zettel schwarz'],
-             lambda: self._schwaerzen(einzeln=True)),
+        Fällt die Datei aus (gelöscht, kaputtes JSON), bleibt der zuletzt
+        gelesene Stand stehen. Ein leerer Stand wäre schlimmer als ein alter:
+        dann wären alle Reflexe still weg, und Ramzi würde sich fragen, warum
+        „stopp" nichts mehr tut.
+        """
+        try:
+            zeit = os.path.getmtime(REFLEXE_DATEI)
+        except OSError:
+            return self._reflex_stand['liste']
+        if zeit == self._reflex_stand['zeit']:
+            return self._reflex_stand['liste']
+        try:
+            with open(REFLEXE_DATEI, encoding='utf-8-sig') as f:
+                roh = json.load(f).get('_reflexe', {})
+        except Exception as e:
+            print(f'[Noor] noor-reflexe.json nicht lesbar ({type(e).__name__}) -- '
+                  f'es gilt weiter der zuletzt gelesene Stand.', flush=True)
+            return self._reflex_stand['liste']
 
-            (['schwarz alles', 'schwarze alles', 'alles schwarz',
-              'schwarz die unterlagen', 'schwarze die unterlagen',
-              'unterlagen schwarz', 'schwarz meine unterlagen'],
-             lambda: self._schwaerzen()),
-
-            # Der ausdrückliche Stopp -- er räumt auch das Wartende weg, anders
-            # als das blosse Anfangen zu reden (siehe _unterbrich_mich).
-            (['hor auf', 'sei mal still', 'sei still', 'ruhe', 'stopp',
-              'nicht weiter reden', 'halt die klappe'],
-             lambda: self._still()),
-
-            # Das Gegenstück zum Unterbrechen. Ramzi unterbricht mich oft --
-            # mit meinem Namen oder der rechten Strg-Taste --, und danach fehlt
-            # ihm der Rest. Sein Auftrag vom 07.08.2026.
-            #
-            # Vorgelesen wird der letzte ABSATZ von vorn und nicht "ab der
-            # Stelle": wo genau der Ton abgeschnitten wurde, weiß niemand --
-            # der Sprecher gibt Ton an die Karte und stoppt den Strom, es gibt
-            # keine Marke "bis hierher gehört". Ein "weiter ab Wort 14" wäre
-            # geraten, und Raten ist teurer als ein paar Sekunden Wiederholung.
-            # Ramzi hat genau das selbst vorgeschlagen.
-            # Die Liste ist am 08.08.2026 gewachsen: Ramzi sagte "sag nochmal
-            # was du gesagt hast" -- die natuerlichste Formulierung ueberhaupt,
-            # und keine einzige Wendung hier traf zu. Sie landete als normale
-            # Nachricht im Chat, und ich habe von Hand wiederholt.
-            #
-            # Bewusst NICHT das nackte "nochmal": das steckt in zu vielen
-            # gewoehnlichen Saetzen ("machen wir das nochmal", "probier das
-            # nochmal") und wuerde staendig falsch ausloesen. Lieber ein paar
-            # Wendungen mehr, die eindeutig sind.
-            (['rede weiter', 'red weiter', 'sprich weiter', 'sag das nochmal',
-              'sag das noch mal', 'nochmal sagen', 'noch mal sagen',
-              'wiederhol', 'nochmal von vorn', 'noch mal von vorne',
-              'mach weiter mit dem satz',
-              'sag noch mal was du gesagt hast',
-              'sag nochmal was du gesagt hast',
-              'sag was du gesagt hast', 'sag es nochmal', 'sag es noch mal',
-              'sags nochmal', 'nochmal bitte', 'noch mal bitte'],
-             lambda: self._nochmal()),
-
-            # Die Umsätze in die Finanzplanung eintragen. Ramzis Auftrag vom
-            # 09.08.2026: er lädt den Export herunter und will danach weder
-            # einen Dateinamen tippen noch auf mich warten -- weder gesagt
-            # noch geklickt soll es mehr als eine Geste sein.
-            #
-            # Wortlisten mit "umsatz"/"umsaetze" reichen hier aus, weil das
-            # Wort in gewöhnlichen Sätzen praktisch nicht vorkommt -- anders
-            # als beim nackten "nochmal" weiter oben. "Tabelle aktualisieren"
-            # ist dazu die Wendung, die er beim Erklären selbst benutzt hat.
-            (['umsatze eintragen', 'umsaetze eintragen', 'umsatze holen',
-              'umsatze aktualisieren', 'umsaetze aktualisieren',
-              'neue umsatze', 'neue umsaetze',
-              'tabelle aktualisieren', 'finanzen aktualisieren',
-              'finanztabelle aktualisieren', 'trag die umsatze ein',
-              'trag die umsaetze ein'],
-             lambda: self._finanzen_eintragen()),
-
-            # Ramzis Notausgang vom 03.08.2026, nachdem sein Video kaum noch zu
-            # hören war: „Statt dass ich in die Einstellungen gehe, in den
-            # Sound, und bei all meinen Apps alles auf 100 Prozent mache, sage
-            # ich das ganz kurz, und ich kann weitermachen."
-            #
-            # Absichtlich viele Formulierungen: er hat selbst gesagt, er wisse
-            # nicht, welcher Befehl es sein soll. Also muss jeder gehen, der
-            # ihm einfällt -- in dem Moment ist er genervt und überlegt nicht,
-            # wie es „richtig" heißt.
-            (['alles wieder laut', 'alles laut', 'mach alles laut',
-              'alles auf hundert', 'alles auf 100', 'lautstarke zuruck',
-              'lautstarke wieder normal', 'wieder normal laut',
-              'mach die lautstarke wieder', 'ton wieder normal',
-              'volle lautstarke', 'alles wieder auf hundert'],
-             lambda: self._alles_laut()),
-
-            # "musik" allein steht mit drin, seit Ramzi am 01.08.2026 genau das
-            # gesagt hat und es im Chat landete. Sein Wunsch war ausdrücklich,
-            # den Umschalt-Charakter zu behalten: sagt er "Musik aus", während
-            # nichts läuft, geht sie trotzdem an -- und das ist richtig so, denn
-            # Qalam verwechselt "an" und "aus", und der Umschalter tut dann
-            # zufällig das Gewollte.
-            (['musik', 'spotify an', 'spotify aus', 'spotify pause',
-              'lied an', 'lied aus', 'song an', 'song aus', 'playlist an'],
-             lambda: self._musik()),
-
-            (['nachstes lied', 'nachster song', 'nachste lied', 'nachsten song', 'nachstes stuck',
-              'skip', 'uberspring', 'weiter im lied', 'nachster titel', 'nachstes titel'],
-             lambda: 'Okay.' if _medien('next') else 'Das hat nicht geklappt.'),
-
-            (['vorheriges lied', 'vorheriger song', 'ein lied zuruck', 'nochmal von vorne',
-              'letztes lied'],
-             lambda: 'Okay.' if _medien('previous') else 'Das hat nicht geklappt.'),
-        ]
+        liste = []
+        for kennung, eintrag in roh.items():
+            if kennung.startswith('_'):
+                continue
+            handler = self._reflex_handler.get(kennung)
+            if handler is None:
+                # Eine Kennung ohne Code ist ein Tippfehler in der Datei. Laut
+                # sagen: still übergehen hieße, Ramzi ergänzt Wörter und
+                # wundert sich, dass nichts passiert.
+                print(f'[Noor] Reflex {kennung!r} steht in der Datei, aber ich '
+                      f'weiß nicht, was er tun soll.', flush=True)
+                continue
+            worte = [w for w in (eintrag.get('worte') or []) if w]
+            if worte:
+                liste.append((worte, handler))
+        self._reflex_stand = {'zeit': zeit, 'liste': liste}
+        print(f'[Noor] {len(liste)} Reflexe gelesen '
+              f'({sum(len(w) for w, _ in liste)} Wörter).', flush=True)
+        return liste
 
     # ------------------------------------------------------------------
     def _schlafen(self):

@@ -13,7 +13,7 @@ jeder Reflex langsamer geworden — auch die, die mit Fenstern nichts zu tun
 haben. Also entscheidet Python hier, ob überhaupt etwas gemeint ist, und ruft
 das Skript nur bei einem Treffer.
 
-Die Liste, was es gibt, steht in `noor/werkzeuge/noor-katalog.json` — Daten,
+Die Liste, was es gibt, steht in `noor/werkzeuge/noor-reflexe.json` — Daten,
 kein Code. Ramzis Sorge war, dass das Skript riesig wird, wenn alles Mögliche
 hineinsoll; so kann es das nicht: eine neue Sache ist eine Zeile.
 
@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import verhoerer  # noqa: E402
 
 WERKZEUGE = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge')
-KATALOG = os.path.join(WERKZEUGE, 'noor-katalog.json')
+KATALOG = os.path.join(WERKZEUGE, 'noor-reflexe.json')
 SKRIPT = os.path.join(WERKZEUGE, 'noor-auf.ps1')
 
 # Bis zu wie vielen Wörtern eine Äußerung als Öffnen-Befehl gilt. Dieselbe

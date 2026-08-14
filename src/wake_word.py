@@ -200,7 +200,7 @@ _ZWEIFELHAFT = r'(?:nur|nor|mur|mor|moe|mo)'
 # auch verrueckte Sachen, wie du sie hier im Protokoll siehst."
 #
 # Eine Codeaenderung je Verhoerer waere der falsche Preis dafuer. Also dieselbe
-# Bauart wie noor-katalog.json und noor-verhoerer.json: eine JSON-Datei, neu
+# Bauart wie noor-reflexe.json und noor-verhoerer.json: eine JSON-Datei, neu
 # gelesen wenn sie sich geaendert hat, kein Neustart.
 _WECKWORT_DATEI = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
                                'noor-weckwort.json')
