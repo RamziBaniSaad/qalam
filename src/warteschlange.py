@@ -340,8 +340,22 @@ def war_kuerzlich_mein_satz(gehoert, schwelle=0.5):
 #
 # Wortgrenzen sind Pflicht: ohne sie träfe "halt" auch "Inhalt" und "enthält",
 # und dann wäre jeder zweite Satz vom Echo-Schutz ausgenommen.
+# NUR NOCH "STOPP" -- Ramzis Entscheidung vom 15.08.2026, 17:42, und sie ist
+# aus dem Test heraus entstanden: "damit haetten wir dann weniger false
+# positives, und dann koennen wir arbeiten, ohne dass so was nochmal vorkommt."
+#
+# Vorher standen hier auch halt, sei still, hoer auf, aufhoeren, ruhe und
+# warte. Genau daran ist Test 3 gescheitert: ich hatte "in Ruhe" gesagt, und
+# damit galt sein Zuruf fuenfzehn Sekunden lang als mein Echo. Woerter, die man
+# im normalen Reden staendig benutzt, taugen nicht als Notausgang -- weder in
+# meinem Mund noch in seinem.
+#
+# Ein einziges Wort, dafuer in allen Schreibweisen, die das Diktat daraus
+# machen kann. Der Preis ist ihm bewusst: "hoer auf" haelt mich nicht mehr an.
+# Dafuer gibt es die rechte Strg-Taste und den Knopf auf der Tafel, und die
+# koennen gar nicht danebengreifen.
 _STOPPWORT = re.compile(
-    r'\b(stopp?t?|halt|sei still|hoer auf|hor auf|aufhoren|ruhe|warte)\b')
+    r'\b(stop|stopp|stops|stopps|stopt|stoppt|stoppe|stoppen|schtopp?)\b')
 
 
 def _ohne_umlaute(text):
