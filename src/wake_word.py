@@ -967,8 +967,22 @@ class Weckwort:
             # an und redet darueber hinaus weiter, muss er nach meinem Ende nur
             # etwa zwei Drittel dessen sprechen, was er waehrend meines Redens
             # gesagt hat -- und wer weiterredet, tut genau das.
+            # 45 STATT 60 -- RAMZIS ANSAGE VOM 15.08.2026, 23:25, und sie kommt
+            # aus einer Messung, nicht aus einem Gefuehl. Um 23:19:30 stand im
+            # Protokoll `mein Anteil 48%`: in denselben 15 Sekunden steckten zur
+            # Haelfte meine eigene Stimme und zur Haelfte sein laufendes Video.
+            # 48 lag unter 60, also ging der Mischmasch als SEINE Nachricht
+            # durch -- mehrfach an diesem Abend, und fuer ihn sehr aergerlich.
+            # Seine Worte: "Wenn 45 Prozent oder mehr von dieser Nachricht dein
+            # Echo ist, dann soll es verworfen werden."
+            #
+            # Der Preis ist ihm genannt und von ihm angenommen: faengt er mitten
+            # in meinem Satz an, muss er nach meinem Ende jetzt etwas MEHR
+            # sprechen als waehrenddessen (vorher reichten zwei Drittel), sonst
+            # gilt das Stueck als Echo. Wer wirklich weiterredet, schafft das --
+            # und die Taste rettet ohnehin immer.
             anteil = mein_sprach / max(1, stueck_sprach)
-            mein_echo = self._ist_echo() or anteil >= 0.6
+            mein_echo = self._ist_echo() or anteil >= 0.45
             # Der Echo-Merker reist MIT dem Ausschnitt, statt beim Auswerten neu
             # nachgesehen zu werden: der Arbeiter laeuft in einem eigenen Faden
             # und ist oft erst dran, wenn laengst die naechste Aeusserung
