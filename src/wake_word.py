@@ -1096,7 +1096,37 @@ class Weckwort:
                     # ploetzlich statt seiner eigenen Redepause gegriffen. Genau
                     # das hat Ramzi gefunden: "trotz 10 Sekunden nach ca. 2
                     # Sekunden abgeschickt."
-                    kurz = gesamt_sprach <= KURZ_SPRACH_FRAMES or self._kurz_erwartet
+                    #
+                    # UND SIE GILT NUR, WENN ER MICH RUFEN KOENNTE -- NICHT
+                    # MITTEN IM GESPRAECH. Ramzis Befund vom 15.08.2026 abends,
+                    # live gemessen: "es schickt von alleine ab am Anfang."
+                    #
+                    # Im Protokoll stand die Ursache wortwoertlich, siebenmal
+                    # hintereinander: "Schwelle 0.8s, kurz; gesprochen 0.1s"
+                    # ... 0.6s ... 0.9s ... 1.0s. Danach, sobald er laenger am
+                    # Stueck geredet hatte: "Schwelle 3.6s, Redepause;
+                    # gesprochen 11.5s". Sein "jetzt ist es wieder besser" war
+                    # also kein Zufall, sondern genau diese Grenze.
+                    #
+                    # Der Grund: `gesamt_sprach` faengt bei JEDER neuen
+                    # Aeusserung bei null an. Am Anfang eines Satzes ist er
+                    # damit immer unter einer Sekunde -- und wer beim Anfangen
+                    # kurz zoegert, wurde nach 0,8 s abgeschnitten. "und ist
+                    # schon... hell" ist genau so entstanden.
+                    #
+                    # Die kurze Schwelle bleibt trotzdem, sie hat ihren Grund
+                    # (ein alleinstehendes "Noor" dauert 0,66 s, und auf den
+                    # Wach-Ton acht Sekunden zu warten war sein Befund vom
+                    # 31.07.). Sie gilt nur nicht mehr dort, wo sie nie gemeint
+                    # war: laeuft schon ein Gespraech, ist ein kurzer Anfang
+                    # kein Ruf, sondern der Anfang seines Satzes -- und dann
+                    # gilt SEINE Redepause. Ein fertiger Kurzbefehl kommt
+                    # weiterhin sofort durch, denn dafuer gibt es die zweite
+                    # Bedingung, und die schaut auf den Inhalt statt auf die Uhr.
+                    kann_ruf_sein = not (self.satz_laeuft
+                                         or time.time() < self.folge_bis)
+                    kurz = ((gesamt_sprach <= KURZ_SPRACH_FRAMES and kann_ruf_sein)
+                            or self._kurz_erwartet)
                     schwelle = (min(KURZE_STILLE_FRAMES, self.stille_frames) if kurz
                                 else self.stille_frames)
 
@@ -1146,7 +1176,9 @@ class Weckwort:
                               f'{"kurz" if kurz else "Redepause"}; gesprochen '
                               f'{gesamt_sprach * FRAME_MS / 1000:.1f}s, '
                               f'Kurzbefehl erwartet: '
-                              f'{"ja" if self._kurz_erwartet else "nein"})',
+                              f'{"ja" if self._kurz_erwartet else "nein"}, '
+                              f'konnte ein Ruf sein: '
+                              f'{"ja" if kann_ruf_sein else "nein"})',
                               flush=True)
                         abgeben(endgueltig=True, gesprochene_bilder=sprach)
                         in_sprache = False
@@ -1310,8 +1342,17 @@ class Weckwort:
             # meinem laufenden Satz, und kam es gerade aus meinem Lautsprecher).
             if ich_rede:
                 if not self._arbeiter_rechnet.is_set():
+                    # `ist_zuruf_stopp` und nicht `ist_stoppwort`: das Wort muss
+                    # der ZURUF sein, nicht in einem Satz vorkommen. Am
+                    # 15.08.2026 um 16:46 habe ich mich selbst abgeschaltet --
+                    # ich erklaerte gerade "ein Kurzbefehl wie STOPP kommt
+                    # sofort durch", und mein eigener Satz kam verhoert zurueck
+                    # ("Ein einfacher Kurs befindet die Stopp od"). Beide
+                    # Echo-Sicherungen darunter mussten daran scheitern, weil
+                    # sie den TEXT vergleichen -- Begruendung bei
+                    # STOPP_MAX_WOERTER.
                     zuruf = self._hoer_kurz(schnipsel)
-                    if (zuruf and warteschlange.ist_stoppwort(zuruf)
+                    if (zuruf and warteschlange.ist_zuruf_stopp(zuruf)
                             and not warteschlange.ist_stoppwort(
                                 warteschlange._mein_satz() or '')
                             and not warteschlange.war_kuerzlich_mein_satz(zuruf)):
@@ -1575,7 +1616,7 @@ class Weckwort:
         # Das Stoppwort ist ausgenommen, und nur das: es ist der eine Zuruf,
         # der mich waehrend des Redens erreichen koennen MUSS, und er ist
         # bereits eine Zeile vorher gegen mein eigenes Echo abgesichert.
-        if mein_echo and text and not warteschlange.ist_stoppwort(text):
+        if mein_echo and text and not warteschlange.ist_zuruf_stopp(text):
             print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] verworfen -- '
                   f'fing an, waehrend ich sprach (mein Echo): {text[:60]!r}',
                   flush=True)

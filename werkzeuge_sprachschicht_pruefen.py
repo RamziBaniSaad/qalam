@@ -38,8 +38,31 @@ def pruefe(name, ist, soll):
 
 
 # --------------------------------------------------------------------------
+def warte_bis_ich_still_bin(hoechstens=120.0):
+    """Erst messen, wenn ich wirklich nichts sage.
+
+    Am 15.08.2026 hat diese Pruefung fuenf Fehler gemeldet, die es nicht gab:
+    sie lief, waehrend ich gerade selbst einen Satz sprach -- die Klammer hielt
+    also voellig zu Recht. Eine Pruefung, die den eigenen Messaufbau nicht
+    kennt, ist schlimmer als keine: sie schickt einen auf die Suche nach einem
+    Fehler, der gar nicht da ist.
+    """
+    ende = time.time() + hoechstens
+    gewartet = False
+    while w.noor_hat_das_wort(nachhall=w.NACHHALL_SEK):
+        if time.time() > ende:
+            print('  ABBRUCH: ich rede seit zwei Minuten -- so ist nichts zu '
+                  'messen.')
+            sys.exit(2)
+        gewartet = True
+        time.sleep(0.5)
+    if gewartet:
+        print('(gewartet, bis ich selbst still war)')
+
+
 def still():
     """Die Zustandslogik allein -- kein Ton, kein Ohr noetig."""
+    warte_bis_ich_still_bin()
     print('== Die Klammer um meinen Redezug ==')
     for datei in (w.REDEZUG, w.WAECHTER):
         try:

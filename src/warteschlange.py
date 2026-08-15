@@ -359,6 +359,38 @@ def ist_stoppwort(gehoert):
     return bool(_STOPPWORT.search(' '.join(flach.split())))
 
 
+# Bis zu wie vielen Woertern ein gehoertes Stoppwort ein ZURUF sein kann.
+#
+# Ramzis Test vom 15.08.2026, 16:46 -- und ich habe es mir selbst eingebrockt.
+# Ich habe erklaert: "Ein fertiger Kurzbefehl wie STOPP oder wie spaet ist es
+# kommt trotzdem sofort durch." Mein eigener Satz kam ueber sein Mikrofon
+# zurueck, verhoert als "Ein einfacher Kurs befindet die Stopp od" -- und hat
+# mich mitten im Wort abgeschaltet.
+#
+# Beide vorhandenen Sicherungen mussten dabei versagen, und das war absehbar:
+#   * der Vergleich mit meinem LAUFENDEN Satz griff nicht, weil ich beim
+#     Eintreffen des Echos laengst beim naechsten war
+#   * der Wortvergleich ueber die letzten Sekunden kam auf 2 von 6 Woertern --
+#     das Verhoeren hat die Uebereinstimmung zerstoert, genau wie bei
+#     "am elften" -> "einen Elfen"
+#
+# Was die beiden Faelle wirklich trennt, ist nicht der Inhalt, sondern die
+# LAENGE. Ein Zuruf ist von Natur aus kurz: "stopp", "hoer auf", "Noor, stopp".
+# Ein Satz, in dem das Wort nur VORKOMMT, ist laenger -- ich REDE dann ueber
+# Befehle, ich gebe keinen. Es ist derselbe Fehlertyp, den REFLEX_MAX_WOERTER
+# und KURZBEFEHL_MAX_SPRACH laengst kennen; hier hat die Grenze gefehlt.
+#
+# Vier Woerter lassen jeden echten Zuruf durch und sperren den Vortrag darueber.
+STOPP_MAX_WOERTER = 4
+
+
+def ist_zuruf_stopp(gehoert):
+    """Ist das ein ZURUF zum Anhalten -- und nicht das Wort in einem Satz?"""
+    if not ist_stoppwort(gehoert):
+        return False
+    return len(str(gehoert or '').split()) <= STOPP_MAX_WOERTER
+
+
 def ist_mein_echo(gehoert, kurz_erlaubt=False):
     """Ist das, was das Ohr gehört hat, in Wahrheit meine eigene Stimme?
 
