@@ -840,7 +840,33 @@ class Assistent:
                     # als Pause gilt und nicht als Abbruch. Wer gerade erst
                     # geweckt hat, will nicht im selben Atemzug abbrechen.
                     self._letzter_tastendruck = 0.0
-                    threading.Thread(target=self._wach_werden, daemon=True).start()
+
+                    def _aufwachen():
+                        # EINE LAUFENDE DENKPAUSE WIRD HIER AUFGEHOBEN.
+                        #
+                        # Ramzis Abend vom 15.08.2026, 22:43: er hat bei
+                        # offenem Fenster die Taste gedrückt -- das ist genau
+                        # dieser Zweig nicht, sondern der Pausen-Zweig unten --
+                        # und damit unbeabsichtigt die Denkpause eingeschaltet.
+                        # Danach hat er VIERMAL gedrückt und geredet, und
+                        # nichts kam an: die Denkpause ist eine dauerhafte
+                        # Sperre, und Wecken hat sie bisher nicht angefasst.
+                        # Im Protokoll sah alles gesund aus -- Taste erkannt,
+                        # Fenster auf, Video hielt an -- nur die Erkennung
+                        # lieferte keine Silbe mehr. Erst ein Neustart half.
+                        # Seine Worte: "ICH KONNT TROTZDEM NICHT REDEN".
+                        #
+                        # Die Regel dahinter ist einfach und stimmt immer: wer
+                        # die Taste drückt, um zu reden, will reden. Eine
+                        # Denkpause, aus der die Wecktaste nicht herausführt,
+                        # ist eine Falle -- der einzige Ausweg wäre, genau
+                        # dieselbe Taste im geschlossenen Fenster NICHT zu
+                        # drücken, und das weiss niemand.
+                        if self.ohr.pausiert():
+                            self._pause_umschalten()
+                        self._wach_werden()
+
+                    threading.Thread(target=_aufwachen, daemon=True).start()
                     return
 
                 if jetzt - self._letzter_tastendruck <= DOPPEL_FENSTER:
