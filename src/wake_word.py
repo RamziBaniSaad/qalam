@@ -533,6 +533,28 @@ class Weckwort:
         # ohnehin alle 0,3 s nachsieht -- gelesen von der Aufnahmeschleife, die
         # sonst je Bild (30 ms) eine Datei aufmachen muesste.
         self._ich_redete_zuletzt = 0.0
+        # HAT DIESE AEUSSERUNG ANGEFANGEN, ALS SEIN FENSTER NOCH OFFEN WAR?
+        #
+        # Ramzis Vermutung vom 15.08.2026, 18:11 -- und sie war richtig, das
+        # Protokoll hat sie bestaetigt: "nach dieser Zeit, die eingestellt ist,
+        # beendet er einfach und macht die Musik wieder laut", mitten in seinem
+        # Satz. Gemessen: sein Fenster lief um 18:11:57 ab, sein Block kam um
+        # 18:12:01 und fiel durch -- fuenfundzwanzig Sekunden Reden verloren.
+        #
+        # Das Fenster wird naemlich nur verlaengert, solange der Mitlauscher
+        # gerade Text hat. Direkt nach meinem Satz haelt er sich 2,5 Sekunden
+        # lang fuer "sie redet noch" (Nachhall) und verlaengert nicht, und
+        # danach gab sein Ausschnitt mehrfach nichts her. Die Uhr lief also ab,
+        # waehrend er redete.
+        #
+        # `satz_laeuft` faengt das nicht: es wird erst gesetzt, wenn ein Stueck
+        # ANGENOMMEN wurde -- und das setzt das offene Fenster voraus. Ein
+        # Zirkel.
+        #
+        # Das Fenster beantwortet "darf er ANFANGEN", nicht "darf er
+        # AUFHOEREN". Also wird der Anfang gemerkt, genau wie beim Echo eine
+        # Zeile weiter oben, und gilt dann fuer die ganze Aeusserung.
+        self._begann_im_fenster = False
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -1143,6 +1165,10 @@ class Weckwort:
                     # der Satz trotzdem ihm und darf nicht verlorengehen. Wer
                     # zuerst da war, dem gehoert die Aeusserung.
                     if not in_sprache:
+                        # Das Fenster sagt, ob er ANFANGEN darf -- nicht, ob er
+                        # aufhoeren muss. Siehe `_begann_im_fenster`.
+                        self._begann_im_fenster = (
+                            time.time() < self.folge_bis or self.satz_laeuft)
                         self._angefangen_waehrend_ich_rede = (
                             self._spricht_gerade()
                             or (time.time() - self._ich_redete_zuletzt
@@ -1794,7 +1820,8 @@ class Weckwort:
         # er dauert; Schluss ist erst bei seinem „fertig". Siehe `satz_laeuft`
         # im Kopf dieser Klasse: das ist Ramzis Regel vom 14.08.2026 und der
         # Grund, warum es hier ein Zustand ist und keine Frist.
-        im_gespraech = time.time() < self.folge_bis or self.satz_laeuft
+        im_gespraech = (time.time() < self.folge_bis or self.satz_laeuft
+                        or self._begann_im_fenster)
 
         # Nichts verstanden. Bei einem Zwischenstueck ist das folgenlos -- bei
         # einem FERTIG mitten im Gespraech nicht: dann haengt der gesammelte
