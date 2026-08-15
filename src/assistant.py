@@ -293,7 +293,28 @@ class Assistent:
                             # Sprechpause zu warten.
                             beim_unterbrechen=self._unterbrich_mich,
                             ist_kurzbefehl=self._ist_kurzbefehl,
-                            spricht_gerade=lambda: self.sprecher.spricht_gerade())
+                            # "Rede ich gerade?" heisst: redet der Sprecher ODER
+                            # hat die Zentrale noch etwas in der Hand.
+                            #
+                            # Der zweite Teil ist der, der gefehlt hat. Ramzi
+                            # am 15.08.2026, nach einem halben Tag Jagd auf
+                            # denselben Fehler: "Wenn ich gerade spreche, darf
+                            # mich nichts ausser dem Stoppwort unterbrechen.
+                            # Mehr ist da gar nicht dran." Die Regel ist genau
+                            # so einfach -- meine Auskunft darueber war es
+                            # nicht.
+                            #
+                            # Zwischen zwei Saetzen EINES Redezugs meldet der
+                            # Sprecher naemlich "ich rede nicht": der eine
+                            # Tonstrom ist zu, der naechste noch nicht auf.
+                            # In diesem Spalt von Millisekunden fing die
+                            # Aufnahme an, und von da an galt sie als seine.
+                            # Dieselbe Luecke hat `_lautstaerke_wache` laengst
+                            # geschlossen (`if sprechzentrale.anzahl()`) -- hier
+                            # fehlte sie noch.
+                            spricht_gerade=lambda: (
+                                self.sprecher.spricht_gerade()
+                                or sprechzentrale.anzahl() > 0))
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
