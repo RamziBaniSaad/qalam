@@ -1030,6 +1030,28 @@ class Weckwort:
                               f'als mein Echo markiert='
                               f'{self._angefangen_waehrend_ich_rede}',
                               flush=True)
+                    # UND WEITER PRUEFEN, NICHT NUR AM ANFANG.
+                    #
+                    # Das war der eigentliche Fehler, und er ist am 15.08.2026
+                    # gemessen worden statt erraten: in neunzig Sekunden gab es
+                    # nur DREI Aeusserungsanfaenge bei einem Dutzend erkannter
+                    # Saetze. Eine Aeusserung ist also meist ein langer Block,
+                    # der erst bei echter Stille endet -- und die Markierung
+                    # fiel einmal an seinem Anfang.
+                    #
+                    # Faengt so ein Block an, waehrend ich still bin, und ich
+                    # rede dann mitten hinein, gehoerte mein eigener Satz von da
+                    # an zu SEINER Aeusserung. Genau deshalb traf es immer den
+                    # Satzanfang: das war die Stelle, an der ich in einen
+                    # laufenden Block hineingeriet.
+                    #
+                    # Also wird bei jedem Bild nachgesehen, nicht nur beim
+                    # ersten. Ueber die Uhr des Mitlauschers und nicht ueber
+                    # `_spricht_gerade()`: die liest im Rueckfall eine Datei,
+                    # und das dreissigmal je Sekunde waere teuer. Die Uhr wird
+                    # ohnehin alle 0,3 s gestellt.
+                    elif (time.time() - self._ich_redete_zuletzt) < NACHHALL_SEK:
+                        self._angefangen_waehrend_ich_rede = True
                     in_sprache = True
                     # NUR bei mehreren Frames hintereinander gilt die Stille als
                     # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
