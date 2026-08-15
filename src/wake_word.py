@@ -519,9 +519,6 @@ class Weckwort:
         # ohnehin alle 0,3 s nachsieht -- gelesen von der Aufnahmeschleife, die
         # sonst je Bild (30 ms) eine Datei aufmachen muesste.
         self._ich_redete_zuletzt = 0.0
-        # Wann ich zuletzt "Ramzi redet" gemeldet habe -- die Drosselung dazu
-        # steht in `_schleife`.
-        self._platz_zuletzt = 0.0
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -1013,59 +1010,19 @@ class Weckwort:
                     # der Satz trotzdem ihm und darf nicht verlorengehen. Wer
                     # zuerst da war, dem gehoert die Aeusserung.
                     if not in_sprache:
-                        # GEMESSEN, NICHT VERMUTET. Am 15.08.2026 habe ich an
-                        # dieser Stelle fuenfmal repariert und viermal
-                        # danebengelegen -- jedes Mal, weil ich mir ueberlegt
-                        # habe, welche der Auskuenfte gerade falsch liegt,
-                        # statt sie aufzuschreiben. Diese eine Zeile beendet
-                        # das Raten: sie haelt fuer JEDEN Aeusserungsanfang
-                        # fest, was die drei Quellen in genau dem Moment
-                        # gesagt haben. Beim naechsten Durchrutscher steht die
-                        # Antwort im Protokoll, statt geschlossen werden zu
-                        # muessen.
-                        _spricht = self._spricht_gerade()
-                        _seit = time.time() - self._ich_redete_zuletzt
                         self._angefangen_waehrend_ich_rede = (
-                            _spricht or _seit < NACHHALL_SEK)
-                    # UND WEITER PRUEFEN, NICHT NUR AM ANFANG.
-                    #
-                    # Das war der eigentliche Fehler, und er ist am 15.08.2026
-                    # gemessen worden statt erraten: in neunzig Sekunden gab es
-                    # nur DREI Aeusserungsanfaenge bei einem Dutzend erkannter
-                    # Saetze. Eine Aeusserung ist also meist ein langer Block,
-                    # der erst bei echter Stille endet -- und die Markierung
-                    # fiel einmal an seinem Anfang.
-                    #
-                    # Faengt so ein Block an, waehrend ich still bin, und ich
-                    # rede dann mitten hinein, gehoerte mein eigener Satz von da
-                    # an zu SEINER Aeusserung. Genau deshalb traf es immer den
-                    # Satzanfang: das war die Stelle, an der ich in einen
-                    # laufenden Block hineingeriet.
-                    #
-                    # Also wird bei jedem Bild nachgesehen, nicht nur beim
-                    # ersten. Ueber die Uhr des Mitlauschers und nicht ueber
-                    # `_spricht_gerade()`: die liest im Rueckfall eine Datei,
-                    # und das dreissigmal je Sekunde waere teuer. Die Uhr wird
-                    # ohnehin alle 0,3 s gestellt.
-                    elif (time.time() - self._ich_redete_zuletzt) < NACHHALL_SEK:
-                        self._angefangen_waehrend_ich_rede = True
-
-                    # HIER STAND EIN PLATZ-MERKER AM STIMMENMELDER -- RAUS.
-                    #
-                    # Der Gedanke war richtig: seinen Platz belegen, sobald er
-                    # einen Laut macht, statt erst wenn ein Wort erkannt ist.
-                    # Die Quelle war falsch, und zwar aus demselben Grund wie
-                    # bei der Daempfung eine Runde vorher: der Stimmenmelder
-                    # schlaegt bei Musik im Takt an. Ramzi konnte danach gar
-                    # nicht mehr reden -- das Protokoll zeigte dutzende
-                    # Aeusserungsanfaenge je Sekunde, und zwischen lauter
-                    # angefangenen Aeusserungen kam keine mehr zustande.
-                    #
-                    # DIE LEHRE, zweimal am selben Tag bezahlt: der
-                    # Stimmenmelder allein ist kein Beleg dafuer, dass RAMZI
-                    # redet. Er sagt nur "hier ist Schall". Alles, was daran
-                    # haengt, muss einen Fehlgriff aushalten koennen -- und
-                    # etwas, das seine Aufnahme blockiert, kann das nicht.
+                            self._spricht_gerade()
+                            or (time.time() - self._ich_redete_zuletzt
+                                < NACHHALL_SEK))
+                    in_sprache = True
+                    # NUR bei mehreren Frames hintereinander gilt die Stille als
+                    # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
+                    # Begründung samt Messung oben bei SPRACHE_FOLGE_MIN.
+                    sprach_folge += 1
+                    if sprach_folge >= SPRACHE_FOLGE_MIN:
+                        stille = 0
+                    sprach += 1
+                    gesamt_sprach += 1
                     # Wie viel er insgesamt schon gesprochen hat, auch fuer den
                     # Mitlauscher sichtbar: der laeuft in einem eigenen Faden und
                     # sieht diese Zaehler sonst nicht. Er braucht die Zahl, um
@@ -1310,36 +1267,6 @@ class Weckwort:
             # mich erreichen koennen MUSS, wird noch geprueft -- mit seinen
             # beiden Sicherungen gegen mein eigenes Echo (steht das Stoppwort in
             # meinem laufenden Satz, und kam es gerade aus meinem Lautsprecher).
-            # `_ist_echo()` mit dazu, und das ist kein Feinschliff: eine
-            # Aeusserung, die waehrend meines Redens angefangen hat, laeuft oft
-            # noch, wenn mein Nachhall schon vorbei ist. Ohne diese Bedingung
-            # war der Ablauf ab da wieder offen -- und `beim_mitschreiben`
-            # verlaengert das Gespraechsfenster bei jedem Zwischenstueck.
-            #
-            # Ramzis Befund vom 15.08.2026: mein eigenes Echo wurde zwar sauber
-            # verworfen, aber die Musik blieb danach leise statt nach seinen
-            # zehn Sekunden wieder lauter zu werden. Genau das war die Ursache:
-            # verworfen wurde nur der TEXT, das Fenster hatte mein Echo
-            # trotzdem aufgeschoben. Stummgeschaltetes Mikrofon lief richtig --
-            # der Beweis, dass es an meiner eigenen Stimme lag.
-            # NUR `ich_rede`, NICHT `_ist_echo()`.
-            #
-            # `_ist_echo()` stand hier eine halbe Stunde lang mit drin, und es
-            # hat einen schlimmeren Fehler erzeugt als den, den es loesen
-            # sollte. Ramzi am 15.08.2026: "Wenn ich gerade am Reden bin, meine
-            # konkrete Aufnahme habe, dann redest du einfach dazwischen und
-            # brichst meine ab. Das ist jetzt zweimal passiert."
-            #
-            # Die Kette dahin: rede ich kurz in SEINE laufende Aeusserung
-            # hinein, gilt sie ab da als mein Echo. Dann steigt der Mitlauscher
-            # hier aus -- und setzt damit auch den Merker "Ramzi redet" nicht
-            # mehr. Ohne den Merker sieht die Zentrale freie Bahn und schickt
-            # den naechsten Satz los, der ihn erneut unterbricht. Ein Kreis,
-            # der sich selbst antreibt, und er kostet IHN seinen Satz.
-            #
-            # Sein Reden hat Vorrang vor meiner sauberen Fensterrechnung. Die
-            # Musik mag dadurch eine Spur laenger unten bleiben; ein
-            # abgeschnittener Satz ist der teurere Fehler.
             if ich_rede:
                 if not self._arbeiter_rechnet.is_set():
                     zuruf = self._hoer_kurz(schnipsel)
