@@ -485,6 +485,11 @@ class Weckwort:
         # nicht nach Sprache klingen. Siehe die Geraeuschunterdrueckung in
         # `_schleife`. 0 heisst "noch nichts gemessen".
         self._grundpegel = 0.0
+        # Hat die laufende Aeusserung angefangen, waehrend ICH gesprochen habe?
+        # Dann ist sie mein eigenes Echo und wird am Ende verworfen, statt sie
+        # mit einem Wortvergleich zu erraten. Siehe `_schleife` und
+        # `_auswerten`.
+        self._angefangen_waehrend_ich_rede = False
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -799,13 +804,20 @@ class Weckwort:
                 if endgueltig and stueck_offen:
                     print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig ohne '
                           f'neuen Ton -- gesammelter Satz wird abgeschickt')
-                    self._auftraege.put((None, True))
+                    self._auftraege.put((None, True, self._angefangen_waehrend_ich_rede))
                     stueck_offen = False
                 puffer.clear()
                 with self._schloss:
                     self._laufend = None
                 return
-            self._auftraege.put((list(puffer), endgueltig))
+            # Der Echo-Merker reist MIT dem Ausschnitt, statt beim Auswerten neu
+            # nachgesehen zu werden: der Arbeiter laeuft in einem eigenen Faden
+            # und ist oft erst dran, wenn laengst die naechste Aeusserung
+            # angefangen hat. Bis dahin haette der Merker schon dem falschen
+            # Ausschnitt gehoert -- ein Fehler, der nur manchmal auftritt und
+            # sich deshalb nie zuverlaessig zeigen wuerde.
+            self._auftraege.put((list(puffer), endgueltig,
+                                 self._angefangen_waehrend_ich_rede))
             stueck_offen = not endgueltig
             puffer.clear()
             with self._schloss:
@@ -956,6 +968,22 @@ class Weckwort:
                     sprach_folge = 0
 
                 if ist_sprache:
+                    # FING DIESE AEUSSERUNG AN, WAEHREND ICH GEREDET HABE?
+                    #
+                    # Dann bin ich es selbst, die da anfaengt -- mein
+                    # Lautsprecher steht neben seinem Mikrofon. Ramzi am
+                    # 15.08.2026, nachdem der Merker allein nicht reichte:
+                    # "Du sollst nicht, waehrend du redest, anfangen
+                    # aufzunehmen. Und weil du geredet hast, unterbrichst du
+                    # dich selber gleichzeitig. Das macht keinen Sinn."
+                    #
+                    # Gemerkt wird NUR der Anfang, nicht jedes Bild dazwischen:
+                    # faellt mitten in SEINEN Satz ein Satz von mir, gehoert
+                    # der Satz trotzdem ihm und darf nicht verlorengehen. Wer
+                    # zuerst da war, dem gehoert die Aeusserung.
+                    if not in_sprache:
+                        self._angefangen_waehrend_ich_rede = (
+                            warteschlange.noor_spricht_gerade())
                     in_sprache = True
                     # NUR bei mehreren Frames hintereinander gilt die Stille als
                     # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
@@ -1084,12 +1112,12 @@ class Weckwort:
         """Fertige Segmente genau transkribieren -- in Ruhe, neben der Aufnahme."""
         while not self._stop.is_set():
             try:
-                frames, endgueltig = self._auftraege.get(timeout=0.4)
+                frames, endgueltig, mein_echo = self._auftraege.get(timeout=0.4)
             except queue.Empty:
                 continue
             self._arbeiter_rechnet.set()
             try:
-                self._pruefe(frames, endgueltig)
+                self._pruefe(frames, endgueltig, mein_echo)
             except Exception as e:
                 print(f'[Weckwort] Auswertung fehlgeschlagen: {e}')
             finally:
@@ -1343,13 +1371,17 @@ class Weckwort:
         except Exception:
             return None
 
-    def _pruefe(self, puffer, endgueltig=True):
+    def _pruefe(self, puffer, endgueltig=True, mein_echo=False):
         """Segment genau transkribieren und entscheiden.
 
         `endgueltig=False` heißt: nur ein Zwischenstück, Ramzi redet noch
         weiter (siehe abgeben()). `beim_wecken` bekommt das mitgeteilt und
         entscheidet selbst, ob es sammelt oder ausführt -- hier wird nur
-        gehört und weitergegeben, nicht bewertet."""
+        gehört und weitergegeben, nicht bewertet.
+
+        `mein_echo=True` heißt: dieses Stück hat angefangen, während mein
+        eigener Lautsprecher lief. Dann bin ich es selbst und es wird
+        verworfen -- Begründung unten bei der Prüfung."""
         # Ein reines "fertig"-Signal ohne Ton -- siehe abgeben(). Es gibt nichts
         # zu rechnen, aber der Assistent wartet auf genau diesen Anruf, um den
         # gesammelten Satz abzuschicken. Kommt nur vor, wenn vorher schon ein
@@ -1464,6 +1496,33 @@ class Weckwort:
               f'{dauer_rechnen:.2f}s Rechenzeit '
               f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")}) '
               f'| gehoert: {text!r}{lach_notiz}')
+
+        # HAT DIESE AEUSSERUNG ANGEFANGEN, WAEHREND ICH REDETE? Dann bin ich es
+        # selbst gewesen, und sie wird hier verworfen -- ohne Wortvergleich,
+        # ohne Raten.
+        #
+        # Ramzis Regel vom 15.08.2026, und sie ist schaerfer als das, was der
+        # Echo-Schutz je konnte: "Es soll niemals sein, dass du ein Echo von
+        # dir erkennst und das trotzdem durchgeht und abgeschickt wird. Dann
+        # soll es verworfen werden."
+        #
+        # Der Wortvergleich in `ist_mein_echo` konnte das nicht halten, weil er
+        # den TEXT vergleicht: kommt mein Satz stark verhoert zurueck ("am
+        # elften" -> "einen Elfen"), teilt er mit dem Original keine Woerter
+        # mehr und rutscht durch. Der Zeitpunkt luegt dagegen nicht -- wer
+        # anfaengt zu reden, waehrend mein Lautsprecher laeuft, ist mein
+        # Lautsprecher.
+        #
+        # Das Stoppwort ist ausgenommen, und nur das: es ist der eine Zuruf,
+        # der mich waehrend des Redens erreichen koennen MUSS, und er ist
+        # bereits eine Zeile vorher gegen mein eigenes Echo abgesichert.
+        if mein_echo and text and not warteschlange.ist_stoppwort(text):
+            print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] verworfen -- '
+                  f'fing an, waehrend ich sprach (mein Echo): {text[:60]!r}',
+                  flush=True)
+            if endgueltig:
+                self.satz_laeuft = False
+            return
 
         # Der Marker haengt sich an den Satz, statt ihn zu ersetzen: „das war
         # wirklich lustig (lacht)" ist die Information, nicht „(lacht)" allein.
