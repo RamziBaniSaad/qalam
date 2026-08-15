@@ -1462,15 +1462,32 @@ class Assistent:
                 # Tueren tragen die Bedingung jetzt, sonst traegt sie keine.
                 if time.time() < getattr(self, '_folge_bis_von_mir', 0.0):
                     continue
-                # Das grosse Folgefenster daneben (`folge_sekunden`, bei ihm 45)
-                # zaehlt weiterhin NUR, wenn es von IHM kommt. Es beantwortet
-                # "darf er ohne meinen Namen reden" und ist absichtlich
-                # grosszuegig -- an meine eigene Antwort gehaengt bliebe die
-                # Musik dreiviertel Minuten nach meinem letzten Wort leise.
-                folge = self.ohr.folge_bis
-                if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
-                    folge = 0.0
-                if time.time() < folge:
+                # NACH SEINEM REDEN ZAEHLT SEINE REDEPAUSE, NICHT DAS GROSSE
+                # FOLGEFENSTER.
+                #
+                # `folge_sekunden` steht bei ihm auf 45. Daran hing die Musik
+                # bisher, und deshalb blieb sie nach jedem seiner Saetze
+                # dreiviertel Minuten unten -- sein Befund vom 15.08.2026:
+                # "Es wurde leiser, aber dann habe ich fertig geredet und es
+                # wurde nicht wieder lauter."
+                #
+                # Die beiden Fragen gehoeren getrennt, und ich hatte sie an
+                # diesem Tag schon einmal verwechselt:
+                #
+                #   DARF er reden           -> `folge_sekunden` (45 s, bleibt
+                #                              grosszuegig, das ist gewollt)
+                #   HOERT er, dass er darf  -> seine Redepause (`stille_ms`)
+                #
+                # Die Musik beantwortet die zweite. Sobald er wirklich fertig
+                # ist -- also seine eigene Redepause verstrichen ist -- geht
+                # sie hoch. Reden darf er trotzdem weiter, nur ohne den
+                # akustischen Hinweis.
+                try:
+                    _pause = (einstellungen.hole('stille_ms') or 1600) / 1000.0
+                except Exception:
+                    _pause = 1.6
+                if (time.time() - getattr(self, '_er_redete_zuletzt', 0.0)
+                        < _pause + 1.0):
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
