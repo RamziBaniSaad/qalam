@@ -1267,7 +1267,19 @@ class Weckwort:
             # mich erreichen koennen MUSS, wird noch geprueft -- mit seinen
             # beiden Sicherungen gegen mein eigenes Echo (steht das Stoppwort in
             # meinem laufenden Satz, und kam es gerade aus meinem Lautsprecher).
-            if ich_rede:
+            # `_ist_echo()` mit dazu, und das ist kein Feinschliff: eine
+            # Aeusserung, die waehrend meines Redens angefangen hat, laeuft oft
+            # noch, wenn mein Nachhall schon vorbei ist. Ohne diese Bedingung
+            # war der Ablauf ab da wieder offen -- und `beim_mitschreiben`
+            # verlaengert das Gespraechsfenster bei jedem Zwischenstueck.
+            #
+            # Ramzis Befund vom 15.08.2026: mein eigenes Echo wurde zwar sauber
+            # verworfen, aber die Musik blieb danach leise statt nach seinen
+            # zehn Sekunden wieder lauter zu werden. Genau das war die Ursache:
+            # verworfen wurde nur der TEXT, das Fenster hatte mein Echo
+            # trotzdem aufgeschoben. Stummgeschaltetes Mikrofon lief richtig --
+            # der Beweis, dass es an meiner eigenen Stimme lag.
+            if ich_rede or self._ist_echo():
                 if not self._arbeiter_rechnet.is_set():
                     zuruf = self._hoer_kurz(schnipsel)
                     if (zuruf and warteschlange.ist_stoppwort(zuruf)
