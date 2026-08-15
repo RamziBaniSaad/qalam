@@ -1010,10 +1010,26 @@ class Weckwort:
                     # der Satz trotzdem ihm und darf nicht verlorengehen. Wer
                     # zuerst da war, dem gehoert die Aeusserung.
                     if not in_sprache:
+                        # GEMESSEN, NICHT VERMUTET. Am 15.08.2026 habe ich an
+                        # dieser Stelle fuenfmal repariert und viermal
+                        # danebengelegen -- jedes Mal, weil ich mir ueberlegt
+                        # habe, welche der Auskuenfte gerade falsch liegt,
+                        # statt sie aufzuschreiben. Diese eine Zeile beendet
+                        # das Raten: sie haelt fuer JEDEN Aeusserungsanfang
+                        # fest, was die drei Quellen in genau dem Moment
+                        # gesagt haben. Beim naechsten Durchrutscher steht die
+                        # Antwort im Protokoll, statt geschlossen werden zu
+                        # muessen.
+                        _spricht = self._spricht_gerade()
+                        _seit = time.time() - self._ich_redete_zuletzt
                         self._angefangen_waehrend_ich_rede = (
-                            self._spricht_gerade()
-                            or (time.time() - self._ich_redete_zuletzt
-                                < NACHHALL_SEK))
+                            _spricht or _seit < NACHHALL_SEK)
+                        print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] '
+                              f'Aeusserung faengt an -- spricht_gerade='
+                              f'{_spricht}, seit meinem Reden={_seit:.1f}s, '
+                              f'als mein Echo markiert='
+                              f'{self._angefangen_waehrend_ich_rede}',
+                              flush=True)
                     in_sprache = True
                     # NUR bei mehreren Frames hintereinander gilt die Stille als
                     # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
