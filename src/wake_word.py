@@ -1160,45 +1160,39 @@ class Weckwort:
                 self._streifen_wachhalten(letzter, erkannt)
                 continue
             letzter = vorlaeufig
-            # Jetzt steht der Text da: rede ich noch, und ist das NICHT mein
-            # eigenes Echo, dann hat Ramzi mitten in meinem Satz übernommen --
-            # und genau dann soll ich aufhören. Das ist die Lage, die er
-            # beschrieben hat: "ich rede, und du redest trotzdem weiter."
-            # `kurz_erlaubt=True` NUR hier, nicht beim Weckwort weiter unten.
-            # Hier geht es um den Merker "Ramzi hat übernommen", und den setzte
-            # bisher mein eigener Lautsprecher: ein Zwei-Wort-Fetzen meiner
-            # Stimme rutschte durch den Echo-Vergleich und wuergte mein
-            # Vorlesen ab. Beim Weckwort bleibt die Sperre bestehen -- "Noor"
-            # dazwischenrufen muss IMMER durchkommen, das ist Ramzis
-            # ausdrueckliche Bedingung.
-            if (ich_rede and im_gespraech
-                    and not warteschlange.ist_mein_echo(vorlaeufig, kurz_erlaubt=True)):
-                warteschlange.redet_merken(True)
-                # DER MERKER JA, DAS ABWUERGEN NEIN.
-                #
-                # Ramzis Entscheidung vom 14.08.2026: „Waehrend du redest, kann
-                # ich dich niemals einfach so unterbrechen -- ausser mit Stopp
-                # oder Hoer auf, mit der Taste oder mit dem Knopf auf dem
-                # Dashboard. Wenn ich normal rede, soll das dich nicht
-                # unterbrechen."
-                #
-                # Und sein Grund dafuer ist der bessere: solange mein eigener
-                # Lautsprecher mitlaeuft, hoere ich mich selbst. Jeder
-                # Fehlalarm des Echo-Schutzes wurde damit zu einem Abbruch
-                # mitten in meinem Satz -- „dass du dich dann selber die ganze
-                # Zeit hoerst und dich selber unterbrichst". Ein Zuruf, der
-                # gemeint ist, ist billig zu erkennen (Stoppwort, mein Name);
-                # ein Nebensatz im Zimmer ist es nicht.
-                #
-                # Der MERKER bleibt trotzdem, und das ist kein Widerspruch: er
-                # beantwortet „faengt sie einen NEUEN Satz an, waehrend er
-                # redet" -- und das soll ich weiterhin nicht. Was hier faellt,
-                # ist nur das Abwuergen des laufenden.
-                #
-                # Die beiden Wege, die weiter unterbrechen, stehen direkt
-                # darunter: das Stoppwort und mein Name. Dazu die Taste und der
-                # Knopf auf der Tafel, beide ausserhalb dieser Datei.
-                # Kein `beim_unterbrechen` an dieser Stelle -- Begruendung oben.
+            # WAEHREND ICH REDE, HOERE ICH ZU -- ABER NICHTS DAVON HAELT MICH AN.
+            #
+            # Ramzis Entscheidung vom 15.08.2026, und sie loest eine ganze
+            # Fehlerklasse auf einmal auf: „Was nicht sein soll, ist, dass du
+            # dich waehrend des Redens mit egal welchem Wort selbst
+            # unterbrichst. Ich will dich nur mit den Signalwoertern, mit der
+            # Taste oder mit dem Knopf unterbrechen koennen. Mehr brauche ich
+            # nicht."
+            #
+            # Warum das die richtige Richtung ist: mein Lautsprecher steht
+            # neben seinem Mikrofon, also hoere ich mich beim Reden immer
+            # selbst. Jeder Versuch, aus dem Gehoerten zu ERRATEN, ob das er
+            # oder ich war, ist genau der Punkt, an dem es schiefgeht -- und er
+            # ging oft genug schief, dass Ramzi sein Mikrofon von Hand stumm
+            # geschaltet hat, nur damit ich ausreden kann. Ein Verfahren, das
+            # den Benutzer zur Handarbeit zwingt, ist gescheitert.
+            #
+            # Die Loesung ist deshalb nicht ein besserer Rateversuch, sondern
+            # gar keiner: waehrend ich rede, zaehlt NUR ein ausdrueckliches
+            # Signal. Die drei stehen fest und sind unverwechselbar --
+            # Stoppwort (gleich darunter), rechte Strg-Taste und der Knopf auf
+            # der Tafel, beide ausserhalb dieser Datei. Ein Stoppwort kann ich
+            # nicht versehentlich von mir selbst hoeren, dagegen sichert
+            # `war_kuerzlich_mein_satz` in `ist_stoppwort` ab.
+            #
+            # Damit faellt hier auch der MERKER weg. Er war gut gemeint --
+            # „faengt sie einen NEUEN Satz an, waehrend er redet" -- aber er
+            # hing an derselben unsicheren Echo-Erkennung und hat mir dadurch
+            # laufende Antworten aus der Warteschlange geraeumt. Solange ich
+            # rede, wird er nicht mehr gesetzt; sobald ich still bin, setzt ihn
+            # der Zweig weiter oben (`if im_gespraech and not ich_rede`)
+            # ohnehin wieder, und DORT ist er sicher, weil dann wirklich nur er
+            # sprechen kann.
 
             # EIN STOPPWORT WIRKT IMMER -- auch ohne meinen Namen davor.
             #
@@ -1266,11 +1260,23 @@ class Weckwort:
                 # sage? Dann war ich es hoechstwahrscheinlich selbst, und ein
                 # verpasster Ruf ist billiger als ein Satz, der sich selbst
                 # abwuergt -- Ramzi kann noch einmal rufen, ich nicht.
-                _meiner = warteschlange._mein_satz() or ''
-                _ich_nannte_mich = bool(SELBST_WECKWORT.search(_meiner))
-                if ich_rede and not _ich_nannte_mich                         and not warteschlange.ist_mein_echo(vorlaeufig):
-                    warteschlange.redet_merken(True)
-                    self._melde(self.beim_unterbrechen)
+                # MEIN NAME UNTERBRICHT MICH NICHT MEHR.
+                #
+                # Ramzi hat diese Bedingung am 15.08.2026 selbst
+                # zurueckgenommen -- sie war frueher seine ausdrueckliche
+                # Forderung ("Noor dazwischenrufen muss IMMER durchkommen"),
+                # und genau sie war die letzte offene Tuer, durch die ich mich
+                # selbst gestoppt habe: ich sage meinen eigenen Namen staendig,
+                # und ein verhoerter Fetzen davon reichte.
+                #
+                # Seine neue Regel ist einfacher und deshalb zuverlaessiger:
+                # waehrend ich rede, unterbrechen nur Stoppwort, Taste und
+                # Knopf -- "mehr brauche ich nicht, meistens mache ich das
+                # sowieso mit der Taste."
+                #
+                # `erkannt` wird oben trotzdem gesetzt: mein Name geht also
+                # weiterhin an den Assistenten, er beendet nur nicht mehr
+                # meinen laufenden Satz.
             if erkannt or time.time() < self.folge_bis:
                 self._melde(self.beim_mitschreiben, vorlaeufig)
                 # Steckt in dem, was bisher zu hören war, schon ein kurzer
