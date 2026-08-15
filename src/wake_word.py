@@ -1091,39 +1091,28 @@ class Weckwort:
                             warteschlange.redet_merken(True)
                         except Exception:
                             pass
-                        # UND DIE MUSIK GLEICH MIT.
+                        # HIER STAND DIE DAEMPFUNG -- UND SIE IST WIEDER RAUS.
                         #
-                        # Ramzis Befund vom 15.08.2026, direkt nach dem
-                        # Platz-Merker: "Als ich angefangen habe zu reden mit
-                        # der Taste, ist es nicht leiser geworden."
+                        # Der Gedanke war richtig (Musik leise, sobald er einen
+                        # Laut macht, statt erst beim erkannten Wort), die
+                        # Stelle war es nicht. Ramzi am 15.08.2026: "Die Musik
+                        # geht die ganze Zeit laut und leise, mit jedem Beat
+                        # Drop."
                         #
-                        # Derselbe Zeitversatz an einer anderen Stelle:
-                        # gedaempft wurde bisher in `assistant._geweckt`, also
-                        # erst wenn ein Text erkannt ist. Bis dahin hat er
-                        # schon ein, zwei Sekunden in laute Musik gesprochen --
-                        # und genau die Sekunden versteht sein Mikrofon am
-                        # schlechtesten.
+                        # Genau das muss hier passieren: der Stimmenmelder
+                        # schlaegt bei einem Bass-Einsatz an, die Daempfung
+                        # greift, der Waechter stellt zurueck, der naechste
+                        # Schlag kommt -- ein Flackern im Takt der Musik. Der
+                        # Melder taugt als Hinweis auf einen Redeversuch (der
+                        # Platz-Merker darueber verfaellt einfach wieder), aber
+                        # nicht als Ausloeser fuer etwas Hoerbares. Ein Fehlgriff
+                        # beim Merker kostet eine Sekunde Stille; derselbe
+                        # Fehlgriff an der Lautstaerke ist ein Effektgeraet.
                         #
-                        # `daempfen_im_hintergrund` merkt sich die alten Werte
-                        # und tut beim zweiten Aufruf nichts Zusaetzliches, ist
-                        # hier also gefahrlos. Zurueckgestellt wird wie bisher
-                        # von den beiden Waechtern -- daran aendert sich
-                        # nichts, also kann hier auch nichts haengenbleiben.
-                        try:
-                            import lautstaerke
-                            if not lautstaerke.gedaempft():
-                                lautstaerke.daempfen_im_hintergrund()
-                        except Exception:
-                            pass
-                    in_sprache = True
-                    # NUR bei mehreren Frames hintereinander gilt die Stille als
-                    # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
-                    # Begründung samt Messung oben bei SPRACHE_FOLGE_MIN.
-                    sprach_folge += 1
-                    if sprach_folge >= SPRACHE_FOLGE_MIN:
-                        stille = 0
-                    sprach += 1
-                    gesamt_sprach += 1
+                        # Gedaempft wird deshalb wieder in `assistant._geweckt`,
+                        # wenn ein Wort erkannt ist. Sein urspruenglicher Befund
+                        # (die ersten ein, zwei Sekunden laufen noch in laute
+                        # Musik) bleibt damit offen und steht in KONTEXT.md.
                     # Wie viel er insgesamt schon gesprochen hat, auch fuer den
                     # Mitlauscher sichtbar: der laeuft in einem eigenen Faden und
                     # sieht diese Zaehler sonst nicht. Er braucht die Zahl, um
