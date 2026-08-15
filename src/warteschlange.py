@@ -412,16 +412,43 @@ def ist_zuruf_stopp(gehoert):
 STOPP_EIGEN_FENSTER = 15.0
 
 
-def habe_ich_stopp_gesagt(sekunden=STOPP_EIGEN_FENSTER):
-    """Kam das Stoppwort in den letzten Sekunden aus MEINEM Lautsprecher?"""
+def _stoppwoerter(text):
+    """WELCHE Haltewoerter stehen drin -- nicht nur ob eines drinsteht."""
+    if not text:
+        return set()
+    flach = _ohne_umlaute(str(text).lower())
+    flach = ''.join(c if c.isalnum() or c.isspace() else ' ' for c in flach)
+    return set(_STOPPWORT.findall(' '.join(flach.split())))
+
+
+def habe_ich_stopp_gesagt(gehoert, sekunden=STOPP_EIGEN_FENSTER):
+    """Kam GENAU DIESES Haltewort in den letzten Sekunden aus meinem Lautsprecher?
+
+    Erst stand hier "habe ich IRGENDEIN Haltewort gesagt", und das war zu grob.
+    Ramzis Test 3 am 15.08.2026: sechs seiner Rufe wurden unterdrueckt, weil in
+    meinem eigenen Satz "in Ruhe" vorkam -- ein voellig normales Wort, das
+    zufaellig auf der Liste steht. Er rief "Stopp", ich hatte "Ruhe" gesagt,
+    und trotzdem galt sein Ruf als mein Echo. Erst nach fuenfzehn Sekunden kam
+    er durch, und genau das hat er gemerkt: "ziemlich spaet auf jeden Fall".
+
+    Ein Echo kann nur enthalten, was ich wirklich gesagt habe. Also wird
+    verglichen, WELCHES Wort es war. Sage ich "in Ruhe" und er ruft "Stopp",
+    kann das unmoeglich mein Echo sein.
+    """
+    seine = _stoppwoerter(gehoert)
+    if not seine:
+        return False
     try:
         with open(GESAGT, encoding='utf-8') as f:
             alt = json.load(f)
     except Exception:
         return False
     jetzt = time.time()
-    return any(ist_stoppwort(e.get('text', ''))
-               for e in alt if jetzt - e.get('t', 0) < sekunden)
+    meine = set()
+    for e in alt:
+        if jetzt - e.get('t', 0) < sekunden:
+            meine |= _stoppwoerter(e.get('text', ''))
+    return bool(meine & seine)
 
 
 def ist_mein_echo(gehoert, kurz_erlaubt=False):

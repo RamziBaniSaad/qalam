@@ -1438,7 +1438,7 @@ class Weckwort:
                         # darf nicht alles am Text haengen. Begruendung bei
                         # warteschlange.STOPP_MAX_WOERTER und
                         # habe_ich_stopp_gesagt.
-                        eigen = (warteschlange.habe_ich_stopp_gesagt()
+                        eigen = (warteschlange.habe_ich_stopp_gesagt(zuruf)
                                  or warteschlange.ist_stoppwort(
                                      warteschlange._mein_satz() or '')
                                  or warteschlange.war_kuerzlich_mein_satz(zuruf))
