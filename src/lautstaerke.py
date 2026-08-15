@@ -117,22 +117,7 @@ def _regler(sitzung):
 def daempfen(anteil=ANTEIL):
     """Alles Fremde leiser stellen und sich merken, wie laut es war.
 
-    VIDEOS WERDEN NICHT LEISER GESTELLT, SONDERN ANGEHALTEN. Ramzis
-    Unterscheidung vom 15.08.2026: „Bei Musik ist das egal, da reicht leiser.
-    Bei Videos will ich alles sehen -- die sollen gestoppt werden." Ein leiser
-    gestelltes Video laeuft weiter, er verpasst also genau die Sekunden, in
-    denen wir reden. Siehe `medien.py`; Spotify bleibt ausdruecklich beim
-    Leiserstellen.
-
     Rückgabe: wie viele Programme gedämpft wurden."""
-    try:
-        import medien
-        medien.videos_anhalten()
-    except Exception as e:
-        # Darf das Daempfen NIE aufhalten. Klappt das Anhalten nicht, wird das
-        # Video eben nur leise -- das ist der alte Zustand und immer noch
-        # besser als eine Musik, die laut bleibt.
-        print('[Medien] anhalten uebersprungen: %s' % e, flush=True)
     anzahl = 0
     with _schloss:
         gemerkt = _lies_merker()
@@ -218,21 +203,6 @@ def zuruecksetzen():
     als "vorher", und es wurde noch leiser. Das ist der Fehler, an dem Ramzi am
     03.08.2026 sein Video kaum noch hören konnte.
     """
-    # ZUERST die Videos wieder starten, und zwar VOR dem `return 0` unten.
-    #
-    # Sonst haengt Ramzis Video daran, ob zufaellig auch etwas gedaempft war --
-    # und bliebe stehen, wenn der Lautstaerke-Merker leer ist. Ein stehendes
-    # Video ist der eine Fehler, den diese Aenderung auf keinen Fall machen
-    # darf: bei der Lautstaerke merkt er es sofort, bei einem pausierten Video
-    # sitzt er davor und wartet.
-    #
-    # Die paar Millisekunden, in denen es noch leise weiterlaeuft, bis die
-    # Lautstaerke gleich unten zurueckgestellt ist, hoert kein Mensch.
-    try:
-        import medien
-        medien.videos_fortsetzen()
-    except Exception as e:
-        print('[Medien] fortsetzen fehlgeschlagen: %s' % e, flush=True)
     anzahl = 0
     with _schloss:
         gemerkt = _lies_merker()
