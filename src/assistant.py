@@ -314,7 +314,7 @@ class Assistent:
                             # fehlte sie noch.
                             spricht_gerade=lambda: (
                                 self.sprecher.spricht_gerade()
-                                or sprechzentrale.anzahl() > 0))
+                                or sprechzentrale.beschaeftigt()))
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.

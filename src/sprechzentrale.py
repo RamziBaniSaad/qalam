@@ -187,6 +187,28 @@ def anzahl():
         return len(_auftraege)
 
 
+# Ein Auftrag ist aus der Liste genommen, aber noch nicht zu hoeren.
+#
+# DIE LUECKE, DIE DAMIT ZUGEHT (Ramzi, 15.08.2026, nach einem halben Tag Jagd
+# auf denselben Fehler): `_bestes()` nimmt den Auftrag aus der Warteschlange,
+# danach wird die Stimme erzeugt -- gemessen 0,7 bis 0,9 Sekunden bis zum
+# ersten Ton. In dieser knappen Sekunde sagt `anzahl()` null und der Sprecher
+# sagt "ich rede nicht". Beides stimmt fuer sich und ergibt zusammen die
+# falsche Antwort: "es ist gerade still."
+#
+# Genau dort fing die Aufnahme an, die dann meinen eigenen Satz enthielt --
+# jedes Mal am SATZANFANG, und deshalb sah es aus, als haette ich mich selbst
+# aktiviert. Ein Zustand, der zwischen zwei Zustaenden verschwindet, ist kein
+# Zustand; er braucht seine eigene Marke.
+_am_zug = False
+
+
+def beschaeftigt():
+    """Laeuft gerade ein Redezug -- egal ob schon hoerbar oder erst im Bau?"""
+    with _sperre:
+        return _am_zug or bool(_auftraege)
+
+
 def stoppe_alles(grund='Stopp'):
     """Sofort still sein: laufenden Satz abbrechen UND die Liste leeren.
 
@@ -319,13 +341,18 @@ def _buehne(an):
 
 
 def _lauf():
+    global _am_zug
     while _laeuft.is_set():
         _aufraeumen()
         auftrag = _bestes()
         if auftrag is None:
+            _am_zug = False
             _buehne(False)
             time.sleep(0.08)
             continue
+        # Ab hier laeuft ein Redezug, auch wenn noch nichts zu hoeren ist --
+        # siehe `beschaeftigt()`.
+        _am_zug = True
 
         # DARF ICH UEBERHAUPT REDEN? Der Schalter auf der Tafel.
         #
