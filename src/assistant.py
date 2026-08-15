@@ -1159,16 +1159,21 @@ class Assistent:
         # ein Satz, der JETZT fertig wird, ist Ton von vorhin; er sagt nichts
         # darüber, ob Ramzi mich gerade unterbrechen will.
         #
-        # Das Stoppwort MITTEN in meinem Satz läuft nicht hier durch, sondern
-        # sofort über `_unterbrich_mich` (wake_word._mitlauscher). Das hier ist
-        # nur das Netz für den Fall, dass es erst mit dem fertigen Satz ankommt.
-        if self._ich_rede_noch():
-            try:
-                import warteschlange as _w
-                if _w.ist_stoppwort(text or ''):
-                    sprechzentrale.unterbrich('Stoppwort im fertigen Satz')
-            except Exception:
-                pass
+        # UND HIER UNTERBRICHT GAR NICHTS MEHR. Ich hatte an dieser Stelle ein
+        # Netz stehen: „falls das Stoppwort erst mit dem fertigen Satz
+        # ankommt". Ramzis erster Test hat es in zehn Minuten zweimal
+        # umgebracht, und zwar mich selbst -- im Protokoll steht zweimal
+        # „unterbrochen (Stoppwort im fertigen Satz)", beide Male, weil mein
+        # eigener Satz das Wort „Stopp" enthielt (ich habe ihm gerade davon
+        # erzählt) und über sein Mikrofon zurückkam.
+        #
+        # Das Netz war auch ohne diesen Fehler wertlos: ein fertiger Satz
+        # kommt erst NACH seiner Redepause an, hier also 3,6 Sekunden zu spät.
+        # Ein Stopp, der so lange braucht, ist keiner mehr.
+        #
+        # Die drei Wege, die F1 nennt, wirken alle sofort und brauchen diese
+        # Stelle nicht: sein Zuruf (wake_word._mitlauscher, mitten im Satz),
+        # die rechte Strg-Taste und der Knopf auf der Tafel.
 
         if not endgueltig:
             # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
