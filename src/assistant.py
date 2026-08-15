@@ -1609,10 +1609,17 @@ class Assistent:
         seines Fensters. Jetzt hängen beide an derselben Bedingung, und das ist
         auch die ehrliche: die Musik IST für ihn die Anzeige dafür."""
         # Wie lange am Stück nichts mehr passieren muss, bevor das Video
-        # weiterläuft. Bewusst grosszügig: zu spät weiterlaufen merkt Ramzi
-        # kaum, zu früh reisst es ihm den Satz entzwei -- und das war seine
-        # Beschwerde.
-        VIDEO_NACHLAUF = 4.0
+        # weiterläuft. Zu früh reisst es ihm den Satz entzwei -- das war seine
+        # Beschwerde von 22:30.
+        #
+        # ZWEI UND NICHT VIER, RAMZIS ZAHL (15.08.2026, 22:42). Der Nachlauf
+        # ADDIERT sich auf sein Fenster: 5 s Fenster + Nachlauf, bis das Video
+        # wieder läuft. Bei 4 waren das neun Sekunden, und die hat er selbst
+        # bemerkt ("irgendwie mehr als fünf Sekunden") -- er schaut nebenbei
+        # etwas, und jede dieser Sekunden ist für ihn ein Standbild. Siehe
+        # memory/feedback_fuenf_sekunden_fenster.md: die 5 s selbst sind seine
+        # bewusste Wahl und bleiben, also muss die Luft hier weg.
+        VIDEO_NACHLAUF = 2.0
         video_angestossen = 0.0
         video_ruhig_seit = 0.0
         video_zuletzt_frei = 0.0
