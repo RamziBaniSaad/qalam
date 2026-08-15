@@ -1816,6 +1816,16 @@ def main(argv=None):
     p.add_argument('--modell', default='small', help='Whisper-Größe fürs Weckwort')
     args = p.parse_args(argv)
 
+    # Ein Merker aus einer abgestuerzten Sitzung wuerde sonst dafuer sorgen,
+    # dass nie wieder ein Video angehalten wird -- ein voller Merker heisst
+    # "haelt schon an". Fortgesetzt wird hier ausdruecklich NICHT: was beim
+    # Absturz lief, hat Ramzi laengst selbst wieder gestartet.
+    try:
+        import medien
+        medien.vergiss()
+    except Exception:
+        pass
+
     a = Assistent(stimme=args.stimme, modell=args.modell)
     a.starte()
     try:
