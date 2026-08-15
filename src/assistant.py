@@ -1452,7 +1452,30 @@ class Assistent:
                 # `satz_laeuft`-Zweig gleich darunter haelt die Musik unten,
                 # bis er fertig ist, ganz ohne Uhr. Genau das wollte er: "dann
                 # gilt ja die Redepause".
-                if time.time() < self.ohr.folge_bis:
+                #
+                # UND ZWAR AN SEINEM REGLER, nicht an `folge_bis` insgesamt.
+                # Es gibt zwei Fenster mit fast gleichem Namen, und genau daran
+                # bin ich haengengeblieben:
+                #
+                #   folge_sekunden      das allgemeine Folgefenster nach JEDER
+                #                       seiner Aeusserungen (Vorgabe 15 s).
+                #                       `_mitschreiben` zieht es bei jedem
+                #                       Zwischenstueck neu auf -- solange er
+                #                       redet, laeuft es nie ab.
+                #   gespraech_sekunden  sein Regler "Fluessiges Gespraech".
+                #                       NUR der gehoert zur Musik: er sagt, wie
+                #                       lange nach MEINER Antwort offen ist.
+                #
+                # An `folge_bis` gehaengt blieb die Musik dauerhaft leise, weil
+                # jede seiner Aeusserungen das grosse Fenster um fuenfzehn
+                # Sekunden weiterschob. Ramzi hat es sofort gemerkt: "Du hast
+                # gesprochen, fuenf Sekunden sind vergangen, sogar mehr, und es
+                # wurde nicht wieder laut."
+                #
+                # `_folge_bis_von_mir` ist genau der Zeitpunkt, den
+                # `_gespraech_offen_halten` gesetzt hat -- sein Regler und
+                # sonst nichts.
+                if time.time() < getattr(self, '_folge_bis_von_mir', 0.0):
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
