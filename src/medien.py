@@ -155,72 +155,8 @@ def _laufen(coro, standard):
     return ergebnis[0]
 
 
-# --- Der Umweg ueber einen eigenen Prozess -----------------------------------
-#
-# GEMESSEN, NICHT VERMUTET. Von Hand aufgerufen hat das Anhalten auf Anhieb
-# funktioniert. Aus dem Ohr heraus stand im Protokoll nur:
-#
-#     [Medien] Abfrage haengt laenger als 2s -- aufgegeben
-#
-# Ramzis Befund dazu: "Mein Video laeuft immer noch, es ist zwar leise, aber es
-# soll ja gestoppt werden."
-#
-# Der Grund ist COM: das Ohr hat es fuer die Lautstaerke (pycaw) laengst in
-# einem Modus geoeffnet, und Windows' Medien-Steuerung braucht einen anderen.
-# Im selben Prozess ist das nicht zu versoehnen -- der Aufruf kehrt schlicht
-# nicht zurueck.
-#
-# Ein eigener Prozess hat frisches COM und das Problem gar nicht. Das kostet
-# etwa eine halbe Sekunde Start, und die faellt nicht auf: der Aufruf laeuft
-# ohnehin schon in einem Nebenfaden, waehrend die Musik gedaempft wird.
-#
-# Anmerkung fuer spaeter: fuer die LAUTSTAERKE ist derselbe Weg am 31.07.2026
-# gescheitert (als abgesetzter Prozess fand pycaw keine einzige Audio-Sitzung,
-# siehe `_nebenher`). Hier geht es -- es ist eine andere Schnittstelle, und sie
-# fragt nicht die Audio-Sitzungen, sondern die Medien-Steuerung.
-_PROZESS_FRIST = 8.0
-
-
-def _python():
-    """Der Interpreter, der eine Konsole hat -- pythonw schluckt die Ausgabe."""
-    import sys
-    exe = sys.executable or 'python'
-    if exe.lower().endswith('pythonw.exe'):
-        exe = exe[:-len('pythonw.exe')] + 'python.exe'
-        if not os.path.exists(exe):
-            return sys.executable
-    return exe
-
-
-def _im_eigenen_prozess(befehl):
-    """`medien.py an` bzw. `auf` abgesetzt ausfuehren."""
-    import subprocess
-    skript = os.path.abspath(__file__)
-    try:
-        fertig = subprocess.run(
-            [_python(), skript, befehl],
-            capture_output=True, text=True, timeout=_PROZESS_FRIST,
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    except subprocess.TimeoutExpired:
-        print('[Medien] eigener Prozess braucht laenger als %.0fs -- aufgegeben'
-              % _PROZESS_FRIST, flush=True)
-        return False
-    except Exception as e:
-        print('[Medien] eigener Prozess fehlgeschlagen: %s' % e, flush=True)
-        return False
-    for zeile in (fertig.stdout or '').splitlines():
-        if zeile.strip():
-            print(zeile, flush=True)      # damit es im Ohr-Protokoll steht
-    if fertig.returncode != 0:
-        fehler = (fertig.stderr or '').strip().splitlines()
-        if fehler:
-            print('[Medien] Fehler: %s' % fehler[-1], flush=True)
-        return False
-    return True
-
-
-def _anhalten_hier():
-    """Die eigentliche Arbeit -- laeuft im abgesetzten Prozess."""
+def videos_anhalten():
+    """Laufende Videos anhalten. Mehrfach aufrufbar, tut dann nichts mehr."""
     with _sperre:
         if _lies_merker():
             return []                   # haelt schon, nichts zu tun
@@ -233,8 +169,8 @@ def _anhalten_hier():
         return angehalten
 
 
-def _fortsetzen_hier():
-    """Die eigentliche Arbeit -- laeuft im abgesetzten Prozess."""
+def videos_fortsetzen():
+    """Genau die Videos wieder starten, die wir selbst angehalten haben."""
     with _sperre:
         kennungen = _lies_merker()
         if not kennungen:
@@ -252,20 +188,6 @@ def _fortsetzen_hier():
                  ', '.join(wieder) if wieder else '(nichts mehr da)'),
               flush=True)
         return wieder
-
-
-def videos_anhalten():
-    """Laufende Videos anhalten. Mehrfach aufrufbar, tut dann nichts mehr."""
-    if _lies_merker():
-        return False                    # haelt schon, kein Prozess noetig
-    return _im_eigenen_prozess('an')
-
-
-def videos_fortsetzen():
-    """Genau die Videos wieder starten, die wir selbst angehalten haben."""
-    if not _lies_merker():
-        return False                    # nichts angehalten, nichts zu tun
-    return _im_eigenen_prozess('auf')
 
 
 def haelt_an():
@@ -290,12 +212,10 @@ def vergiss():
 if __name__ == '__main__':
     import sys
     was = sys.argv[1] if len(sys.argv) > 1 else 'zeigen'
-    # Hier die _hier-Fassungen, NICHT die oeffentlichen: sonst setzt sich der
-    # abgesetzte Prozess einen weiteren ab, und so fort.
     if was == 'an':
-        _anhalten_hier()
+        print(videos_anhalten())
     elif was == 'auf':
-        _fortsetzen_hier()
+        print(videos_fortsetzen())
     else:
         async def _zeigen():
             for s in await _sitzungen():
