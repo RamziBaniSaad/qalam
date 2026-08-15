@@ -862,10 +862,26 @@ class Assistent:
                         # ist eine Falle -- der einzige Ausweg wäre, genau
                         # dieselbe Taste im geschlossenen Fenster NICHT zu
                         # drücken, und das weiss niemand.
-                        if self.ohr.pausiert():
-                            self._pause_umschalten()
+                        try:
+                            if self.ohr.pausiert:
+                                self._pause_umschalten()
+                        except Exception as e:
+                            print(f'[Noor] Denkpause liess sich nicht '
+                                  f'aufheben: {e}', flush=True)
                         self._wach_werden()
 
+                    # NOCHMAL, WEIL ES MICH SOFORT EINGEHOLT HAT: `pausiert`
+                    # ist eine EIGENSCHAFT, keine Methode. Die Klammer darin
+                    # hat `'bool' object is not callable` geworfen, der Faden
+                    # starb vor `_wach_werden`, und die Taste tat gar nichts
+                    # mehr. Ramzi hat meine Ausrede zu Recht abgeräumt: "und
+                    # nein, es ist nicht Ungeduld."
+                    #
+                    # Der eigentliche Fehler war nicht die Klammer, sondern die
+                    # Reihenfolge: eine Nebensache (Denkpause aufheben) stand
+                    # ungesichert VOR der Hauptsache (wecken). Deshalb steht
+                    # sie oben jetzt in einem try -- das Wecken passiert, egal
+                    # was daneben schiefgeht.
                     threading.Thread(target=_aufwachen, daemon=True).start()
                     return
 
