@@ -135,6 +135,67 @@ def laut_reden():
     pruefe('und wieder losgelassen', w.noor_hat_das_wort(), False)
 
 
+def laut_echo():
+    """Der Fall, der zweimal durchgefallen ist: hoere ich mich selbst? (F1)
+
+    Ramzis Test 1 am 15.08.2026. Zweimal sind meine eigenen Saetze als SEINE
+    Aeusserung durchgegangen -- beim zweiten Mal 754 Zeichen an Claude. Der
+    Fehler war nur mit laufender Musik zu sehen, weil sie den Stimmenmelder
+    wachhaelt und die Aeusserung deshalb schon offen war, bevor ich anfing.
+
+    Deshalb prueft das hier MIT Musik, und deshalb steht es ueberhaupt hier:
+    was zweimal durchgefallen ist, darf nie wieder ungeprueft bleiben.
+    """
+    print('== Hoere ich mich selbst? (Test 1) ==')
+    protokoll = os.path.join(HIER, 'ohr.log')
+    if not os.path.exists(protokoll):
+        print('  ABBRUCH: kein ohr.log -- laeuft das Ohr?')
+        _fehler.append('ohr.log fehlt')
+        return
+
+    def zeilen():
+        with open(protokoll, encoding='utf-8', errors='replace') as f:
+            return f.readlines()
+
+    vorher = len(zeilen())
+
+    wav = os.path.join(HIER, 'assets', 'noor_wach.wav')
+    ps = ('$p = New-Object System.Media.SoundPlayer "%s"; '
+          '1..200 | ForEach-Object { $p.PlaySync() }' % wav)
+    musik = subprocess.Popen(
+        ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps],
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    text = ('Das ist die Selbstpruefung der Sprachschicht. Ich rede jetzt eine '
+            'Weile am Stueck, damit mein eigenes Mikrofon genug von mir '
+            'zurueckbekommt. Waehrenddessen laeuft absichtlich ein Geraeusch '
+            'mit, denn genau das hat den Fehler damals sichtbar gemacht. Kein '
+            'einziger dieser Saetze darf als Aeusserung von Ramzi gelten, und '
+            'vor allem darf nichts davon an Claude gehen.')
+    p = subprocess.Popen([sys.executable,
+                          os.path.join(HIER, 'src', 'voice_output.py'), text],
+                         cwd=HIER, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+    p.wait(timeout=180)
+    musik.terminate()
+    # Das genaue Modell wertet erst nach seiner Redepause aus -- abwarten,
+    # sonst zaehle ich ein Protokoll, das noch gar nicht geschrieben ist.
+    time.sleep(9)
+
+    neu = zeilen()[vorher:]
+    gehoert = [z for z in neu if "gehoert: '" in z and "gehoert: ''" not in z]
+    echo = [z for z in neu if 'mein Echo' in z]
+    weiter = [z for z in neu if 'gebe weiter' in z]
+    print('   %d Bloecke mit Text gehoert, %d als mein Echo verworfen, '
+          '%d an Claude uebergeben' % (len(gehoert), len(echo), len(weiter)))
+    for z in echo[:4]:
+        print('   ' + z.strip()[:120])
+    pruefe('nichts davon ging an Claude', len(weiter), 0)
+    pruefe('ich habe mich selbst gehoert (sonst war es kein Test)',
+           len(gehoert) > 0, True)
+    pruefe('und alles davon verworfen', len(echo) >= len(gehoert), True)
+
+
 def laut_musik():
     """Ist die Musik die Anzeige fuers offene Fenster? (F3/F4)"""
     print('== Musik als Anzeige ==')
@@ -203,6 +264,7 @@ if __name__ == '__main__':
     still()
     if '--laut' in sys.argv:
         laut_reden()
+        laut_echo()
         laut_musik()
     else:
         print('(--laut fuer Sprech- und Musikprobe -- braucht ein laufendes Ohr)')
