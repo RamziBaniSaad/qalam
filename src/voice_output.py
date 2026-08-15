@@ -113,6 +113,12 @@ def in_saetze(text):
     return [s for s in _SATZ_ENDE.split(text) if s.strip()]
 
 
+# Eingehaengt von assistant.py: "darf Ramzi gerade noch ohne meinen Namen
+# antworten?" Solange das gilt, bleibt die Musik unten -- siehe `_leiser`.
+# Fehlt der Haken (Qalam allein, Testlauf), verhaelt sich alles wie vorher.
+gespraech_offen = None
+
+
 def _leiser(an):
     """Musik dämpfen bzw. zurückstellen, ohne daran scheitern zu können.
 
@@ -145,6 +151,26 @@ def _leiser(an):
         import threading
         import warteschlange
 
+        # DRITTE BEDINGUNG: sein Gespraechsfenster.
+        #
+        # Ramzis Wunsch vom 15.08.2026 -- die Musik soll leise bleiben, solange
+        # er nach meiner Antwort noch ohne meinen Namen reden darf. Dann hoert
+        # er am Ton, ob sein Fenster offen ist, und sein Mikrofon versteht ihn,
+        # weil die Lautsprecher unten sind.
+        #
+        # UND WARUM ES DREIMAL NICHT GEWIRKT HAT, als ich es nur im Waechter
+        # (`assistant._lautstaerke_wache`) gebaut habe: die Musik wird an ZWEI
+        # unabhaengigen Stellen wieder hochgestellt. Der Waechter ist die eine,
+        # dieser Zweig hier ist die andere -- und er feuert sofort, wenn mein
+        # letzter Satz zu Ende ist. Was der Waechter danach noch entscheidet,
+        # ist gleichgueltig: hochgestellt war es da schon. Eine Bedingung, die
+        # nur an einer von zwei Tueren haengt, ist keine Bedingung.
+        def _offen():
+            try:
+                return bool(gespraech_offen and gespraech_offen())
+            except Exception:
+                return False
+
         def _wenn_beide_still():
             # Höchstens 90 s warten. Länger als das redet niemand am Stück,
             # und wenn doch, ist ein einmaliges Zurückstellen das kleinere
@@ -152,7 +178,7 @@ def _leiser(an):
             ende = time.time() + 90
             while time.time() < ende:
                 try:
-                    if not warteschlange.ramzi_redet():
+                    if not warteschlange.ramzi_redet() and not _offen():
                         break
                 except Exception:
                     break
@@ -163,7 +189,7 @@ def _leiser(an):
             redet = warteschlange.ramzi_redet()
         except Exception:
             redet = False
-        if redet:
+        if redet or _offen():
             threading.Thread(target=_wenn_beide_still, daemon=True).start()
         else:
             lautstaerke.zuruecksetzen_im_hintergrund()

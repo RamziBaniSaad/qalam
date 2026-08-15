@@ -315,6 +315,19 @@ class Assistent:
                             spricht_gerade=lambda: (
                                 self.sprecher.spricht_gerade()
                                 or sprechzentrale.beschaeftigt()))
+        # Der Sprecher stellt die Musik selbst zurueck, sobald mein letzter
+        # Satz endet -- unabhaengig vom Waechter und vor ihm. Er muss deshalb
+        # dieselbe Frage stellen koennen: darf Ramzi gerade noch ohne meinen
+        # Namen antworten? Ohne diesen Haken war jede Bedingung im Waechter
+        # wirkungslos, weil die Musik da schon oben war. Genau daran sind am
+        # 15.08.2026 drei Anlaeufe gescheitert.
+        #
+        # Bewusst NUR mein eigenes Fenster (`_folge_bis_von_mir`): das grosse
+        # `folge_bis` steht bei ihm auf 45 Sekunden und haette die Musik nach
+        # jeder Antwort dreiviertel Minuten unten gehalten.
+        import voice_output as _vo
+        _vo.gespraech_offen = (
+            lambda: time.time() < getattr(self, '_folge_bis_von_mir', 0.0))
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
@@ -1398,7 +1411,11 @@ class Assistent:
                 if dauer <= 0:
                     continue
                 import warteschlange as _w
-                if not _w.noor_spricht_gerade():
+                # `beschaeftigt()` mit dazu: ein Redezug laeuft schon, waehrend
+                # die Stimme erzeugt wird (gemessen 0,7-0,9 s). Ohne das faengt
+                # mein Fenster erst beim ersten Ton an zu zaehlen.
+                if not (_w.noor_spricht_gerade()
+                        or sprechzentrale.beschaeftigt()):
                     continue
                 neu = max(self.ohr.folge_bis, time.time() + dauer)
                 self.ohr.folge_bis = neu
@@ -1430,25 +1447,26 @@ class Assistent:
                 import lautstaerke
                 if not lautstaerke.gedaempft():
                     continue
-                # ZURUECK AUF DEN STAND VOR DEM 15.08.2026.
+                # SEIN GESPRAECHSFENSTER -- die eine Tuer von zweien.
                 #
-                # Ramzis Wunsch an diesem Tag war richtig und bleibt gueltig:
-                # die Musik soll leise bleiben, solange er noch antworten darf
-                # -- daran haette er gehoert, ob sein Fenster offen ist. Ich
-                # habe es dreimal hintereinander gebaut und jedes Mal etwas
-                # anderes kaputtgemacht: erst blieb sie fuer immer leise (am
-                # 45-Sekunden-Fenster), dann wurde sie mitten in seinem Reden
-                # laut, dann gar nicht mehr leise.
+                # Ramzis Wunsch vom 15.08.2026: die Musik bleibt leise, solange
+                # er nach meiner Antwort noch ohne meinen Namen reden darf.
+                # Damit hoert er, ob sein Fenster offen ist, und sein Mikrofon
+                # versteht ihn, weil die Lautsprecher unten sind.
                 #
-                # Deshalb steht hier wieder das Alte, das nachweislich lief.
-                # Der Wunsch ist damit nicht erledigt, sondern zurueckgestellt
-                # -- er gehoert mit klarem Kopf gebaut und mit einer Messung,
-                # nicht in der dritten Runde unter Zeitdruck. Was dabei zu
-                # beachten ist, steht in KONTEXT.md.
-                #
-                # Ein Folgefenster, das NUR `_gespraech_offen_halten` offen
-                # haelt, zaehlt hier nicht: es heisst "er darf ohne meinen Namen
-                # antworten", nicht "es laeuft noch ein Gespraech".
+                # Dreimal daran gescheitert, und der Grund war nicht diese
+                # Zeile, sondern eine ZWEITE Stelle: `voice_output._leiser`
+                # stellt die Musik ebenfalls zurueck, sobald mein letzter Satz
+                # endet -- unabhaengig von diesem Waechter und vor ihm. Was
+                # hier entschieden wird, war dort laengst passiert. Beide
+                # Tueren tragen die Bedingung jetzt, sonst traegt sie keine.
+                if time.time() < getattr(self, '_folge_bis_von_mir', 0.0):
+                    continue
+                # Das grosse Folgefenster daneben (`folge_sekunden`, bei ihm 45)
+                # zaehlt weiterhin NUR, wenn es von IHM kommt. Es beantwortet
+                # "darf er ohne meinen Namen reden" und ist absichtlich
+                # grosszuegig -- an meine eigene Antwort gehaengt bliebe die
+                # Musik dreiviertel Minuten nach meinem letzten Wort leise.
                 folge = self.ohr.folge_bis
                 if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
                     folge = 0.0
