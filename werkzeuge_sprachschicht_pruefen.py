@@ -196,6 +196,75 @@ def laut_echo():
     pruefe('und alles davon verworfen', len(echo) >= len(gehoert), True)
 
 
+def laut_zucken():
+    """Zuckt die Musik zwischen zwei meiner Saetze kurz hoch? (Test 13)
+
+    Der Fall, fuer den in der Waechterin der Nachhall steht: zwischen zwei
+    Auftraegen ist die Liste schon leer und der naechste Satz noch nicht
+    angemeldet. Fehlt dort etwas, geht die Musik in jeder Luecke kurz hoch --
+    genau das Zucken, das Ramzi frueher im Video gesehen hat.
+
+    Deshalb DREI getrennte Auftraege und nicht einer: bei einem einzigen gibt
+    es die Luecke gar nicht, und der Test waere ein Selbstbetrug.
+    """
+    print('== Zuckt die Musik zwischen zwei Saetzen? ==')
+    import lautstaerke
+    sprich = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                          'noor-sprich.ps1')
+    if not os.path.exists(sprich):
+        print('  uebersprungen: noor-sprich.ps1 nicht gefunden')
+        return
+
+    wav = os.path.join(HIER, 'assets', 'noor_wach.wav')
+    ps = ('$p = New-Object System.Media.SoundPlayer "%s"; '
+          '1..200 | ForEach-Object { $p.PlaySync() }' % wav)
+    musik = subprocess.Popen(
+        ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps],
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    time.sleep(3)
+
+    for satz in ('Erster Satz von drei, das ist die Zuck-Pruefung.',
+                 'Zweiter Satz, und zwischen den Saetzen liegt die Luecke.',
+                 'Dritter und letzter Satz dieser Pruefung.'):
+        subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy',
+                        'Bypass', '-File', sprich, '-Text', satz],
+                       capture_output=True,
+                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    begonnen = time.time()
+    while time.time() - begonnen < 25 and not lautstaerke.gedaempft():
+        time.sleep(0.1)
+    if not lautstaerke.gedaempft():
+        musik.terminate()
+        pruefe('es wurde ueberhaupt gedaempft', False, True)
+        return
+
+    zucker = punkte = leise = 0
+    war_laut = False
+    start = time.time()
+    while time.time() - start < 90:
+        ich_rede = w.noor_hat_das_wort(nachhall=w.NACHHALL_SEK)
+        gedaempft = lautstaerke.gedaempft()
+        if ich_rede:
+            punkte += 1
+            if gedaempft:
+                leise += 1
+            elif not war_laut:
+                zucker += 1
+                war_laut = True
+        if gedaempft:
+            war_laut = False
+        if not ich_rede and time.time() - start > 5 and w.noor_still_seit() > 6:
+            break
+        time.sleep(0.1)
+    musik.terminate()
+
+    print('   %d Messpunkte waehrend ich redete, davon %d mit leiser Musik'
+          % (punkte, leise))
+    pruefe('der Redezug war lang genug zum Messen', punkte > 20, True)
+    pruefe('kein Zucken zwischen den Saetzen', zucker, 0)
+
+
 def laut_musik():
     """Ist die Musik die Anzeige fuers offene Fenster? (F3/F4)"""
     print('== Musik als Anzeige ==')
@@ -265,6 +334,7 @@ if __name__ == '__main__':
     if '--laut' in sys.argv:
         laut_reden()
         laut_echo()
+        laut_zucken()
         laut_musik()
     else:
         print('(--laut fuer Sprech- und Musikprobe -- braucht ein laufendes Ohr)')
