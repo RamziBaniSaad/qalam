@@ -722,16 +722,41 @@ class Assistent:
         # ausgerechnet bei der Taste, mit der er mich unterbrechen soll.
         # Gemessen am 09.08.2026 um 15:59:13: drei Aktionen aus einem Druck.
         self._taste_haengt = False
+        self._taste_seit = 0.0
         try:
             from pynput import keyboard
 
             def _gedrueckt(taste):
                 if taste != keyboard.Key.ctrl_r:
                     return
-                if self._taste_haengt:
-                    return          # dieselbe Taste, nur Windows' Wiederholung
-                self._taste_haengt = True
                 jetzt = time.time()
+                # DER MERKER DARF NICHT EWIG HALTEN.
+                #
+                # Ramzis Befund vom 15.08.2026, 18:25: "ich druecke nach dem
+                # Ende vom Fenster die Taste und rede, aber er hoert nicht zu
+                # -- das ist jetzt mehrmals passiert." Im Protokoll stand dazu
+                # KEINE einzige Tastenzeile, obwohl er gedrueckt hat.
+                #
+                # Genau hier wird ein Druck stumm verschluckt: `_taste_haengt`
+                # wird beim Druecken gesetzt und nur beim LOSLASSEN geloescht.
+                # Geht ein Loslassen verloren -- Fokuswechsel, Vollbild, ein
+                # verschlucktes Ereignis --, ist die Taste danach tot, bis
+                # zufaellig mal ein Release ankommt. Der Schutz gegen Windows'
+                # Tastenwiederholung war richtig, seine Dauer war es nicht.
+                #
+                # Eine Wiederholung kommt binnen Millisekunden. Wer eine Sekunde
+                # spaeter drueckt, drueckt wirklich neu.
+                if self._taste_haengt and jetzt - self._taste_seit < 1.0:
+                    return          # dieselbe Taste, nur Windows' Wiederholung
+                if self._taste_haengt:
+                    # Sichtbar machen, statt es nur zu heilen: sonst waere beim
+                    # naechsten Mal wieder nicht zu unterscheiden, ob die Taste
+                    # gar nicht ankam oder hier verschluckt wurde.
+                    print('[%s] [Taste] haengender Merker nach %.1fs '
+                          '-- geloest' % (time.strftime('%H:%M:%S'),
+                                          jetzt - self._taste_seit), flush=True)
+                self._taste_haengt = True
+                self._taste_seit = jetzt
 
                 # JEDER DRUCK KOMMT INS PROTOKOLL, samt dem, was in dem
                 # Moment galt. Ramzi am 15.08.2026, 18:22: "ich druecke
