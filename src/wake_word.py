@@ -519,6 +519,9 @@ class Weckwort:
         # ohnehin alle 0,3 s nachsieht -- gelesen von der Aufnahmeschleife, die
         # sonst je Bild (30 ms) eine Datei aufmachen muesste.
         self._ich_redete_zuletzt = 0.0
+        # Wann ich zuletzt "Ramzi redet" gemeldet habe -- die Drosselung dazu
+        # steht in `_schleife`.
+        self._platz_zuletzt = 0.0
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -1052,6 +1055,42 @@ class Weckwort:
                     # ohnehin alle 0,3 s gestellt.
                     elif (time.time() - self._ich_redete_zuletzt) < NACHHALL_SEK:
                         self._angefangen_waehrend_ich_rede = True
+
+                    # SEINEN PLATZ SOFORT BELEGEN, NICHT ERST WENN TEXT DA IST.
+                    #
+                    # Ramzis Befund vom 15.08.2026, mehrfach: "Du unterbrichst
+                    # mich die ganze Zeit, wenn ich rede." Er hat recht, und
+                    # die Ursache ist ein Zeitversatz:
+                    #
+                    # Die Zentrale wartet, solange `ramzi_redet()` gilt. Dieser
+                    # Merker wurde bisher NUR vom Mitlauscher gesetzt -- und der
+                    # braucht erst einen erkannten Text. Zwischen seinem ersten
+                    # Laut und dem ersten Wort liegen ein bis drei Sekunden, in
+                    # denen niemand seinen Platz haelt. Genau dort ist mein
+                    # naechster Satz losgelaufen.
+                    #
+                    # Der Stimmenmelder weiss es viel frueher: er sagt Bild fuer
+                    # Bild, ob da jemand spricht. Dasselbe Muster, das mein
+                    # eigenes Reden geloest hat -- den echten Zustand nehmen
+                    # statt einer Auskunft, die hinterherhinkt.
+                    #
+                    # NICHT bei meinem eigenen Echo: sonst hielte ich mir selbst
+                    # den Platz frei und wuerde nach jedem Satz verstummen.
+                    #
+                    # Gedrosselt auf viermal je Sekunde. Der Merker ist eine
+                    # Datei, und dreissig Schreibvorgaenge je Sekunde waeren
+                    # Verschwendung; er verfaellt nach einer Sekunde
+                    # (REDET_ALTER), viermal reicht also mit Reserve. Das ist
+                    # zugleich das Netz gegen ein Geraeusch, das faelschlich als
+                    # Sprache gilt: nach einer Sekunde Stille bin ich wieder
+                    # frei, ohne dass jemand etwas zuruecksetzen muss.
+                    if (not self._angefangen_waehrend_ich_rede
+                            and time.time() - self._platz_zuletzt > 0.25):
+                        self._platz_zuletzt = time.time()
+                        try:
+                            warteschlange.redet_merken(True)
+                        except Exception:
+                            pass
                     in_sprache = True
                     # NUR bei mehreren Frames hintereinander gilt die Stille als
                     # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
