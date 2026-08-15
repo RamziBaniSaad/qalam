@@ -1261,50 +1261,54 @@ class Weckwort:
                 warteschlange.redet_merken(True)
                 self._melde(self.beim_unterbrechen)
 
+            # HIER IST SCHLUSS, SOLANGE ICH REDE.
+            #
+            # Ramzis Unterscheidung vom 15.08.2026, und sie ist die richtige --
+            # es gibt ZWEI Aufnahmen, und ich hatte sie vorher in einen Topf
+            # geworfen:
+            #
+            #   DAUERAUFNAHME    das Mikrofon hoert immer zu. Landet im
+            #                    Protokoll, wird aber nicht verwendet. Bleibt
+            #                    genau so -- daran haengt das Stoppwort, das
+            #                    oben schon geprueft wurde.
+            #   KONKRETE         faengt an, wenn er meinen Namen sagt, die
+            #   AUFNAHME         Taste drueckt oder das Gespraechsfenster offen
+            #                    ist. Sie ist die sichtbare: SEIN Untertitel
+            #                    erscheint, und nach seiner Redepause geht der
+            #                    Text an Claude.
+            #
+            # Seine Regel: "Diese konkrete Aufnahme soll nie starten, waehrend
+            # du redest -- auch nicht bei fluessigem Gespraech. Dafuer muesste
+            # ich dich einmal stoppen, egal womit, und danach kann ich erst
+            # reden."
+            #
+            # Es genuegt deshalb NICHT, den Text am Ende zu verwerfen (das tut
+            # `_pruefe` weiterhin, als zweites Netz). Zu diesem Zeitpunkt ist
+            # die konkrete Aufnahme laengst gelaufen: sein Untertitel hat
+            # meinen ueberschrieben, und fuer ihn sah es aus, als nehme ich
+            # mitten in meinem eigenen Satz seine Antwort auf. Genau das war
+            # sein Befund, dreimal gemeldet.
+            #
+            # Also endet der Mitlauscher hier. Kein Weckwort, kein Untertitel,
+            # kein Gespraechsfenster -- solange mein Lautsprecher laeuft, ist
+            # der einzige Weg zu mir der Zuruf, die Taste oder der Knopf.
+            if ich_rede:
+                continue
+
+            # Ab hier bin ich sicher still -- das `continue` oben hat alles
+            # andere abgefangen. Der Name startet also die konkrete Aufnahme,
+            # ohne dass noch einmal gefragt werden muss, ob ich es selbst war:
+            # ich kann mich nicht selbst gehoert haben, wenn ich nichts sage.
+            #
+            # Genau dieser Aufbau macht den frueheren Echo-Vergleich an dieser
+            # Stelle ueberfluessig. Er hat hier jahrelang geraten ("ist dieser
+            # Fetzen mein eigener Satz?") und lag oft genug daneben, dass Ramzi
+            # sein Mikrofon von Hand stumm geschaltet hat. Eine Bedingung, die
+            # gar nicht mehr erreicht werden kann, wenn ich rede, braucht
+            # keinen Rateversuch.
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True
                 self._melde(self.beim_erkennen)
-                # MITTEN IM SATZ UNTERBROCHEN.
-                #
-                # Bis zum 02.08.2026 hat der Mitlauscher den Namen zwar
-                # gefunden, es aber nur weitergemeldet -- gestoppt wurde erst,
-                # wenn Ramzi zu Ende geredet hatte und das genaue Modell dran
-                # war. Gemessen um 20:45: seine fuenf Rufe landeten in EINEM
-                # Block von 14,1 Sekunden und wurden erst ausgewertet, als er
-                # aufhoerte zu rufen. Er dachte, der fuenfte Ruf haette
-                # gewirkt -- in Wahrheit war es das Ende seiner Rufe.
-                #
-                # `ist_mein_echo` ist der Schutz davor, dass mein eigener
-                # Lautsprecher mich stoppt: nur wenn das Gehoerte NICHT das
-                # ist, was ich gerade sage, war es wirklich er.
-                # ICH SAGE MEINEN EIGENEN NAMEN -- und wecke mich damit selbst.
-                #
-                # Ramzi hat es sofort bemerkt: "du unterbrichst dich selber,
-                # wenn du irgendwie ein Wort wie Noor sagst." Der Echo-Schutz
-                # vergleicht das Gehoerte mit meinem laufenden Satz, aber bei
-                # einem kurzen Fetzen wie "Nur." trifft der Wortvergleich zu
-                # schwach. Deshalb hier zusaetzlich die einfachste Frage, die
-                # es gibt: steht mein Name ueberhaupt in dem, was ich gerade
-                # sage? Dann war ich es hoechstwahrscheinlich selbst, und ein
-                # verpasster Ruf ist billiger als ein Satz, der sich selbst
-                # abwuergt -- Ramzi kann noch einmal rufen, ich nicht.
-                # MEIN NAME UNTERBRICHT MICH NICHT MEHR.
-                #
-                # Ramzi hat diese Bedingung am 15.08.2026 selbst
-                # zurueckgenommen -- sie war frueher seine ausdrueckliche
-                # Forderung ("Noor dazwischenrufen muss IMMER durchkommen"),
-                # und genau sie war die letzte offene Tuer, durch die ich mich
-                # selbst gestoppt habe: ich sage meinen eigenen Namen staendig,
-                # und ein verhoerter Fetzen davon reichte.
-                #
-                # Seine neue Regel ist einfacher und deshalb zuverlaessiger:
-                # waehrend ich rede, unterbrechen nur Stoppwort, Taste und
-                # Knopf -- "mehr brauche ich nicht, meistens mache ich das
-                # sowieso mit der Taste."
-                #
-                # `erkannt` wird oben trotzdem gesetzt: mein Name geht also
-                # weiterhin an den Assistenten, er beendet nur nicht mehr
-                # meinen laufenden Satz.
             if erkannt or time.time() < self.folge_bis:
                 self._melde(self.beim_mitschreiben, vorlaeufig)
                 # Steckt in dem, was bisher zu hören war, schon ein kurzer
