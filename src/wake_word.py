@@ -1011,7 +1011,7 @@ class Weckwort:
                     # zuerst da war, dem gehoert die Aeusserung.
                     if not in_sprache:
                         self._angefangen_waehrend_ich_rede = (
-                            warteschlange.noor_spricht_gerade()
+                            self._spricht_gerade()
                             or (time.time() - self._ich_redete_zuletzt
                                 < NACHHALL_SEK))
                     in_sprache = True
@@ -1155,7 +1155,7 @@ class Weckwort:
         """
         if not self._angefangen_waehrend_ich_rede:
             return False
-        return (warteschlange.noor_spricht_gerade()
+        return (self._spricht_gerade()
                 or (time.time() - self._ich_redete_zuletzt) < NACHHALL_SEK)
 
     def _melde(self, rueckruf, *args):
@@ -1209,7 +1209,7 @@ class Weckwort:
             # Jetzt laeuft sie in JEDER Runde mit, unabhaengig davon, ob es
             # etwas zu hoeren gibt. Eine Uhr, die nur manchmal gestellt wird,
             # ist keine Uhr.
-            if warteschlange.noor_spricht_gerade():
+            if self._spricht_gerade():
                 self._ich_redete_zuletzt = time.time()
             with self._schloss:
                 schnipsel = self._laufend
@@ -1236,7 +1236,7 @@ class Weckwort:
             # `_auswerten`: hat sein Satz einmal angefangen, laeuft er, bis er
             # fertig ist -- keine Uhr darf ihn mittendrin fuer beendet erklaeren.
             im_gespraech = erkannt or self.satz_laeuft or time.time() < self.folge_bis
-            ich_rede = warteschlange.noor_spricht_gerade()
+            ich_rede = self._spricht_gerade()
             if ich_rede:
                 self._ich_redete_zuletzt = time.time()
             # Mein Nachhall zaehlt wie mein Reden -- siehe NACHHALL_SEK. Sonst
