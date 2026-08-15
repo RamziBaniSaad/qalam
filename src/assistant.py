@@ -1701,10 +1701,17 @@ class Assistent:
                 # hier durch.
                 if jetzt - video_angestossen > 3:
                     video_angestossen = jetzt
+                    # `folge_bis` ist 0.0, wenn das Fenster ausdrücklich
+                    # zugemacht wurde (erledigter Auftrag) -- dann wäre die
+                    # Differenz die halbe Unix-Zeit. Ein Protokoll, das
+                    # 1786825698 Sekunden meldet, ist schlimmer als keines;
+                    # genau solche Zeilen haben mich heute Abend zweimal in
+                    # die falsche Richtung geschickt.
+                    seit = (f'{jetzt - self.ohr.folge_bis:.1f}s'
+                            if self.ohr.folge_bis else 'zugemacht')
                     print(f'[{time.strftime("%H:%M:%S")}] [Videos] fortsetzen '
                           f'angestossen -- {VIDEO_NACHLAUF:.0f}s Ruhe, Fenster '
-                          f'seit {jetzt - self.ohr.folge_bis:.1f}s zu.',
-                          flush=True)
+                          f'seit {seit} zu.', flush=True)
                     videos.anstossen(False)
             except Exception:
                 continue
