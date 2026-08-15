@@ -119,6 +119,26 @@ BLICKE_JE_AEUSSERUNG = 6
 KURZ_SPRACH_FRAMES = int(1.0 * 1000 / FRAME_MS)
 KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 
+# NACHHALL -- wie lange nach meinem letzten Wort noch ich selbst im Raum bin.
+#
+# Ramzis Befund vom 15.08.2026, direkt nachdem die Sperre "waehrend ich rede"
+# stand: "Du hast dich wieder aufgenommen." Belegt im Protokoll um 13:13:30 --
+# er hatte mich per Taste gestoppt, mein Lautsprecher war damit aus, und
+# gleich danach lief eine konkrete Aufnahme mit MEINEM Satz drin ("Hallo, ich
+# bin Jan, der Vollschlag steht noch" -- verhoert aus "Hallo, ich bin da. Der
+# Vorschlag steht noch").
+#
+# Der Grund ist keine Logik, sondern Physik: das Ohr sieht immer ein Stueck
+# Vergangenheit an, und der Schall vom Lautsprecher zum Mikrofon ist noch
+# unterwegs, wenn die Wiedergabe schon aus ist. Die Sperre endete also exakt
+# in dem Moment, in dem mein letzter Ton erst ankam.
+#
+# Anderthalb Sekunden decken das ab, ohne ihm im Weg zu stehen: sie kosten ihn
+# nur dann etwas, wenn er direkt auf mein letztes Wort losredet -- und dann
+# faengt seine Aufnahme eben eine Sekunde spaeter an, statt mit meinem eigenen
+# Satz zu beginnen.
+NACHHALL_SEK = 1.5
+
 # Bis zu wie viel GESPROCHENER Zeit etwas ueberhaupt ein kurzer Befehl sein kann.
 #
 # DAS IST DIE GRENZE, DIE GEFEHLT HAT, und ihr Fehlen ist Ramzis Fehler
@@ -490,6 +510,10 @@ class Weckwort:
         # mit einem Wortvergleich zu erraten. Siehe `_schleife` und
         # `_auswerten`.
         self._angefangen_waehrend_ich_rede = False
+        # Wann mein Lautsprecher zuletzt lief. Gefuehrt vom Mitlauscher, der
+        # ohnehin alle 0,3 s nachsieht -- gelesen von der Aufnahmeschleife, die
+        # sonst je Bild (30 ms) eine Datei aufmachen muesste.
+        self._ich_redete_zuletzt = 0.0
 
     # Schlafen ist kein reines Innenleben mehr, sondern ein Schalter, den auch
     # andere Prozesse sehen muessen -- die Sprech-Hooks und der Tafel-Sammler
@@ -983,7 +1007,9 @@ class Weckwort:
                     # zuerst da war, dem gehoert die Aeusserung.
                     if not in_sprache:
                         self._angefangen_waehrend_ich_rede = (
-                            warteschlange.noor_spricht_gerade())
+                            warteschlange.noor_spricht_gerade()
+                            or (time.time() - self._ich_redete_zuletzt
+                                < NACHHALL_SEK))
                     in_sprache = True
                     # NUR bei mehreren Frames hintereinander gilt die Stille als
                     # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
@@ -1161,8 +1187,49 @@ class Weckwort:
             # fertig ist -- keine Uhr darf ihn mittendrin fuer beendet erklaeren.
             im_gespraech = erkannt or self.satz_laeuft or time.time() < self.folge_bis
             ich_rede = warteschlange.noor_spricht_gerade()
+            if ich_rede:
+                self._ich_redete_zuletzt = time.time()
+            # Mein Nachhall zaehlt wie mein Reden -- siehe NACHHALL_SEK. Sonst
+            # endet die Sperre genau in dem Moment, in dem mein letzter Ton am
+            # Mikrofon erst ankommt.
+            ich_rede = ich_rede or (time.time() - self._ich_redete_zuletzt
+                                    < NACHHALL_SEK)
             if im_gespraech and not ich_rede:
                 warteschlange.redet_merken(True)
+
+            # SOLANGE ICH REDE, HOERE ICH NUR AUF EIN STOPPWORT -- SONST NICHTS.
+            #
+            # Das steht so weit oben, weil Ramzi am 15.08.2026 den Rest des
+            # Problems gefunden hat, nachdem die Weckwort-Sperre schon stand:
+            # "Meine konkrete Aufnahme ist die ganze Zeit an. Es hoert auch gar
+            # nicht auf, sogar nachdem das abschickt."
+            #
+            # Er hatte recht, und der Grund lag ein paar Zeilen tiefer:
+            # `_streifen_wachhalten` schickt den letzten Text noch einmal, damit
+            # der Untertitel-Streifen nicht ablaeuft -- und das lief weiter,
+            # waehrend ich sprach. Fuer ihn ist der Streifen die konkrete
+            # Aufnahme; ein Streifen, der nie ablaeuft, ist eine Aufnahme, die
+            # nie aufhoert. Ich hatte also die Tuer zugemacht und daneben das
+            # Fenster offen gelassen.
+            #
+            # Deshalb endet die Runde hier vollstaendig: kein Wachhalten, kein
+            # Weckwort, kein Mitschrieb, kein Zaehler. Nur der eine Zuruf, der
+            # mich erreichen koennen MUSS, wird noch geprueft -- mit seinen
+            # beiden Sicherungen gegen mein eigenes Echo (steht das Stoppwort in
+            # meinem laufenden Satz, und kam es gerade aus meinem Lautsprecher).
+            if ich_rede:
+                if not self._arbeiter_rechnet.is_set():
+                    zuruf = self._hoer_kurz(schnipsel)
+                    if (zuruf and warteschlange.ist_stoppwort(zuruf)
+                            and not warteschlange.ist_stoppwort(
+                                warteschlange._mein_satz() or '')
+                            and not warteschlange.war_kuerzlich_mein_satz(zuruf)):
+                        print('[Weckwort] Stoppwort gehoert: %r' % zuruf[:40],
+                              flush=True)
+                        warteschlange.redet_merken(True)
+                        self._melde(self.beim_unterbrechen)
+                continue
+
             # Vorrang für das genaue Modell -- siehe _arbeiter_rechnet.
             if self._arbeiter_rechnet.is_set():
                 self._streifen_wachhalten(letzter, erkannt)
@@ -1175,11 +1242,11 @@ class Weckwort:
             # Ausreißer von 18-24 s Rechenzeit.
             if erkannt and not self.beim_mitschreiben:
                 continue
-            if blicke >= BLICKE_JE_AEUSSERUNG and not erkannt and not ich_rede:
+            if blicke >= BLICKE_JE_AEUSSERUNG and not erkannt:
                 # Die Grenze spart Rechenzeit bei Gemurmel, das kein Ruf war.
-                # Solange ICH rede, gilt sie nicht: dann versucht Ramzi gerade
-                # durchzukommen, und ihn nach sechs Blicken nicht mehr
-                # anzusehen ist genau das Gegenteil von dem, was er braucht.
+                # Die frühere Ausnahme "solange ICH rede, gilt sie nicht" ist
+                # weggefallen -- während ich rede, kommt der Ablauf gar nicht
+                # mehr bis hierher (siehe oben).
                 continue
 
             blicke += 1
@@ -1188,124 +1255,14 @@ class Weckwort:
                 self._streifen_wachhalten(letzter, erkannt)
                 continue
             letzter = vorlaeufig
-            # WAEHREND ICH REDE, HOERE ICH ZU -- ABER NICHTS DAVON HAELT MICH AN.
-            #
-            # Ramzis Entscheidung vom 15.08.2026, und sie loest eine ganze
-            # Fehlerklasse auf einmal auf: „Was nicht sein soll, ist, dass du
-            # dich waehrend des Redens mit egal welchem Wort selbst
-            # unterbrichst. Ich will dich nur mit den Signalwoertern, mit der
-            # Taste oder mit dem Knopf unterbrechen koennen. Mehr brauche ich
-            # nicht."
-            #
-            # Warum das die richtige Richtung ist: mein Lautsprecher steht
-            # neben seinem Mikrofon, also hoere ich mich beim Reden immer
-            # selbst. Jeder Versuch, aus dem Gehoerten zu ERRATEN, ob das er
-            # oder ich war, ist genau der Punkt, an dem es schiefgeht -- und er
-            # ging oft genug schief, dass Ramzi sein Mikrofon von Hand stumm
-            # geschaltet hat, nur damit ich ausreden kann. Ein Verfahren, das
-            # den Benutzer zur Handarbeit zwingt, ist gescheitert.
-            #
-            # Die Loesung ist deshalb nicht ein besserer Rateversuch, sondern
-            # gar keiner: waehrend ich rede, zaehlt NUR ein ausdrueckliches
-            # Signal. Die drei stehen fest und sind unverwechselbar --
-            # Stoppwort (gleich darunter), rechte Strg-Taste und der Knopf auf
-            # der Tafel, beide ausserhalb dieser Datei. Ein Stoppwort kann ich
-            # nicht versehentlich von mir selbst hoeren, dagegen sichert
-            # `war_kuerzlich_mein_satz` in `ist_stoppwort` ab.
-            #
-            # Damit faellt hier auch der MERKER weg. Er war gut gemeint --
-            # „faengt sie einen NEUEN Satz an, waehrend er redet" -- aber er
-            # hing an derselben unsicheren Echo-Erkennung und hat mir dadurch
-            # laufende Antworten aus der Warteschlange geraeumt. Solange ich
-            # rede, wird er nicht mehr gesetzt; sobald ich still bin, setzt ihn
-            # der Zweig weiter oben (`if im_gespraech and not ich_rede`)
-            # ohnehin wieder, und DORT ist er sicher, weil dann wirklich nur er
-            # sprechen kann.
 
-            # EIN STOPPWORT WIRKT IMMER -- auch ohne meinen Namen davor.
-            #
-            # Ramzis Beschwerde vom 07.08.2026 hatte zwei Haelften. Die eine
-            # war der Echo-Schutz (geloest in warteschlange.ist_stoppwort);
-            # die andere ist diese: unterbrochen wurde bisher NUR, wenn das
-            # Weckwort im Fetzen stand. Ein blosses "stopp" oder "hoer auf",
-            # mitten in meinen Satz gerufen, lief also ins Leere -- und genau
-            # so ruft man, wenn es schnell gehen soll.
-            #
-            # Nur waehrend ich rede. Sonst waere jedes "warte mal" in einem
-            # Diktat ein Abbruch.
-            #
-            # UND NUR, WENN ICH DAS WORT NICHT SELBST GERADE SAGE. Genau
-            # dieselbe Falle wie beim Weckwort ein paar Zeilen weiter unten
-            # ("du unterbrichst dich selber, wenn du ein Wort wie Noor sagst"),
-            # nur schaerfer: fuer Stoppwoerter ist der Echo-Schutz absichtlich
-            # ausser Kraft -- sonst kaeme sein Zuruf nicht durch. Damit wuerde
-            # aber jedes "warte" oder "halt" in meinem eigenen Satz ueber den
-            # Lautsprecher zurueckkommen und mich abwuergen. Ein verpasster
-            # Zuruf ist billiger: Ramzi kann noch einmal rufen, ich nicht.
-            # Die zweite Bedingung allein reichte nicht -- Ramzi hat es am
-            # 08.08.2026 zweimal in fuenf Minuten erlebt. Sie fragt "steht das
-            # Stoppwort in meinem LAUFENDEN Satz". Das Echo gehoert aber zum
-            # VORIGEN, und das Stoppwort entsteht ohnehin erst durchs Verhoeren
-            # ("Zurueckgenommen" -> "zur Ruhe genommen", "Inhaltlich" ->
-            # "in halt lich"). In meinem Text stand es also nie.
-            #
-            # Deshalb zusaetzlich die Frage, auf die es wirklich ankommt: kam
-            # das ueberhaupt aus meinem eigenen Lautsprecher? Sein echter Zuruf
-            # teilt mit meinen letzten Saetzen keine Woerter.
-            if (ich_rede and warteschlange.ist_stoppwort(vorlaeufig)
-                    and not warteschlange.ist_stoppwort(
-                        warteschlange._mein_satz() or '')
-                    and not warteschlange.war_kuerzlich_mein_satz(vorlaeufig)):
-                print('[Weckwort] Stoppwort gehoert: %r' % vorlaeufig[:40],
-                      flush=True)
-                warteschlange.redet_merken(True)
-                self._melde(self.beim_unterbrechen)
-
-            # HIER IST SCHLUSS, SOLANGE ICH REDE.
-            #
-            # Ramzis Unterscheidung vom 15.08.2026, und sie ist die richtige --
-            # es gibt ZWEI Aufnahmen, und ich hatte sie vorher in einen Topf
-            # geworfen:
-            #
-            #   DAUERAUFNAHME    das Mikrofon hoert immer zu. Landet im
-            #                    Protokoll, wird aber nicht verwendet. Bleibt
-            #                    genau so -- daran haengt das Stoppwort, das
-            #                    oben schon geprueft wurde.
-            #   KONKRETE         faengt an, wenn er meinen Namen sagt, die
-            #   AUFNAHME         Taste drueckt oder das Gespraechsfenster offen
-            #                    ist. Sie ist die sichtbare: SEIN Untertitel
-            #                    erscheint, und nach seiner Redepause geht der
-            #                    Text an Claude.
-            #
-            # Seine Regel: "Diese konkrete Aufnahme soll nie starten, waehrend
-            # du redest -- auch nicht bei fluessigem Gespraech. Dafuer muesste
-            # ich dich einmal stoppen, egal womit, und danach kann ich erst
-            # reden."
-            #
-            # Es genuegt deshalb NICHT, den Text am Ende zu verwerfen (das tut
-            # `_pruefe` weiterhin, als zweites Netz). Zu diesem Zeitpunkt ist
-            # die konkrete Aufnahme laengst gelaufen: sein Untertitel hat
-            # meinen ueberschrieben, und fuer ihn sah es aus, als nehme ich
-            # mitten in meinem eigenen Satz seine Antwort auf. Genau das war
-            # sein Befund, dreimal gemeldet.
-            #
-            # Also endet der Mitlauscher hier. Kein Weckwort, kein Untertitel,
-            # kein Gespraechsfenster -- solange mein Lautsprecher laeuft, ist
-            # der einzige Weg zu mir der Zuruf, die Taste oder der Knopf.
-            if ich_rede:
-                continue
-
-            # Ab hier bin ich sicher still -- das `continue` oben hat alles
-            # andere abgefangen. Der Name startet also die konkrete Aufnahme,
-            # ohne dass noch einmal gefragt werden muss, ob ich es selbst war:
-            # ich kann mich nicht selbst gehoert haben, wenn ich nichts sage.
-            #
-            # Genau dieser Aufbau macht den frueheren Echo-Vergleich an dieser
-            # Stelle ueberfluessig. Er hat hier jahrelang geraten ("ist dieser
-            # Fetzen mein eigener Satz?") und lag oft genug daneben, dass Ramzi
-            # sein Mikrofon von Hand stumm geschaltet hat. Eine Bedingung, die
-            # gar nicht mehr erreicht werden kann, wenn ich rede, braucht
-            # keinen Rateversuch.
+            # Ab hier ist sicher, dass ich still bin -- die Runde waere sonst
+            # oben schon beendet worden. Der Name startet die konkrete Aufnahme
+            # deshalb ohne jede Rueckfrage, ob ich es selbst gewesen sein
+            # koennte: ich kann mich nicht selbst gehoert haben, wenn ich nichts
+            # sage. Genau das macht den frueheren Echo-Rateversuch an dieser
+            # Stelle ueberfluessig -- eine Bedingung, die waehrend meines Redens
+            # gar nicht mehr erreichbar ist, braucht keine Vermutung.
             if not erkannt and WECKWORT.search(vorlaeufig):
                 erkannt = True
                 self._melde(self.beim_erkennen)
