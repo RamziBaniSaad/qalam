@@ -1317,7 +1317,25 @@ class Weckwort:
             # verworfen wurde nur der TEXT, das Fenster hatte mein Echo
             # trotzdem aufgeschoben. Stummgeschaltetes Mikrofon lief richtig --
             # der Beweis, dass es an meiner eigenen Stimme lag.
-            if ich_rede or self._ist_echo():
+            # NUR `ich_rede`, NICHT `_ist_echo()`.
+            #
+            # `_ist_echo()` stand hier eine halbe Stunde lang mit drin, und es
+            # hat einen schlimmeren Fehler erzeugt als den, den es loesen
+            # sollte. Ramzi am 15.08.2026: "Wenn ich gerade am Reden bin, meine
+            # konkrete Aufnahme habe, dann redest du einfach dazwischen und
+            # brichst meine ab. Das ist jetzt zweimal passiert."
+            #
+            # Die Kette dahin: rede ich kurz in SEINE laufende Aeusserung
+            # hinein, gilt sie ab da als mein Echo. Dann steigt der Mitlauscher
+            # hier aus -- und setzt damit auch den Merker "Ramzi redet" nicht
+            # mehr. Ohne den Merker sieht die Zentrale freie Bahn und schickt
+            # den naechsten Satz los, der ihn erneut unterbricht. Ein Kreis,
+            # der sich selbst antreibt, und er kostet IHN seinen Satz.
+            #
+            # Sein Reden hat Vorrang vor meiner sauberen Fensterrechnung. Die
+            # Musik mag dadurch eine Spur laenger unten bleiben; ein
+            # abgeschnittener Satz ist der teurere Fehler.
+            if ich_rede:
                 if not self._arbeiter_rechnet.is_set():
                     zuruf = self._hoer_kurz(schnipsel)
                     if (zuruf and warteschlange.ist_stoppwort(zuruf)
