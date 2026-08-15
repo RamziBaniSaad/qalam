@@ -1650,21 +1650,29 @@ class Assistent:
         Video mit meinem letzten Wort wieder anlaufen, also genau zu Beginn
         seines Fensters. Jetzt hängen beide an derselben Bedingung, und das ist
         auch die ehrliche: die Musik IST für ihn die Anzeige dafür."""
-        # Wie lange am Stück nichts mehr passieren muss, bevor das Video
-        # weiterläuft. Zu früh reisst es ihm den Satz entzwei -- das war seine
-        # Beschwerde von 22:30.
+        # DER NACHLAUF IST WEG -- RAMZIS ANSAGE VOM 15.08.2026, 23:20, und sie
+        # ist die bessere Konstruktion, nicht nur ein anderer Wunsch.
         #
-        # ZWEI UND NICHT VIER, RAMZIS ZAHL (15.08.2026, 22:42). Der Nachlauf
-        # ADDIERT sich auf sein Fenster: 5 s Fenster + Nachlauf, bis das Video
-        # wieder läuft. Bei 4 waren das neun Sekunden, und die hat er selbst
-        # bemerkt ("irgendwie mehr als fünf Sekunden") -- er schaut nebenbei
-        # etwas, und jede dieser Sekunden ist für ihn ein Standbild. Siehe
-        # memory/feedback_fuenf_sekunden_fenster.md: die 5 s selbst sind seine
-        # bewusste Wahl und bleiben, also muss die Luft hier weg.
-        VIDEO_NACHLAUF = 2.0
+        # Er hatte erst 4 s, dann 2 s Nachlauf, und beides ADDIERTE sich auf
+        # sein Nachhören-Fenster: bei „Nachhören 3" musste er 5 s auf sein Bild
+        # warten, durfte aber nur 3 s davon reden. Seine Worte: „Die Wahrheit
+        # ist da nicht da. Es ist einfach nicht richtig." Er hat recht -- eine
+        # Zahl, die zwei verschiedene Dinge bedeutet, ist keine Einstellung
+        # mehr, sondern eine Falle.
+        #
+        # Jetzt gilt: **die eingestellte Nachhörzeit IST die Wartezeit.** Stellt
+        # er 3 ein, hat er 3 Sekunden zum Reden und das Video ist nach 3
+        # Sekunden zurück. Nicht mehr und nicht weniger.
+        #
+        # Was das Video trotzdem stehen lässt, ist kein Zuschlag, sondern ein
+        # ZUSTAND: redet er gerade wirklich (`ramzi_redet`), läuft nichts an.
+        # Der Unterschied ist genau der, den er meint -- eine Sekunde, die
+        # verstreicht, ohne dass er sie nutzen darf, ist verlorene Zeit; eine
+        # Sekunde, in der er redet, ist keine.
+        #
+        # Der Preis, den er ausdrücklich annimmt: denkt er mitten im Fenster
+        # kurz nach, kommt das Bild zurück. Dann stellt er das Nachhören höher.
         video_angestossen = 0.0
-        video_ruhig_seit = 0.0
-        video_zuletzt_frei = 0.0
         while self._laeuft.is_set():
             time.sleep(0.4)
             try:
@@ -1730,20 +1738,16 @@ class Assistent:
                 # durchgekommen ist. Ein einziger blockierter Takt (er sagt
                 # noch etwas, die Zentrale hat noch etwas) setzt sie zurück.
                 jetzt = time.time()
-                if jetzt - video_zuletzt_frei > 0.6:
-                    # Die letzte Runde kam nicht bis hierher -- irgendetwas
-                    # hielt noch. Die Ruhe fängt von vorne an.
-                    video_ruhig_seit = jetzt
-                video_zuletzt_frei = jetzt
-                try:
-                    if _w.ramzi_redet():
-                        video_ruhig_seit = jetzt
-                except Exception:
-                    pass
                 if not videos.haengt_an():
                     continue
-                if jetzt - video_ruhig_seit < VIDEO_NACHLAUF:
-                    continue
+                # REDET ER GERADE, bleibt es stehen -- aber das ist keine
+                # zusätzliche Wartezeit, sondern ein Zustand. Es hält nur so
+                # lange, wie wirklich etwas passiert.
+                try:
+                    if _w.ramzi_redet():
+                        continue
+                except Exception:
+                    pass
                 # Die 3 Sekunden Sperre sind gegen den Takt dieser Schleife:
                 # der abgesetzte Prozess braucht einen Moment, bis er den
                 # Merker löscht, und in der Zeit liefe sie sonst noch zweimal
@@ -1759,8 +1763,7 @@ class Assistent:
                     seit = (f'{jetzt - self.ohr.folge_bis:.1f}s'
                             if self.ohr.folge_bis else 'zugemacht')
                     print(f'[{time.strftime("%H:%M:%S")}] [Videos] fortsetzen '
-                          f'angestossen -- {VIDEO_NACHLAUF:.0f}s Ruhe, Fenster '
-                          f'seit {seit} zu.', flush=True)
+                          f'angestossen -- Fenster seit {seit} zu.', flush=True)
                     videos.anstossen(False)
             except Exception:
                 continue
