@@ -65,12 +65,18 @@ RANG_VORLESEN = 3
 #
 # Ausdruecklich KEINE Einstellung auf der Tafel: "wir brauchen nicht ins
 # Dashboard reinzumachen, das kann so bleiben."
-_ZWEI_MINUTEN = 120.0
+#
+# Nachtrag von ihm, wenige Minuten spaeter: "mach halt 180 Sekunden." Also
+# drei Minuten statt zwei. Das ist derselbe Wert wie warteschlange.KAPUTT_NACH
+# -- dort steht er als Diagnose ("so lange redet niemand am Stueck"), hier als
+# Geduld. Passt zusammen: laenger als das darf nichts warten, denn dann ist
+# nicht er langsam, sondern etwas kaputt.
+_FRIST_S = 180.0
 FRIST = {
     RANG_SOFORT: None,          # nie verfallen
-    RANG_ANTWORT: _ZWEI_MINUTEN,
-    RANG_ZWISCHEN: _ZWEI_MINUTEN,
-    RANG_VORLESEN: _ZWEI_MINUTEN,
+    RANG_ANTWORT: _FRIST_S,
+    RANG_ZWISCHEN: _FRIST_S,
+    RANG_VORLESEN: _FRIST_S,
 }
 
 _sperre = threading.RLock()
