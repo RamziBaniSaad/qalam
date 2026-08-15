@@ -1027,12 +1027,6 @@ class Weckwort:
                         _seit = time.time() - self._ich_redete_zuletzt
                         self._angefangen_waehrend_ich_rede = (
                             _spricht or _seit < NACHHALL_SEK)
-                        print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] '
-                              f'Aeusserung faengt an -- spricht_gerade='
-                              f'{_spricht}, seit meinem Reden={_seit:.1f}s, '
-                              f'als mein Echo markiert='
-                              f'{self._angefangen_waehrend_ich_rede}',
-                              flush=True)
                     # UND WEITER PRUEFEN, NICHT NUR AM ANFANG.
                     #
                     # Das war der eigentliche Fehler, und er ist am 15.08.2026
@@ -1056,63 +1050,22 @@ class Weckwort:
                     elif (time.time() - self._ich_redete_zuletzt) < NACHHALL_SEK:
                         self._angefangen_waehrend_ich_rede = True
 
-                    # SEINEN PLATZ SOFORT BELEGEN, NICHT ERST WENN TEXT DA IST.
+                    # HIER STAND EIN PLATZ-MERKER AM STIMMENMELDER -- RAUS.
                     #
-                    # Ramzis Befund vom 15.08.2026, mehrfach: "Du unterbrichst
-                    # mich die ganze Zeit, wenn ich rede." Er hat recht, und
-                    # die Ursache ist ein Zeitversatz:
+                    # Der Gedanke war richtig: seinen Platz belegen, sobald er
+                    # einen Laut macht, statt erst wenn ein Wort erkannt ist.
+                    # Die Quelle war falsch, und zwar aus demselben Grund wie
+                    # bei der Daempfung eine Runde vorher: der Stimmenmelder
+                    # schlaegt bei Musik im Takt an. Ramzi konnte danach gar
+                    # nicht mehr reden -- das Protokoll zeigte dutzende
+                    # Aeusserungsanfaenge je Sekunde, und zwischen lauter
+                    # angefangenen Aeusserungen kam keine mehr zustande.
                     #
-                    # Die Zentrale wartet, solange `ramzi_redet()` gilt. Dieser
-                    # Merker wurde bisher NUR vom Mitlauscher gesetzt -- und der
-                    # braucht erst einen erkannten Text. Zwischen seinem ersten
-                    # Laut und dem ersten Wort liegen ein bis drei Sekunden, in
-                    # denen niemand seinen Platz haelt. Genau dort ist mein
-                    # naechster Satz losgelaufen.
-                    #
-                    # Der Stimmenmelder weiss es viel frueher: er sagt Bild fuer
-                    # Bild, ob da jemand spricht. Dasselbe Muster, das mein
-                    # eigenes Reden geloest hat -- den echten Zustand nehmen
-                    # statt einer Auskunft, die hinterherhinkt.
-                    #
-                    # NICHT bei meinem eigenen Echo: sonst hielte ich mir selbst
-                    # den Platz frei und wuerde nach jedem Satz verstummen.
-                    #
-                    # Gedrosselt auf viermal je Sekunde. Der Merker ist eine
-                    # Datei, und dreissig Schreibvorgaenge je Sekunde waeren
-                    # Verschwendung; er verfaellt nach einer Sekunde
-                    # (REDET_ALTER), viermal reicht also mit Reserve. Das ist
-                    # zugleich das Netz gegen ein Geraeusch, das faelschlich als
-                    # Sprache gilt: nach einer Sekunde Stille bin ich wieder
-                    # frei, ohne dass jemand etwas zuruecksetzen muss.
-                    if (not self._angefangen_waehrend_ich_rede
-                            and time.time() - self._platz_zuletzt > 0.25):
-                        self._platz_zuletzt = time.time()
-                        try:
-                            warteschlange.redet_merken(True)
-                        except Exception:
-                            pass
-                        # HIER STAND DIE DAEMPFUNG -- UND SIE IST WIEDER RAUS.
-                        #
-                        # Der Gedanke war richtig (Musik leise, sobald er einen
-                        # Laut macht, statt erst beim erkannten Wort), die
-                        # Stelle war es nicht. Ramzi am 15.08.2026: "Die Musik
-                        # geht die ganze Zeit laut und leise, mit jedem Beat
-                        # Drop."
-                        #
-                        # Genau das muss hier passieren: der Stimmenmelder
-                        # schlaegt bei einem Bass-Einsatz an, die Daempfung
-                        # greift, der Waechter stellt zurueck, der naechste
-                        # Schlag kommt -- ein Flackern im Takt der Musik. Der
-                        # Melder taugt als Hinweis auf einen Redeversuch (der
-                        # Platz-Merker darueber verfaellt einfach wieder), aber
-                        # nicht als Ausloeser fuer etwas Hoerbares. Ein Fehlgriff
-                        # beim Merker kostet eine Sekunde Stille; derselbe
-                        # Fehlgriff an der Lautstaerke ist ein Effektgeraet.
-                        #
-                        # Gedaempft wird deshalb wieder in `assistant._geweckt`,
-                        # wenn ein Wort erkannt ist. Sein urspruenglicher Befund
-                        # (die ersten ein, zwei Sekunden laufen noch in laute
-                        # Musik) bleibt damit offen und steht in KONTEXT.md.
+                    # DIE LEHRE, zweimal am selben Tag bezahlt: der
+                    # Stimmenmelder allein ist kein Beleg dafuer, dass RAMZI
+                    # redet. Er sagt nur "hier ist Schall". Alles, was daran
+                    # haengt, muss einen Fehlgriff aushalten koennen -- und
+                    # etwas, das seine Aufnahme blockiert, kann das nicht.
                     # Wie viel er insgesamt schon gesprochen hat, auch fuer den
                     # Mitlauscher sichtbar: der laeuft in einem eigenen Faden und
                     # sieht diese Zaehler sonst nicht. Er braucht die Zahl, um
