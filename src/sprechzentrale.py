@@ -318,12 +318,55 @@ def _buehne(an):
         pass
 
 
+# Wer sagt, ob das Gespraechsfenster noch offen ist? Das Ohr, und nur das --
+# dort liegt `folge_bis`, und dort wird es auch verlaengert, solange sein Satz
+# laeuft. Die Zentrale fragt nach, statt die Frist selbst mitzurechnen: zwei
+# Uhren fuer denselben Zustand laufen frueher oder spaeter auseinander, und
+# dann waere die Musik leise, obwohl das Fenster zu ist (oder umgekehrt).
+#
+# Eingehaengt von assistant.py, sobald das Ohr steht. Fehlt der Haken -- etwa
+# beim Start oder in einem Testlauf --, gilt "kein Fenster offen"; dann
+# verhaelt sich die Buehne wie vorher, statt haengenzubleiben.
+gespraech_offen = None
+
+
+def _gespraech_offen():
+    try:
+        return bool(gespraech_offen and gespraech_offen())
+    except Exception:
+        return False
+
+
 def _lauf():
     while _laeuft.is_set():
         _aufraeumen()
         auftrag = _bestes()
         if auftrag is None:
-            _buehne(False)
+            # DIE BUEHNE BLEIBT UNTEN, SOLANGE ER NOCH ANTWORTEN DARF.
+            #
+            # Ramzis Idee vom 15.08.2026, und sie ist besser als das, was ich
+            # vorgeschlagen haette: nicht die Musik in dem Moment leise machen,
+            # in dem er zu reden anfaengt, sondern sie leise LASSEN, bis das
+            # Gespraechsfenster zu ist.
+            #
+            # Zwei Dinge auf einmal, und beide zaehlen:
+            #
+            #   * Er hoert, ob er noch reden darf. Musik leise = das Fenster
+            #     ist offen. Musik wieder laut = vorbei, jetzt braucht es
+            #     wieder meinen Namen oder die Taste. Ein Zustand, der bisher
+            #     nur auf der Tafel stand, ist damit hoerbar -- und zwar genau
+            #     dort, wo er ohnehin hinhoert.
+            #   * Musik nebenbei wird benutzbar. Sein Mikrofon hoert die
+            #     Lautsprecher mit; bleibt die Musik waehrend des ganzen
+            #     Fensters leise, kommt sein Satz durch, ohne dass er etwas
+            #     anfassen muss. Danach wird es von selbst wieder laut.
+            #
+            # Faengt er wirklich an zu reden, uebernimmt die Redepause: das
+            # Fenster laeuft dann nicht mehr ab, solange sein Satz laeuft
+            # (`satz_laeuft` in wake_word), und die Buehne bleibt entsprechend
+            # unten. Genau das wollte er: "dann gilt ja die Redepause".
+            if not _gespraech_offen():
+                _buehne(False)
             time.sleep(0.08)
             continue
 

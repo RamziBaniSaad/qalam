@@ -294,6 +294,13 @@ class Assistent:
                             beim_unterbrechen=self._unterbrich_mich,
                             ist_kurzbefehl=self._ist_kurzbefehl,
                             spricht_gerade=lambda: self.sprecher.spricht_gerade())
+        # Die Zentrale muss wissen, ob das Gespraechsfenster noch offen ist --
+        # daran haengt seit dem 15.08.2026, wie lange die Musik leise bleibt
+        # (Begruendung in sprechzentrale._lauf). Sie fragt hier nach, statt die
+        # Frist selbst mitzurechnen: `folge_bis` gehoert dem Ohr, und zwei
+        # Uhren fuer denselben Zustand laufen auseinander.
+        sprechzentrale.gespraech_offen = (
+            lambda: time.time() < self.ohr.folge_bis or self.ohr.satz_laeuft)
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
