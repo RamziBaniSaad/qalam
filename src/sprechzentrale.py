@@ -380,6 +380,22 @@ def _lauf():
         if was == 'gestoppt':
             continue
 
+        # GEMESSEN, WEIL RAMZI SAGT, ICH FAHRE IHM WEITER REIN.
+        #
+        # Eine Zeile je Auftrag, direkt vor dem ersten Ton: hielt in diesem
+        # Moment jemand seinen Platz? Damit ist beim naechsten Mal beantwortet,
+        # ob der Merker fehlte (dann liegt es am Ohr) oder ob er stand und
+        # trotzdem gesprochen wurde (dann liegt es hier). Raten hat an diesem
+        # Tag fuenf Runden gekostet, Messen eine.
+        try:
+            import warteschlange as _w
+            print('[Zentrale] starte Auftrag -- ramzi_ist_dran=%s '
+                  '(redet=%s, diktat=%s): %r'
+                  % (_w.ramzi_ist_dran(), _w.ramzi_redet(),
+                     _w.qalam_nimmt_auf(), auftrag['text'][:40]), flush=True)
+        except Exception:
+            pass
+
         _buehne(True)
         try:
             ergebnis = _sprecher.sprich(auftrag['text'])

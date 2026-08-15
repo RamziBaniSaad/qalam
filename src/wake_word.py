@@ -1091,6 +1091,30 @@ class Weckwort:
                             warteschlange.redet_merken(True)
                         except Exception:
                             pass
+                        # UND DIE MUSIK GLEICH MIT.
+                        #
+                        # Ramzis Befund vom 15.08.2026, direkt nach dem
+                        # Platz-Merker: "Als ich angefangen habe zu reden mit
+                        # der Taste, ist es nicht leiser geworden."
+                        #
+                        # Derselbe Zeitversatz an einer anderen Stelle:
+                        # gedaempft wurde bisher in `assistant._geweckt`, also
+                        # erst wenn ein Text erkannt ist. Bis dahin hat er
+                        # schon ein, zwei Sekunden in laute Musik gesprochen --
+                        # und genau die Sekunden versteht sein Mikrofon am
+                        # schlechtesten.
+                        #
+                        # `daempfen_im_hintergrund` merkt sich die alten Werte
+                        # und tut beim zweiten Aufruf nichts Zusaetzliches, ist
+                        # hier also gefahrlos. Zurueckgestellt wird wie bisher
+                        # von den beiden Waechtern -- daran aendert sich
+                        # nichts, also kann hier auch nichts haengenbleiben.
+                        try:
+                            import lautstaerke
+                            if not lautstaerke.gedaempft():
+                                lautstaerke.daempfen_im_hintergrund()
+                        except Exception:
+                            pass
                     in_sprache = True
                     # NUR bei mehreren Frames hintereinander gilt die Stille als
                     # gebrochen -- sonst löscht ein einzelnes Spielgeräusch sie.
