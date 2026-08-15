@@ -187,6 +187,41 @@ def anzahl():
         return len(_auftraege)
 
 
+# Der Auftrag, den ich gerade in der Hand habe -- schon aus der Liste genommen,
+# aber noch nicht gesprochen.
+#
+# Ramzi am 15.08.2026, 20:30: "Du hast geredet und ich konnte danach nicht
+# reden. Das hat direkt die Musik wieder laut gemacht." Und ausdruecklich dazu:
+# er will KEINE Pausen zwischen meinen Bloecken -- ich darf so lange reden wie
+# ich will, aber am Ende von allem gehoeren ihm seine zehn Sekunden.
+#
+# Das Loch sass genau hier. Die Lautstaerke-Wache haelt die Musik leise,
+# solange noch etwas WARTET (`anzahl`). Nur ist ein Auftrag, dessen Stimme
+# gerade erzeugt wird, nicht mehr in der Liste und noch nicht im Redezug --
+# fuer beide Wachen sah das aus wie "fertig, Gespraech vorbei". Bei einem
+# kurzen Satz deckt der Nachhall das zu, bei einem langen Block dauert das
+# Erzeugen mehrere Sekunden: die Musik springt mitten im Monolog hoch, und
+# sein Fenster faengt an der falschen Stelle an zu laufen.
+_in_arbeit = None
+
+
+def in_arbeit():
+    """Habe ich gerade einen Auftrag in der Hand -- auch wenn noch kein Ton
+    kommt, weil die Stimme erst erzeugt wird?"""
+    with _sperre:
+        return _in_arbeit is not None
+
+
+def beschaeftigt():
+    """Ist noch irgendetwas offen? Wartendes UND das gerade Laufende.
+
+    Die eine Auskunft, auf die sich beide Wachen stuetzen sollen. Getrennt
+    gefragt hat jede von beiden ihre eigene halbe Wahrheit gehabt.
+    """
+    with _sperre:
+        return bool(_auftraege) or _in_arbeit is not None
+
+
 def stoppe_alles(grund='Stopp'):
     """Sofort still sein: laufenden Satz abbrechen UND die Liste leeren.
 
@@ -354,11 +389,20 @@ def _lauf():
             continue
 
         _buehne(True)
+        global _in_arbeit
+        with _sperre:
+            _in_arbeit = auftrag
         try:
             ergebnis = _sprecher.sprich(auftrag['text'])
         except Exception as e:
             print('[Zentrale] Sprechen fehlgeschlagen: %s' % e, flush=True)
             continue
+        finally:
+            # Auch im Fehlerfall wieder freigeben -- ein haengender Merker
+            # wuerde die Musik fuer immer leise lassen. Genau diese Falle hat
+            # heute Abend schon einmal zugeschnappt (der Tasten-Merker).
+            with _sperre:
+                _in_arbeit = None
 
         # Was ist daraus geworden? Der Sprecher sagt es selbst.
         #

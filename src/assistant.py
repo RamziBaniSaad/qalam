@@ -1516,7 +1516,22 @@ class Assistent:
                 # zwei meiner Sätze und während die Stimme erst erzeugt wird,
                 # sagt die alte Auskunft "nein" -- und dann lief das Fenster
                 # ausgerechnet in meinen eigenen Pausen ab.
-                if not _w.noor_hat_das_wort():
+                # ODER die Zentrale hat noch etwas in der Hand.
+                #
+                # Ramzi am 15.08.2026, 20:30, und es ist eine Ansage, keine
+                # Bitte: "Ich will keine Pausen zwischendurch. Wenn du viel zu
+                # sagen hast, kannst du das gerne machen -- aber am Ende von
+                # all dem, was du gesagt hast, soll ich trotzdem diese Zeit
+                # bekommen, um zu reden."
+                #
+                # Also darf das Fenster nicht schon zwischen zwei Bloecken
+                # anfangen zu laufen. Vorher tat es das: waehrend die Stimme
+                # des naechsten Blocks erzeugt wurde, war der Redezug aus und
+                # die Liste leer -- das Fenster lief los, waehrend ich gerade
+                # Luft holte, und war zum Teil schon verbraucht, wenn ich
+                # wirklich fertig war. Seine zehn Sekunden fangen erst an,
+                # wenn das LETZTE Wort gesagt ist.
+                if not (_w.noor_hat_das_wort() or sprechzentrale.beschaeftigt()):
                     continue
                 self.ohr.folge_bis = max(self.ohr.folge_bis,
                                          time.time() + dauer)
@@ -1587,7 +1602,7 @@ class Assistent:
                 # in der Hand. Sonst springt die Musik zwischen je zwei
                 # Aufträgen kurz hoch -- genau das Zucken, das Ramzi am
                 # Video gesehen hat.
-                if sprechzentrale.anzahl():
+                if sprechzentrale.beschaeftigt():
                     continue
                 from wake_word import qalam_nimmt_auf
                 if qalam_nimmt_auf():
