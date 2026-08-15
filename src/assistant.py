@@ -733,6 +733,26 @@ class Assistent:
                 self._taste_haengt = True
                 jetzt = time.time()
 
+                # JEDER DRUCK KOMMT INS PROTOKOLL, samt dem, was in dem
+                # Moment galt. Ramzi am 15.08.2026, 18:22: "ich druecke
+                # einfach die Taste und ich rede, aber das regelt gar nicht,
+                # ich muss nochmal druecken." Ich konnte dazu nichts sagen --
+                # ein Druck, der mich WECKT, hinterliess bisher keine einzige
+                # Zeile, nur der Stopp-Zweig schrieb etwas. Was man nicht
+                # sieht, kann man nicht diagnostizieren, und Raten hat an
+                # diesem Tag genug gekostet.
+                try:
+                    print('[%s] [Taste] rechte Strg -- ich rede: %s, '
+                          'Auftraege: %d, Fenster offen: %.1fs, letzter Druck '
+                          'vor %.1fs'
+                          % (time.strftime('%H:%M:%S'), self._ich_rede_noch(),
+                             sprechzentrale.anzahl(),
+                             max(0.0, self.ohr.folge_bis - jetzt),
+                             jetzt - (self._letzter_tastendruck or jetzt)),
+                          flush=True)
+                except Exception:
+                    pass
+
                 # REDE ICH GERADE? Dann ist die Taste der STOPP -- vor allem
                 # anderen und ohne Doppeldruck.
                 #
