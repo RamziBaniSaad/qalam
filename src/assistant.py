@@ -294,13 +294,6 @@ class Assistent:
                             beim_unterbrechen=self._unterbrich_mich,
                             ist_kurzbefehl=self._ist_kurzbefehl,
                             spricht_gerade=lambda: self.sprecher.spricht_gerade())
-        # Die Zentrale muss wissen, ob das Gespraechsfenster noch offen ist --
-        # daran haengt seit dem 15.08.2026, wie lange die Musik leise bleibt
-        # (Begruendung in sprechzentrale._lauf). Sie fragt hier nach, statt die
-        # Frist selbst mitzurechnen: `folge_bis` gehoert dem Ohr, und zwei
-        # Uhren fuer denselben Zustand laufen auseinander.
-        sprechzentrale.gespraech_offen = (
-            lambda: time.time() < self.ohr.folge_bis or self.ohr.satz_laeuft)
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
@@ -1383,11 +1376,12 @@ class Assistent:
                     continue
                 neu = max(self.ohr.folge_bis, time.time() + dauer)
                 self.ohr.folge_bis = neu
-                # Mitschreiben, dass DIESES Fenster von mir kommt -- siehe
-                # `_lautstaerke_wache`. Sonst bliebe Ramzis Musik nach jeder
-                # meiner Antworten noch 15 Sekunden leise, und das hat er nicht
-                # bestellt. Das Folgefenster beantwortet "darf er ohne meinen
-                # Namen reden", nicht "laeuft noch ein Gespraech".
+                # Weiter mitgeschrieben, obwohl `_lautstaerke_wache` seit dem
+                # 15.08.2026 nicht mehr danach fragt: die Zahl beantwortet
+                # "woher kommt dieses Fenster", und das ist beim Nachsehen im
+                # Protokoll die erste Frage. Sie kostet nichts und ist die
+                # einzige Stelle, an der der Unterschied ueberhaupt festgehalten
+                # wird.
                 self._folge_bis_von_mir = neu
             except Exception:
                 pass
@@ -1410,15 +1404,34 @@ class Assistent:
                 import lautstaerke
                 if not lautstaerke.gedaempft():
                     continue
-                # Ein Folgefenster, das NUR `_gespraech_offen_halten` offen
-                # haelt, zaehlt hier nicht: es heisst "er darf ohne meinen Namen
-                # antworten", nicht "es laeuft noch ein Gespraech". Sonst bliebe
-                # die Musik nach jeder meiner Antworten 15 Sekunden zu leise --
-                # eine Nebenwirkung, die niemand bestellt hat.
-                folge = self.ohr.folge_bis
-                if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
-                    folge = 0.0
-                if time.time() < folge:
+                # DIE MUSIK BLEIBT LEISE, SOLANGE ER OHNE MEINEN NAMEN REDEN
+                # DARF -- auch dann, wenn dieses Fenster von MIR kommt.
+                #
+                # Hier stand bis zum 15.08.2026 das Gegenteil: ein Folgefenster
+                # aus `_gespraech_offen_halten` wurde ausdruecklich ignoriert,
+                # damit die Musik nach meinen Antworten nicht "zu leise" bleibt.
+                # Ramzi hat es an diesem Tag umgedreht, und seine Begruendung
+                # ist die bessere -- er hat aus der Nebenwirkung eine ANZEIGE
+                # gemacht:
+                #
+                #   "Solange die Musik noch leise ist, ist das fuer mich ein
+                #    Faktor, dass ich noch sprechen kann. Und sobald die Musik
+                #    lauter wird, weiss ich: okay, fluessiges Gespraech ist
+                #    vorbei."
+                #
+                # Damit ist ein Zustand hoerbar, der bisher nur auf der Tafel
+                # stand -- und zwar genau dort, wo er ohnehin hinhoert. Der
+                # zweite Gewinn ist ebenso praktisch: sein Mikrofon hoert die
+                # Lautsprecher mit, also war Musik nebenbei bisher der Grund,
+                # warum seine Saetze nicht ankamen. Ist sie waehrend des
+                # ganzen Fensters gedaempft, kommt er durch, ohne etwas
+                # anzufassen -- und danach wird es von selbst wieder laut.
+                #
+                # Faengt er wirklich an zu reden, uebernimmt die Redepause: der
+                # `satz_laeuft`-Zweig gleich darunter haelt die Musik unten,
+                # bis er fertig ist, ganz ohne Uhr. Genau das wollte er: "dann
+                # gilt ja die Redepause".
+                if time.time() < self.ohr.folge_bis:
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
