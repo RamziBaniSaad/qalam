@@ -391,6 +391,39 @@ def ist_zuruf_stopp(gehoert):
     return len(str(gehoert or '').split()) <= STOPP_MAX_WOERTER
 
 
+# Und die zweite Haelfte derselben Sache, die Ramzi selbst benannt hat:
+# "du erkennst nicht, dass es von dir kommt, und dann stoppst du dich selber
+# die ganze Zeit."
+#
+# Die Laengengrenze oben faengt den langen Vortrag ab. Sie faengt NICHT den
+# Fall, dass ausgerechnet ein Drei-Sekunden-Ausschnitt meines eigenen Satzes
+# kurz genug ist: "das Wort Stopp" sind drei Woerter und kaemen durch.
+#
+# Was hier hilft, ist das Einzige, was nicht luegt: ICH WEISS, WAS ICH GESAGT
+# HABE. Nicht wie es zurueckkam -- das ist verhoert und darum wertlos --
+# sondern was aus meinem Lautsprecher kam. Habe ich das Wort in den letzten
+# Sekunden selbst gesagt, ist ein gehoertes Stoppwort waehrend meines Redens
+# so gut wie sicher mein eigenes Echo.
+#
+# Der Preis ist klein und benannt: sage ich selbst "stopp" oder "warte", kann
+# er mich fuenfzehn Sekunden lang nicht per ZURUF anhalten. Die rechte
+# Strg-Taste und der Knopf auf der Tafel wirken weiter -- und die sind ohnehin
+# die Wege, die nie danebengreifen koennen.
+STOPP_EIGEN_FENSTER = 15.0
+
+
+def habe_ich_stopp_gesagt(sekunden=STOPP_EIGEN_FENSTER):
+    """Kam das Stoppwort in den letzten Sekunden aus MEINEM Lautsprecher?"""
+    try:
+        with open(GESAGT, encoding='utf-8') as f:
+            alt = json.load(f)
+    except Exception:
+        return False
+    jetzt = time.time()
+    return any(ist_stoppwort(e.get('text', ''))
+               for e in alt if jetzt - e.get('t', 0) < sekunden)
+
+
 def ist_mein_echo(gehoert, kurz_erlaubt=False):
     """Ist das, was das Ohr gehört hat, in Wahrheit meine eigene Stimme?
 

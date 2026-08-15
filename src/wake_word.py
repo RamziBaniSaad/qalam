@@ -1352,14 +1352,28 @@ class Weckwort:
                     # sie den TEXT vergleichen -- Begruendung bei
                     # STOPP_MAX_WOERTER.
                     zuruf = self._hoer_kurz(schnipsel)
-                    if (zuruf and warteschlange.ist_zuruf_stopp(zuruf)
-                            and not warteschlange.ist_stoppwort(
-                                warteschlange._mein_satz() or '')
-                            and not warteschlange.war_kuerzlich_mein_satz(zuruf)):
-                        print('[Weckwort] Stoppwort gehoert: %r' % zuruf[:40],
-                              flush=True)
-                        warteschlange.redet_merken(True)
-                        self._melde(self.beim_unterbrechen)
+                    if zuruf and warteschlange.ist_zuruf_stopp(zuruf):
+                        # Vier Sicherungen, und sie fragen VERSCHIEDENE Dinge --
+                        # das ist der Punkt. Der Text luegt (verhoert), also
+                        # darf nicht alles am Text haengen. Begruendung bei
+                        # warteschlange.STOPP_MAX_WOERTER und
+                        # habe_ich_stopp_gesagt.
+                        eigen = (warteschlange.habe_ich_stopp_gesagt()
+                                 or warteschlange.ist_stoppwort(
+                                     warteschlange._mein_satz() or '')
+                                 or warteschlange.war_kuerzlich_mein_satz(zuruf))
+                        if eigen:
+                            # LAUT sagen, dass hier einer unterdrueckt wurde.
+                            # Ramzi hat den Fehler nur gefunden, weil das
+                            # Gegenteil im Protokoll stand; ein still
+                            # verschluckter Zuruf waere genauso teuer.
+                            print('[Weckwort] Stoppwort ueberhoert -- das war '
+                                  'ich selbst: %r' % zuruf[:40], flush=True)
+                        else:
+                            print('[Weckwort] Stoppwort gehoert: %r' % zuruf[:40],
+                                  flush=True)
+                            warteschlange.redet_merken(True)
+                            self._melde(self.beim_unterbrechen)
                 continue
 
             # Vorrang für das genaue Modell -- siehe _arbeiter_rechnet.
