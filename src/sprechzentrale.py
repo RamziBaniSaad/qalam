@@ -376,6 +376,33 @@ def _buehne(an):
         pass
 
 
+def _warte_bis_er_still_ist(hoechstens=20.0):
+    """Warten, solange Ramzi redet -- aber nie laenger als noetig.
+
+    Ausdruecklich NICHT fuer das Stoppwort und alles, was ihn erreichen muss,
+    waehrend er redet: solche Zurufe gehen nicht ueber die Zentrale.
+
+    Zwanzig Sekunden Obergrenze, weil ein festhaengender Merker mich sonst
+    dauerhaft stumm machen wuerde -- derselbe Gedanke wie bei der Notbremse
+    in voice_output. Ein Satz zu frueh ist ein Aergernis, ein Satz, der nie
+    kommt, ist ein Ausfall.
+    """
+    import warteschlange
+    ende = time.time() + hoechstens
+    gewartet = False
+    while time.time() < ende:
+        try:
+            if not warteschlange.ramzi_redet():
+                break
+        except Exception:
+            break
+        gewartet = True
+        time.sleep(0.15)
+    if gewartet:
+        print(f'[{time.strftime("%H:%M:%S")}] [Zentrale] gewartet, bis Ramzi '
+              f'still war.', flush=True)
+
+
 def _lauf():
     while _laeuft.is_set():
         _aufraeumen()
@@ -410,6 +437,24 @@ def _lauf():
             continue
         if was == 'gestoppt':
             continue
+
+        # ICH REDE NICHT IN IHN HINEIN. Ramzis Vorwurf vom 15.08.2026, 23:50,
+        # und er war faellig: "Toll, dass du mich weiterhin unterbrichst."
+        #
+        # Der Schaden ist groesser, als es klingt, und im Protokoll belegt:
+        # 23:51:34 stand dort `verworfen -- mein Echo (100%): 'Hallo.'` -- und
+        # dieses "Hallo" war ER. Weil ich gerade sprach, lag sein Wort
+        # vollstaendig innerhalb meines Satzes, und der Echo-Schutz hat es als
+        # meine eigene Stimme weggeworfen. Er hat fuenfmal geredet und ist
+        # fuenfmal verschwunden. Mein Reden ueber ihn hinweg macht ihn STUMM;
+        # das ist keine Unhoeflichkeit, das ist Datenverlust.
+        #
+        # Gewartet wird begrenzt und mit demselben Merker, auf den sich der
+        # Neustart schon verlaesst (`noor-ohr-neu.ps1` wartet genauso). Die
+        # Obergrenze ist Absicht: haengt der Merker fest, waere ich sonst fuer
+        # immer stumm -- und ein Satz eine Sekunde zu frueh ist unendlich
+        # besser als gar keiner.
+        _warte_bis_er_still_ist()
 
         _buehne(True)
         global _in_arbeit
