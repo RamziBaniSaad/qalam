@@ -368,7 +368,17 @@ def aufnahme_beginnt():
 
 def aufnahme_endet():
     warteschlange.aufnahme_endet()
-    _leiser(False)
+    # DIE MUSIK MACHT NUR EINE STELLE WIEDER LAUT: die Waechterin im
+    # Assistenten. Sie ist die einzige, die weiss, ob sein Gespraechsfenster
+    # noch offen ist -- und seit dem 15.08.2026 ist genau das hoerbar (F3).
+    # Stellte diese Zeile hier gleich mit zurueck, waere sie die zweite Tuer,
+    # und eine Bedingung an einer von zwei Tueren ist keine Bedingung.
+    #
+    # Laeuft das Ohr gar nicht (Qalam allein), gibt es keine Waechterin --
+    # dann bleibt es bei der alten Notbremse, sonst waere die Musik fuer
+    # immer leise.
+    if not warteschlange.waechter_lebt():
+        _leiser(False)
 
 
 def qalam_nimmt_auf():
@@ -427,7 +437,11 @@ class Weckwort:
                 return True
             try:
                 import warteschlange
-                return warteschlange.noor_spricht_gerade()
+                # Die Klammer um den ganzen Redezug, nicht nur um den Ton --
+                # siehe warteschlange.noor_hat_das_wort(). Sie enthaelt die
+                # alte Auskunft (den Untertitel) und fuellt zusaetzlich die
+                # Luecke, in der die Stimme erst erzeugt wird.
+                return warteschlange.noor_hat_das_wort()
             except Exception:
                 return False
 
@@ -719,6 +733,14 @@ class Weckwort:
         # bliebe die Sperre stehen, waere das Ohr danach stumm, ohne dass
         # irgendetwas darauf hindeutet.
         self._pausiert.clear()
+        # UND SEIN SATZ IST VORBEI. Ohne diese Zeile blieb `satz_laeuft` nach
+        # einem Abbruch stehen -- es wird sonst nur von einem "fertig"
+        # geloescht, und genau das kommt hier ja nie. Die Folgen sind still und
+        # unangenehm: die Musik bleibt leise (die Waechterin sieht einen
+        # laufenden Satz), und seit dem 15.08. haelt derselbe Merker seinen
+        # Platz in der Warteschlange -- ich waere danach bis zu drei Minuten
+        # stumm. Ein Zustand braucht fuer JEDEN Ausgang einen Weg zurueck.
+        self.satz_laeuft = False
         try:
             while True:
                 self._auftraege.get_nowait()
@@ -887,6 +909,11 @@ class Weckwort:
                     self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
+                    # Aus demselben Grund wie in abbrechen(): was hier
+                    # weggeworfen wird, meldet nie ein "fertig". Bliebe der
+                    # Merker stehen, gaelte sein Satz nach dem Diktat noch als
+                    # laufend -- und niemand raeumte ihn je weg.
+                    self.satz_laeuft = False
                     with self._schloss:
                         self._laufend = None
                     continue
@@ -1244,7 +1271,21 @@ class Weckwort:
             # Mikrofon erst ankommt.
             ich_rede = ich_rede or (time.time() - self._ich_redete_zuletzt
                                     < NACHHALL_SEK)
-            if im_gespraech and not ich_rede:
+            # `satz_laeuft` haelt seinen Platz AUCH waehrend ich rede -- und das
+            # ist F2, sein haeufigster Befund: "wenn ich gerade am Reden bin,
+            # redest du einfach dazwischen und brichst meine Aufnahme ab."
+            #
+            # Der Grund lag genau hier: waehrend ich sprach, wurde sein Merker
+            # nicht mehr erneuert, verfiel nach einer Sekunde -- und die
+            # Zentrale hielt ihn fuer fertig, obwohl er mitten im Satz war.
+            # Mein naechster Auftrag lief los, sobald mein Satz endete.
+            #
+            # `satz_laeuft` ist dafuer die richtige Quelle und NICHT der
+            # Stimmenmelder (FEHLER.md, L3): es steht erst, wenn ein
+            # Zwischenstueck von IHM durchgekommen ist -- mein eigenes Echo
+            # wird vorher verworfen. Und es kann nicht haengenbleiben: jeder
+            # Weg, auf dem ein "fertig" ankommt, loescht es wieder.
+            if im_gespraech and (not ich_rede or self.satz_laeuft):
                 warteschlange.redet_merken(True)
 
             # SOLANGE ICH REDE, HOERE ICH NUR AUF EIN STOPPWORT -- SONST NICHTS.
@@ -1399,9 +1440,16 @@ class Weckwort:
         # Zwischenstueck geliefert wurde; wir sind also sicher im Gespraech und
         # brauchen die Weckwort-Pruefung unten nicht.
         if puffer is None:
+            # Sein Satz ist hier zu Ende, auch wenn kein Ton mehr dabei war --
+            # das ist ja gerade die Aussage dieses Signals. Ohne diese Zeile
+            # blieb `satz_laeuft` als einziger Rest stehen (die anderen beiden
+            # frueh verlassenen Wege sind abbrechen() und das Diktat).
+            self.satz_laeuft = False
             self._melde(self.beim_wecken, '', True)
             return
         if len(puffer) < 8:      # unter ~0,25 s ist es kein Wort, sondern ein Geräusch
+            if endgueltig:
+                self.satz_laeuft = False
             return
         audio = np.concatenate(list(puffer)).astype(np.float32) / 32768.0
         dauer_audio = len(puffer) * FRAME_MS / 1000

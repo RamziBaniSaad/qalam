@@ -280,10 +280,6 @@ class Assistent:
         # Bis wann nach einem Abbruch nichts mehr angenommen wird -- siehe
         # _abbrechen() und die Sperre in _geweckt().
         self._abbruch_bis = 0.0
-        # Der Stand des Folgefensters, den ICH zuletzt gesetzt habe, weil ich
-        # gerade rede. Siehe `_gespraech_offen_halten` und die Stelle in
-        # `_lautstaerke_wache`, die ihn wieder herausrechnet.
-        self._folge_bis_von_mir = 0.0
         self.ohr = Weckwort(self._geweckt, modell=modell,
                             beim_erkennen=self._erkannt,
                             beim_mitschreiben=self._mitschreiben,
@@ -404,6 +400,7 @@ class Assistent:
 
     def _still(self):
         sprechzentrale.stoppe_alles('Zuruf: sei still')
+        self._ihm_das_wort_geben('Zuruf: sei still')
         return None      # nichts sagen -- er will ja gerade Ruhe
 
     def _nochmal(self):
@@ -754,13 +751,22 @@ class Assistent:
                 # Im eigenen Faden: `stoppe_alles` wartet, bis wirklich Ruhe
                 # ist, und pynput hält den Tastatur-Listener an, solange dieser
                 # Rückruf läuft -- das darf seine Tastatur nicht blockieren.
-                if self.sprecher.spricht_gerade() or sprechzentrale.anzahl():
+                # `noor_hat_das_wort` mit dazu, und das ist die Lücke, die
+                # Ramzi als "die Taste tut manchmal etwas anderes" erlebt hat:
+                # zwischen "Auftrag genommen" und dem ersten Ton meldet der
+                # Sprecher noch "ich rede nicht" und die Liste ist schon leer.
+                # Genau dort hätte die Taste mich GEWECKT statt gestoppt.
+                if (self.sprecher.spricht_gerade() or sprechzentrale.anzahl()
+                        or self._ich_rede_noch()):
                     # Zurücksetzen, damit ein gleich folgender zweiter Druck
                     # nicht als Abbruch der Kette gilt.
                     self._letzter_tastendruck = 0.0
                     threading.Thread(
                         target=sprechzentrale.stoppe_alles,
                         args=('rechte Strg',), daemon=True).start()
+                    # Und ab jetzt gehört das Wort ihm -- Musik leise, Ohr
+                    # offen. Siehe _ihm_das_wort_geben(): genau das hat gefehlt.
+                    self._ihm_das_wort_geben('rechte Strg')
                     return
 
                 # HÖRT MIR GERADE NIEMAND ZU? Dann ist die Taste der RUF.
@@ -839,6 +845,19 @@ class Assistent:
             return
         sprechzentrale.einwerfen(text, sprechzentrale.RANG_ANTWORT, 'reflex')
 
+    def _ich_rede_noch(self):
+        """Rede ich gerade -- auch in den Lücken, in denen nichts zu hören ist?
+
+        Die EINE Frage, über die EINE Quelle. Der Sprecher hier im Prozess weiß
+        nichts von der Zeit, in der die Stimme erst erzeugt wird, und nichts von
+        einem anderen Prozess, der spricht (Probe-Knopf, noor-sprich.ps1).
+        Begründung in warteschlange.noor_hat_das_wort()."""
+        try:
+            import warteschlange
+            return warteschlange.noor_hat_das_wort()
+        except Exception:
+            return self.sprecher.spricht_gerade()
+
     def _wach_werden(self):
         """Aufwachen: Ton, Platzhalter, Folgefenster -- auf welchem Weg der Name
         auch gehört wurde.
@@ -859,10 +878,16 @@ class Assistent:
 
         Doppelt tönen kann es nicht: ein offenes Folgefenster heißt, dass schon
         geweckt wurde. Dafür braucht es keinen eigenen Merker, der wieder
-        veralten könnte."""
-        if time.time() < self.ohr.folge_bis:
-            return
-        ton('noor_wach.wav')
+        veralten könnte.
+
+        WAS DER TON NICHT ENTSCHEIDET (geändert 15.08.2026, F4): das Dämpfen
+        und sein Platz in der Warteschlange. Die hingen früher an demselben
+        Rücksprung -- war das Fenster schon offen, passierte gar nichts mehr,
+        und Ramzi redete in laute Musik. Ein zweiter Ruf muss nicht tönen, aber
+        er darf nicht folgenlos sein."""
+        schon_offen = time.time() < self.ohr.folge_bis
+        if not schon_offen:
+            ton('noor_wach.wav')
         # Musik leiser, solange er redet -- nicht aus. Ramzis Wunsch vom
         # 31.07.2026; die Begründung und das Zurückstellen auf den Wert von
         # VORHER stehen in lautstaerke.py. Zurück geht es in _lautstaerke_wache().
@@ -876,14 +901,65 @@ class Assistent:
             lautstaerke.daempfen_im_hintergrund()
         except Exception:
             pass
-        # Ramzi will SOFORT etwas Sichtbares zum Ton, egal was drinsteht. Das
-        # frühere Flacker-Problem lag an der 180-Sekunden-Haltezeit, nicht am
-        # Platzhalter selbst -- mit dem einstellbaren Regler (Standard 10 s)
-        # wird er zuverlässig durch echten Text ersetzt.
-        _untertitel('… ich höre zu …', 'ramzi')
+        # UND SEIN PLATZ, AB SOFORT. Der Merker hing bisher allein am
+        # Mitlauscher, und der braucht erst einen erkannten Text -- ein bis
+        # drei Sekunden, in denen sein Platz niemandem gehörte und mein
+        # nächster Satz losfuhr (F2). Hier ist die Quelle eindeutig: entweder
+        # hat er die Taste gedrückt oder sein Name ist wirklich gefallen. Und
+        # der Merker verfällt nach einer Sekunde von selbst, kann also auch
+        # nichts blockieren.
+        try:
+            import warteschlange
+            warteschlange.redet_merken(True)
+        except Exception:
+            pass
+        if not schon_offen:
+            # Ramzi will SOFORT etwas Sichtbares zum Ton, egal was drinsteht.
+            # Das frühere Flacker-Problem lag an der 180-Sekunden-Haltezeit,
+            # nicht am Platzhalter selbst.
+            _untertitel('… ich höre zu …', 'ramzi')
         # Ab jetzt zählt auch der nächste Satz ohne Namen als Auftrag: er sagt
         # den Namen, wartet auf dieses Zeichen und redet dann erst los.
-        self.ohr.folge_bis = time.time() + einstellungen.hole('folge_sekunden')
+        # `max`, damit ein zweiter Ruf ein längeres Fenster nicht VERKÜRZT.
+        self.ohr.folge_bis = max(
+            self.ohr.folge_bis,
+            time.time() + einstellungen.hole('folge_sekunden'))
+
+    def _ihm_das_wort_geben(self, grund=''):
+        """Ein ausdrücklicher Stopp gibt ihm das Wort -- Musik leise, Ohr offen.
+
+        Ramzis eigener Ablauf (15.08.2026): „Die konkrete Aufnahme soll nie
+        starten, während du redest. Dafür müsste ich dich einmal stoppen, egal
+        womit, und danach kann ich erst reden."
+
+        Genau das ist die Lücke hinter F4 gewesen: er drückt die Taste,
+        während ich rede -- das war der STOPP-Zweig, und der hat nur mich
+        abgeschaltet. Gedämpft wurde nichts, sein Platz gehörte niemandem, das
+        Fenster blieb zu. Er hat also in laute Musik weitergeredet, und genau
+        diese Sekunden versteht sein Mikrofon am schlechtesten.
+
+        Gilt für jeden ausdrücklichen Stopp: Taste, Stoppwort, Knopf auf der
+        Tafel. Kein Ton -- er wollte gerade Ruhe."""
+        print(f'[{time.strftime("%H:%M:%S")}] [Noor] Wort abgegeben ({grund}) '
+              f'-- Musik leise, Fenster offen.', flush=True)
+        try:
+            import lautstaerke
+            lautstaerke.daempfen_im_hintergrund()
+        except Exception:
+            pass
+        try:
+            import warteschlange
+            warteschlange.redet_merken(True)
+        except Exception:
+            pass
+        # Sichtbar statt hörbar: er hat gerade Ruhe verlangt, ein Ton wäre
+        # genau das Gegenteil. Der Streifen sagt ihm trotzdem, dass ich
+        # zuhöre -- der Mitlauscher überschreibt ihn mit echtem Text, sobald
+        # er redet.
+        _untertitel('… ich höre zu …', 'ramzi')
+        self.ohr.folge_bis = max(
+            self.ohr.folge_bis,
+            time.time() + einstellungen.hole('folge_sekunden'))
 
     def _mitschreiben(self, vorlaeufig):
         """Was gerade zu hören ist, sofort auf den Streifen -- noch während
@@ -1071,14 +1147,28 @@ class Assistent:
             # fertig, zählt eine Lesezeit -- und nicht mehr sein Regler.
             _ramzi_untertitel(self._sammelsatz, offen=not endgueltig)
 
-        # Wenn ich gerade rede und angesprochen werde: erst mal Klappe halten.
-        # Das ist die einfache Form vom Unterbrochenwerden -- noch nicht
-        # mitten im Wort, aber schon "du hast Vorrang".
+        # WÄHREND ICH REDE, UNTERBRICHT MICH NUR EIN AUSDRÜCKLICHES SIGNAL.
         #
-        # Über die Zentrale, damit auch die Bühne (Video, Dämpfung) sauber
-        # freigegeben wird. Nur der laufende Satz -- was wartet, wartet weiter.
-        if self.sprecher.spricht_gerade():
-            sprechzentrale.unterbrich()
+        # Ramzis Regel vom 15.08.2026, wortgetreu: „Wenn ich gerade spreche,
+        # darf mich nichts außer dem Stoppwort unterbrechen. Mehr ist da gar
+        # nicht dran." Sein eigener Name gehört ausdrücklich nicht mehr dazu --
+        # ich sage ihn ständig selbst.
+        #
+        # Hier stand vorher: sobald überhaupt ein fertiger Satz ankam, während
+        # ich rede, habe ich abgebrochen. Das ist genau die falsche Größe --
+        # ein Satz, der JETZT fertig wird, ist Ton von vorhin; er sagt nichts
+        # darüber, ob Ramzi mich gerade unterbrechen will.
+        #
+        # Das Stoppwort MITTEN in meinem Satz läuft nicht hier durch, sondern
+        # sofort über `_unterbrich_mich` (wake_word._mitlauscher). Das hier ist
+        # nur das Netz für den Fall, dass es erst mit dem fertigen Satz ankommt.
+        if self._ich_rede_noch():
+            try:
+                import warteschlange as _w
+                if _w.ist_stoppwort(text or ''):
+                    sprechzentrale.unterbrich('Stoppwort im fertigen Satz')
+            except Exception:
+                pass
 
         if not endgueltig:
             # Er redet weiter -- Fenster offenhalten, noch nichts ausführen.
@@ -1372,16 +1462,14 @@ class Assistent:
                 if dauer <= 0:
                     continue
                 import warteschlange as _w
-                if not _w.noor_spricht_gerade():
+                # `noor_hat_das_wort` statt `noor_spricht_gerade`: zwischen
+                # zwei meiner Sätze und während die Stimme erst erzeugt wird,
+                # sagt die alte Auskunft "nein" -- und dann lief das Fenster
+                # ausgerechnet in meinen eigenen Pausen ab.
+                if not _w.noor_hat_das_wort():
                     continue
-                neu = max(self.ohr.folge_bis, time.time() + dauer)
-                self.ohr.folge_bis = neu
-                # Mitschreiben, dass DIESES Fenster von mir kommt -- siehe
-                # `_lautstaerke_wache`. Sonst bliebe Ramzis Musik nach jeder
-                # meiner Antworten noch 15 Sekunden leise, und das hat er nicht
-                # bestellt. Das Folgefenster beantwortet "darf er ohne meinen
-                # Namen reden", nicht "laeuft noch ein Gespraech".
-                self._folge_bis_von_mir = neu
+                self.ohr.folge_bis = max(self.ohr.folge_bis,
+                                         time.time() + dauer)
             except Exception:
                 pass
 
@@ -1396,22 +1484,38 @@ class Assistent:
         Ereignis, kann das nicht -- er heilt sich selbst.
 
         Gedämpft bleibt es auch, solange ich noch antworte: sonst wird die Musik
-        mitten in meinem Satz laut."""
+        mitten in meinem Satz laut.
+
+        SEIT DEM 15.08.2026 IST DIE MUSIK EINE ANZEIGE (F3). Ramzis Idee, und
+        sie ist gut: „Solange die Musik noch leise ist, ist das für mich ein
+        Faktor, dass ich noch sprechen kann. Und sobald die Musik lauter wird,
+        weiß ich: okay, flüssiges Gespräch ist vorbei."
+
+        Damit hat diese Wache genau eine Bedingung, und sie ist dieselbe wie
+        die für das offene Fenster. Die frühere Ausnahme -- ein Fenster, das
+        nur `_gespraech_offen_halten` hält, zählt nicht -- ist deshalb weg: sie
+        war der Grund, warum die Musik direkt nach meiner Antwort hochging,
+        also genau dann, wenn er antworten dürfte und es nicht hören konnte.
+
+        UND ES IST DIE EINZIGE STELLE, DIE ZURÜCKSTELLT. Sie meldet sich
+        deshalb als lebend (siehe warteschlange.waechter_lebt): die beiden
+        Notbremsen in wake_word und voice_output greifen nur noch, wenn es sie
+        wirklich nicht gibt. Eine Bedingung, die nur an einer von zwei Türen
+        hängt, ist keine Bedingung -- das war der teuerste Fehler des Tages."""
         while self._laeuft.is_set():
             time.sleep(0.4)
             try:
+                import warteschlange as _w
+                # ZUERST, vor jedem Ausstieg: sonst gilt die Wache als tot,
+                # sobald gerade nichts gedämpft ist -- und die Notbremsen
+                # würden wieder mitreden.
+                _w.waechter_lebt_melden()
                 import lautstaerke
                 if not lautstaerke.gedaempft():
                     continue
-                # Ein Folgefenster, das NUR `_gespraech_offen_halten` offen
-                # haelt, zaehlt hier nicht: es heisst "er darf ohne meinen Namen
-                # antworten", nicht "es laeuft noch ein Gespraech". Sonst bliebe
-                # die Musik nach jeder meiner Antworten 15 Sekunden zu leise --
-                # eine Nebenwirkung, die niemand bestellt hat.
-                folge = self.ohr.folge_bis
-                if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
-                    folge = 0.0
-                if time.time() < folge:
+                # Sein Fenster ist offen -- also bleibt die Musik leise, und
+                # genau das ist das Zeichen, an dem er es hört.
+                if time.time() < self.ohr.folge_bis:
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
@@ -1421,7 +1525,12 @@ class Assistent:
                 # das nicht (siehe `wake_word.satz_laeuft`).
                 if getattr(self.ohr, 'satz_laeuft', False):
                     continue
-                if self.sprecher.spricht_gerade():
+                # Mit Nachhall, und der ist hier kein Schmuck: zwischen zwei
+                # Aufträgen ist die Liste unten schon leer und der nächste
+                # Satz noch nicht angemeldet. Ohne diese Spanne springt die
+                # Musik in jeder Lücke kurz hoch -- das Zucken, das Ramzi im
+                # Video gesehen hat.
+                if _w.noor_hat_das_wort(nachhall=_w.NACHHALL_SEK):
                     continue
                 # Auch dann noch gedämpft lassen, wenn zwischen zwei Sätzen
                 # gerade niemand redet: die Zentrale hat den nächsten schon
@@ -1532,8 +1641,10 @@ class Assistent:
         Knopf auf der Tafel), nicht dem blossen Anfangen zu reden.
         """
         try:
-            if self.sprecher.spricht_gerade():
+            if self._ich_rede_noch():
                 sprechzentrale.unterbrich()
+            # Er hat mich ausdrücklich gestoppt -- also will er jetzt reden.
+            self._ihm_das_wort_geben('Stoppwort')
         except Exception:
             pass
 
@@ -1612,6 +1723,7 @@ class Assistent:
         print(f'[Befehl] {befehl}', flush=True)
         if befehl == 'stopp':
             sprechzentrale.stoppe_alles('Stopp-Knopf auf der Tafel')
+            self._ihm_das_wort_geben('Stopp-Knopf')
         elif befehl == 'weckwort':
             # Umschalten und nicht "an"/"aus": der Knopf weiss zwar, was er
             # anzeigt, aber zwischen Anzeige und Druck kann sich der Zustand

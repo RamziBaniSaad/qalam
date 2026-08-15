@@ -135,6 +135,88 @@ def redet_merken(an):
         pass
 
 
+# --- WER HAT DAS WORT? Die eine Quelle, an der alles andere haengt ---------
+#
+# Bis zum 15.08.2026 gab es drei halbe Auskuenfte darueber, ob ich rede, und
+# jede war in einer anderen Luecke falsch (gemessen, siehe FEHLER.md L4/L5):
+#
+#   der Sprecher      meldet "nein" zwischen zwei Saetzen desselben Redezugs
+#   der Untertitel    kennt nur das laufende Stueck, geschaetzte Dauer
+#   die Warteschlange sagt "nichts da", waehrend die Stimme noch erzeugt wird
+#                     (gemessen 0,7-0,9 s zwischen Auftrag und erstem Ton)
+#
+# Alle drei stimmen fuer sich und ergeben zusammen "es ist still" -- genau in
+# diesen Luecken ist die Aufnahme angesprungen und hatte meinen eigenen Satz
+# drin. Ein Zustand, der zwischen zwei Zustaenden verschwindet, ist keiner.
+#
+# Also eine Klammer um den GANZEN Vorgang, von der Absicht bis zum Ende:
+# gesetzt wird sie in voice_output.Sprecher.sprich(), sobald feststeht, dass
+# gesprochen wird -- und zwar als Herzschlag, damit ein abgestuerzter Sprecher
+# mich nicht dauerhaft taub macht. Eine Datei, weil mehrere Prozesse sprechen.
+REDEZUG = os.path.join(PROJEKT, '.noor-redezug.lock')
+REDEZUG_ALTER = 1.0      # Herzschlag alle 0,25 s -- danach gilt er als tot
+NACHHALL_SEK = 2.5       # so lange ist mein Schall noch auf dem Weg zum Mikrofon
+
+
+def noor_redezug_herzschlag():
+    """Ich rede -- ab der Absicht, nicht erst ab dem ersten Ton."""
+    try:
+        with open(REDEZUG, 'w') as f:
+            f.write(str(time.time()))
+    except OSError:
+        pass
+
+
+def noor_still_seit():
+    """Sekunden seit meinem letzten Herzschlag. Sehr gross, wenn nie einer kam.
+
+    Die Datei wird bewusst NICHT geloescht: ihr Zeitstempel ist die Antwort auf
+    "wie lange ist es her" -- und genau die braucht der Nachhall."""
+    try:
+        return time.time() - os.path.getmtime(REDEZUG)
+    except OSError:
+        return 1e9
+
+
+def noor_hat_das_wort(nachhall=0.0):
+    """Rede ich gerade -- egal aus welchem Prozess und in welcher Luecke?
+
+    ODER mit der alten Auskunft, nie statt ihr: zwei Quellen, die beide nur
+    "ja" sagen koennen, machen die Antwort sicherer. Faellt eine aus, bleibt
+    die andere."""
+    return (noor_still_seit() < REDEZUG_ALTER + nachhall
+            or noor_spricht_gerade())
+
+
+# --- Kuemmert sich jemand um die Lautstaerke? ------------------------------
+#
+# Es darf genau EINE Stelle geben, die die Musik wieder laut macht -- die
+# Waechterin in assistant.py. Jede zweite Tuer laesst sie irgendwann zur
+# falschen Zeit hochgehen, und fuer Ramzi sieht das aus wie Zufall (FEHLER.md,
+# L1: "eine Bedingung, die nur an einer von zwei Tueren haengt, ist keine").
+#
+# Laeuft das Ohr aber gar nicht (Qalam allein), gibt es diese Waechterin nicht,
+# und die Musik bliebe fuer immer leise. Deshalb sagt sie hier Bescheid, dass
+# es sie gibt -- und nur wenn sie schweigt, springt die Notbremse ein.
+WAECHTER = os.path.join(PROJEKT, '.lautstaerke-waechter.lock')
+WAECHTER_ALTER = 2.0     # gemeldet alle 0,4 s
+
+
+def waechter_lebt_melden():
+    try:
+        with open(WAECHTER, 'w') as f:
+            f.write(str(time.time()))
+    except OSError:
+        pass
+
+
+def waechter_lebt():
+    try:
+        return (time.time() - os.path.getmtime(WAECHTER)) < WAECHTER_ALTER
+    except OSError:
+        return False
+
+
 # --- Mein eigenes Echo erkennen -------------------------------------------
 #
 # Das Problem, das Ramzi am 01.08.2026 nicht losgelassen hat: er redet, ich

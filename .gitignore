@@ -144,6 +144,8 @@ config.yaml
 .aufnahme.lock
 .schlaeft.lock
 .ramzi-redet.lock
+.noor-redezug.lock
+.lautstaerke-waechter.lock
 stimmen/
 ohr.log
 ohr-fehler.log

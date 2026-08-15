@@ -440,6 +440,30 @@ def _untertitel(text, worte, start, dauer):
         pass
 
 
+def _redezug_starten(ende, hoechstens=180.0):
+    """Den Herzschlag „ich rede" schlagen, bis `ende` gesetzt wird.
+
+    Die Klammer um meinen ganzen Redezug -- Begruendung in
+    warteschlange.noor_hat_das_wort(). Der Deckel ist kein Schoenheitsfehler:
+    haengt das Sprechen aus irgendeinem Grund, waere das Ohr sonst dauerhaft
+    taub. Nach drei Minuten redet niemand mehr am Stueck.
+    """
+    if ende is None:
+        return
+
+    def _schlag():
+        schluss = time.time() + hoechstens
+        while not ende.is_set() and time.time() < schluss:
+            try:
+                import warteschlange
+                warteschlange.noor_redezug_herzschlag()
+            except Exception:
+                pass
+            ende.wait(0.25)
+
+    threading.Thread(target=_schlag, daemon=True).start()
+
+
 def _er_diktiert():
     """Hat er die Diktat-Taste gedrückt, während ich rede?
 
@@ -542,12 +566,19 @@ class Sprecher:
         # (Briefkasten, Reflex, Stop-Hook), und ein Schalter waere beim Ende des
         # ersten schon wieder aus, obwohl der zweite noch redet.
         self._reden += 1
+        # Die Redezug-Klammer bekommt bei JEDEM Aufruf ihr eigenes Signal und
+        # liegt bewusst NICHT als Feld am Sprecher: reden zwei Faeden
+        # gleichzeitig (Briefkasten und Reflex), wuerde ein gemeinsames Feld
+        # vom zweiten ueberschrieben -- der Herzschlag des ersten liefe dann
+        # fuer immer weiter, und das Ohr waere dauerhaft taub.
+        ende = threading.Event()
         try:
-            return self._sprich(text, sd)
+            return self._sprich(text, sd, ende)
         finally:
+            ende.set()
             self._reden -= 1
 
-    def _sprich(self, text, sd):
+    def _sprich(self, text, sd, ende=None):
 
         saetze = in_saetze(text)
         if not saetze:
@@ -572,6 +603,16 @@ class Sprecher:
             warteschlange.warte_bis_er_fertig_ist()
         except Exception:
             pass
+
+        # AB HIER HABE ICH DAS WORT -- und zwar ab jetzt, nicht ab dem ersten
+        # Ton. Dazwischen liegen gemessen 0,7-0,9 s Stimmerzeugung, und genau
+        # in dieser Luecke ist bisher seine Aufnahme angesprungen und hatte
+        # meinen eigenen Satz drin (FEHLER.md, L4).
+        #
+        # KEINE Zeile frueher: solange ich oben auf ihn warte, gehoert das Wort
+        # IHM. Wuerde die Klammer dort schon stehen, gaelte sein eigener Satz
+        # als mein Echo und waere weg.
+        _redezug_starten(ende)
 
         # Warten, bis niemand sonst von MIR spricht. Ohne das reden zwei
         # Prozesse gleichzeitig: das Ohr beantwortet einen Reflex, während der
