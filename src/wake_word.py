@@ -810,6 +810,42 @@ class Weckwort:
                               # 01.08.2026 gefunden: "trotz 10 Sekunden nach
                               # ca. 2 Sekunden abgeschickt."
         in_sprache = False
+        # WIE VIEL VON DIESEM STUECK WAR ICH SELBST?
+        #
+        # Ramzis Test 1 am 15.08.2026, 17:00 -- durchgefallen, und er hat die
+        # Ursache selbst benannt: "ich glaube die ganze Zeit ueber war eine
+        # konkrete Aufnahme dabei, seit dem Anfang." Im Protokoll standen 754
+        # Zeichen MEINES eigenen Textes, an Claude uebergeben.
+        #
+        # Der Grund: die Echo-Markierung fiel bisher EINMAL, am Anfang der
+        # Aeusserung. Seine Aeusserung hatte aber schon angefangen, bevor ich
+        # zu reden anfing -- ich bin mitten hineingelaufen. Der Anfang gehoerte
+        # ihm, also galt alles Weitere als seins, auch meine vierzig Sekunden.
+        #
+        # Es ist derselbe Fehlertyp wie in FEHLER.md L2, nur andersherum: eine
+        # Aeusserung ist ein langer Block, und EINE Entscheidung an seinem
+        # Anfang kann nicht fuer den ganzen Block gelten. Die richtige Koernung
+        # ist das STUECK -- also genau das, was auch abgegeben wird.
+        #
+        # Gezaehlt wird je Bild, ohne eine einzige Datei anzufassen: der
+        # Mitlauscher stellt `_ich_redete_zuletzt` ohnehin alle 0,3 s. Bewusst
+        # ein enges Fenster (0,6 s) und NICHT der Nachhall: mit 2,5 s waere
+        # seine Antwort direkt nach meinem Satz -- das fluessige Gespraech, das
+        # heute nachweislich funktioniert -- als mein Echo verschwunden.
+        #
+        # ERSTE MESSUNG, 17:06: der Anteil ueber ALLE Bilder kam bei meinen
+        # eigenen Saetzen nur auf 62 bis 68 Prozent -- und drei Stuecke, die
+        # ganz aus meiner Stimme bestanden, wurden gar nicht erst markiert.
+        # Der Grund: in einem Stueck steckt auch alles, was VOR meinem Reden
+        # lag (die Musik haelt den Melder wach) und die nachlaufende Stille.
+        # Beides verduennt den Anteil, obwohl es gar keine fremde Stimme ist.
+        #
+        # Also wird ueber das gezaehlt, worum es geht: die SPRACH-Bilder. Von
+        # allem, was in diesem Stueck nach Sprache klang -- wie viel davon lief,
+        # waehrend ich redete?
+        mein_ton = 0          # Bilder insgesamt, nur fuers Protokoll
+        mein_sprach = 0       # davon: Sprach-Bilder waehrend meines Redens
+        stueck_sprach = 0     # Sprach-Bilder in diesem Stueck insgesamt
         stueck_offen = False  # In dieser Aeusserung wurde schon ein Zwischenstueck
                               # abgegeben -- der Assistent sammelt also gerade einen
                               # Satz und wartet auf ein "fertig". Solange das gilt,
@@ -849,27 +885,55 @@ class Weckwort:
             Deshalb: zu wenig Ton beendet ein ZWISCHENSTUECK, aber niemals ein
             FERTIG, solange ein Satz gesammelt wird. Dann geht statt Ton ein
             reines Signal raus."""
-            nonlocal stueck_offen
+            nonlocal stueck_offen, mein_ton, mein_sprach, stueck_sprach
             if (gesprochene_bilder is not None
                     and gesprochene_bilder < MINDEST_SPRACH_FRAMES):
                 if endgueltig and stueck_offen:
                     print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig ohne '
                           f'neuen Ton -- gesammelter Satz wird abgeschickt')
-                    self._auftraege.put((None, True, self._ist_echo()))
+                    self._auftraege.put((None, True, self._ist_echo(), 0.0))
                     stueck_offen = False
                 puffer.clear()
+                mein_ton = mein_sprach = stueck_sprach = 0
                 with self._schloss:
                     self._laufend = None
                 return
+            # WEM GEHOERT DIESES STUECK -- gemessen, nicht am Anfang geraten.
+            #
+            # Zwei Fragen, und beide muessen "nein" sagen, damit es durchgeht:
+            #   * fing es waehrend meines Redens an und liegt es immer noch
+            #     darin?              -> _ist_echo(), der alte Weg
+            #   * war es fast VOLLSTAENDIG waehrend meines Redens?
+            #                         -> der Anteil, der neue Weg
+            #
+            # Neunzig Prozent und nicht hundert: an den Raendern liegt immer
+            # ein Bild daneben. Und der Anteil kann nur dort hoch werden, wo er
+            # mich ohnehin erst stoppen muesste -- faengt er mitten in meinem
+            # Satz an und redet darueber hinaus weiter, bleibt der Anteil klein
+            # und der Satz gehoert ihm. Genau seine Regel: "Mein Echo kann
+            # meinen Lautsprecher nicht ueberleben."
+            # Von allem, was in diesem Stueck nach Sprache klang: wie viel lief,
+            # waehrend ich redete? Sechzig Prozent und nicht neunzig -- die
+            # erste Messung hat gezeigt, dass ein Stueck aus reiner
+            # Eigenstimme nicht auf neunzig kommt, weil die Raender dazuzaehlen.
+            #
+            # Sechzig laesst seine Regel heil: faengt er mitten in meinem Satz
+            # an und redet darueber hinaus weiter, muss er nach meinem Ende nur
+            # etwa zwei Drittel dessen sprechen, was er waehrend meines Redens
+            # gesagt hat -- und wer weiterredet, tut genau das.
+            anteil = mein_sprach / max(1, stueck_sprach)
+            mein_echo = self._ist_echo() or anteil >= 0.6
             # Der Echo-Merker reist MIT dem Ausschnitt, statt beim Auswerten neu
             # nachgesehen zu werden: der Arbeiter laeuft in einem eigenen Faden
             # und ist oft erst dran, wenn laengst die naechste Aeusserung
             # angefangen hat. Bis dahin haette der Merker schon dem falschen
             # Ausschnitt gehoert -- ein Fehler, der nur manchmal auftritt und
             # sich deshalb nie zuverlaessig zeigen wuerde.
-            self._auftraege.put((list(puffer), endgueltig, self._ist_echo()))
+            self._auftraege.put((list(puffer), endgueltig, mein_echo,
+                                 round(anteil, 2)))
             stueck_offen = not endgueltig
             puffer.clear()
+            mein_ton = mein_sprach = stueck_sprach = 0
             with self._schloss:
                 self._laufend = None
 
@@ -909,7 +973,9 @@ class Weckwort:
                     self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
+                    mein_ton = mein_sprach = stueck_sprach = 0
                     # Aus demselben Grund wie in abbrechen(): was hier
+                    # (Diktat -- der Puffer wird ohnehin verworfen.)
                     # weggeworfen wird, meldet nie ein "fertig". Bliebe der
                     # Merker stehen, gaelte sein Satz nach dem Diktat noch als
                     # laufend -- und niemand raeumte ihn je weg.
@@ -931,6 +997,7 @@ class Weckwort:
                     self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
+                    mein_ton = mein_sprach = stueck_sprach = 0
                     with self._schloss:
                         self._laufend = None
                     continue
@@ -1013,6 +1080,12 @@ class Weckwort:
                     if pegel < noetig:
                         ist_sprache = False
 
+                # REDE ICH IN DIESEM AUGENBLICK? Eine Subtraktion, keine Datei:
+                # der Mitlauscher stellt die Uhr ohnehin alle 0,3 s, und hier
+                # laeuft alle 30 ms ein Bild durch. Das enge Fenster ist
+                # Absicht -- Begruendung oben bei `mein_ton`.
+                ich_rede_jetzt = (time.time() - self._ich_redete_zuletzt) < 0.6
+
                 if not ist_sprache:
                     # Die Folge reisst bei JEDEM stillen Frame -- auch dann,
                     # wenn gerade keine Aeusserung laeuft. Ohne diese Zeile
@@ -1064,6 +1137,10 @@ class Weckwort:
                     if self._kurz_erwartet and gesamt_sprach > KURZBEFEHL_MAX_SPRACH:
                         self._kurz_erwartet = False
                     puffer.append(frame)
+                    stueck_sprach += 1
+                    if ich_rede_jetzt:
+                        mein_ton += 1
+                        mein_sprach += 1
                     # Nur einen Ausschnitt hinlegen, damit der Mitlauscher in
                     # seinem eigenen Faden etwas zu tun hat. Kopieren, nicht
                     # teilen: an der Deque wird gleich weitergearbeitet.
@@ -1076,6 +1153,8 @@ class Weckwort:
                     sprach_folge = 0
                     stille += 1
                     puffer.append(frame)
+                    if ich_rede_jetzt:
+                        mein_ton += 1
                     # Die erste Sekunde Stille gehört noch zum Ausschnitt.
                     # Sonst sieht der Mitlauscher bei einem kurzen "Noor" nur
                     # 0,66 s Ton, und dafür gibt das schnelle Modell oft gar
@@ -1230,12 +1309,13 @@ class Weckwort:
         """Fertige Segmente genau transkribieren -- in Ruhe, neben der Aufnahme."""
         while not self._stop.is_set():
             try:
-                frames, endgueltig, mein_echo = self._auftraege.get(timeout=0.4)
+                frames, endgueltig, mein_echo, anteil = \
+                    self._auftraege.get(timeout=0.4)
             except queue.Empty:
                 continue
             self._arbeiter_rechnet.set()
             try:
-                self._pruefe(frames, endgueltig, mein_echo)
+                self._pruefe(frames, endgueltig, mein_echo, anteil)
             except Exception as e:
                 print(f'[Weckwort] Auswertung fehlgeschlagen: {e}')
             finally:
@@ -1478,7 +1558,7 @@ class Weckwort:
         except Exception:
             return None
 
-    def _pruefe(self, puffer, endgueltig=True, mein_echo=False):
+    def _pruefe(self, puffer, endgueltig=True, mein_echo=False, anteil=0.0):
         """Segment genau transkribieren und entscheiden.
 
         `endgueltig=False` heißt: nur ein Zwischenstück, Ramzi redet noch
@@ -1609,6 +1689,7 @@ class Weckwort:
         print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] {dauer_audio:.1f}s Audio -> '
               f'{dauer_rechnen:.2f}s Rechenzeit '
               f'({self.modell_name}, genau, {getattr(self._modell, "device", "?")}) '
+              f'| mein Anteil {anteil * 100:.0f}% '
               f'| gehoert: {text!r}{lach_notiz}')
 
         # HAT DIESE AEUSSERUNG ANGEFANGEN, WAEHREND ICH REDETE? Dann bin ich es
@@ -1632,7 +1713,8 @@ class Weckwort:
         # bereits eine Zeile vorher gegen mein eigenes Echo abgesichert.
         if mein_echo and text and not warteschlange.ist_zuruf_stopp(text):
             print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] verworfen -- '
-                  f'fing an, waehrend ich sprach (mein Echo): {text[:60]!r}',
+                  f'mein Echo ({anteil * 100:.0f}% der Sprache in diesem '
+                  f'Stueck lief, waehrend ich redete): {text[:60]!r}',
                   flush=True)
             if endgueltig:
                 self.satz_laeuft = False
