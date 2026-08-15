@@ -1430,83 +1430,29 @@ class Assistent:
                 import lautstaerke
                 if not lautstaerke.gedaempft():
                     continue
-                # DIE MUSIK BLEIBT LEISE, SOLANGE ER OHNE MEINEN NAMEN REDEN
-                # DARF -- auch dann, wenn dieses Fenster von MIR kommt.
+                # ZURUECK AUF DEN STAND VOR DEM 15.08.2026.
                 #
-                # Hier stand bis zum 15.08.2026 das Gegenteil: ein Folgefenster
-                # aus `_gespraech_offen_halten` wurde ausdruecklich ignoriert,
-                # damit die Musik nach meinen Antworten nicht "zu leise" bleibt.
-                # Ramzi hat es an diesem Tag umgedreht, und seine Begruendung
-                # ist die bessere -- er hat aus der Nebenwirkung eine ANZEIGE
-                # gemacht:
+                # Ramzis Wunsch an diesem Tag war richtig und bleibt gueltig:
+                # die Musik soll leise bleiben, solange er noch antworten darf
+                # -- daran haette er gehoert, ob sein Fenster offen ist. Ich
+                # habe es dreimal hintereinander gebaut und jedes Mal etwas
+                # anderes kaputtgemacht: erst blieb sie fuer immer leise (am
+                # 45-Sekunden-Fenster), dann wurde sie mitten in seinem Reden
+                # laut, dann gar nicht mehr leise.
                 #
-                #   "Solange die Musik noch leise ist, ist das fuer mich ein
-                #    Faktor, dass ich noch sprechen kann. Und sobald die Musik
-                #    lauter wird, weiss ich: okay, fluessiges Gespraech ist
-                #    vorbei."
+                # Deshalb steht hier wieder das Alte, das nachweislich lief.
+                # Der Wunsch ist damit nicht erledigt, sondern zurueckgestellt
+                # -- er gehoert mit klarem Kopf gebaut und mit einer Messung,
+                # nicht in der dritten Runde unter Zeitdruck. Was dabei zu
+                # beachten ist, steht in KONTEXT.md.
                 #
-                # Damit ist ein Zustand hoerbar, der bisher nur auf der Tafel
-                # stand -- und zwar genau dort, wo er ohnehin hinhoert. Der
-                # zweite Gewinn ist ebenso praktisch: sein Mikrofon hoert die
-                # Lautsprecher mit, also war Musik nebenbei bisher der Grund,
-                # warum seine Saetze nicht ankamen. Ist sie waehrend des
-                # ganzen Fensters gedaempft, kommt er durch, ohne etwas
-                # anzufassen -- und danach wird es von selbst wieder laut.
-                #
-                # Faengt er wirklich an zu reden, uebernimmt die Redepause: der
-                # `satz_laeuft`-Zweig gleich darunter haelt die Musik unten,
-                # bis er fertig ist, ganz ohne Uhr. Genau das wollte er: "dann
-                # gilt ja die Redepause".
-                #
-                # UND ZWAR AN SEINEM REGLER, nicht an `folge_bis` insgesamt.
-                # Es gibt zwei Fenster mit fast gleichem Namen, und genau daran
-                # bin ich haengengeblieben:
-                #
-                #   folge_sekunden      das allgemeine Folgefenster nach JEDER
-                #                       seiner Aeusserungen (Vorgabe 15 s).
-                #                       `_mitschreiben` zieht es bei jedem
-                #                       Zwischenstueck neu auf -- solange er
-                #                       redet, laeuft es nie ab.
-                #   gespraech_sekunden  sein Regler "Fluessiges Gespraech".
-                #                       NUR der gehoert zur Musik: er sagt, wie
-                #                       lange nach MEINER Antwort offen ist.
-                #
-                # An `folge_bis` gehaengt blieb die Musik dauerhaft leise, weil
-                # jede seiner Aeusserungen das grosse Fenster um fuenfzehn
-                # Sekunden weiterschob. Ramzi hat es sofort gemerkt: "Du hast
-                # gesprochen, fuenf Sekunden sind vergangen, sogar mehr, und es
-                # wurde nicht wieder laut."
-                #
-                # `_folge_bis_von_mir` ist genau der Zeitpunkt, den
-                # `_gespraech_offen_halten` gesetzt hat -- sein Regler und
-                # sonst nichts.
-                # BEIDE, nicht eines von beiden. Der erste Anlauf hing nur am
-                # grossen Fenster (Musik wurde nie wieder laut), der zweite nur
-                # an seinem Regler -- und da fiel das Gegenstueck weg: waehrend
-                # ER redet, wurde die Musik zwischendurch laut. "Wenn ich die
-                # Taste druecke, wird das ganz kurz leise und dann direkt
-                # wieder laut."
-                #
-                # Aber NICHT `folge_bis`: das steht bei ihm auf 45 Sekunden und
-                # wird von jedem Zwischenstueck neu aufgezogen -- daran gehaengt
-                # bliebe die Musik dreiviertel Minuten nach seinem letzten Wort
-                # leise. Es beantwortet "darf er ohne meinen Namen reden", und
-                # das ist absichtlich grosszuegig.
-                #
-                # Was hier zaehlt, ist enger und heisst schlicht: redet er
-                # gerade noch. Das sind zwei Dinge -- sein Regler nach MEINER
-                # Antwort, und seine eigene Redepause nach SEINEM letzten Wort.
-                # Die zweite fehlte, und genau sie hat er vermisst: "Wenn ich
-                # die Taste druecke, wird das ganz kurz leise und dann direkt
-                # wieder laut." Zwischen zwei seiner Aeusserungen ist
-                # `satz_laeuft` naemlich kurz falsch.
-                try:
-                    _pause = (einstellungen.hole('stille_ms') or 1600) / 1000.0
-                except Exception:
-                    _pause = 1.6
-                if (time.time() < getattr(self, '_folge_bis_von_mir', 0.0)
-                        or time.time() - getattr(self, '_er_redete_zuletzt', 0.0)
-                        < _pause + 1.0):
+                # Ein Folgefenster, das NUR `_gespraech_offen_halten` offen
+                # haelt, zaehlt hier nicht: es heisst "er darf ohne meinen Namen
+                # antworten", nicht "es laeuft noch ein Gespraech".
+                folge = self.ohr.folge_bis
+                if abs(folge - getattr(self, '_folge_bis_von_mir', 0.0)) < 0.01:
+                    folge = 0.0
+                if time.time() < folge:
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
