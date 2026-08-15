@@ -315,19 +315,6 @@ class Assistent:
                             spricht_gerade=lambda: (
                                 self.sprecher.spricht_gerade()
                                 or sprechzentrale.beschaeftigt()))
-        # Der Sprecher stellt die Musik selbst zurueck, sobald mein letzter
-        # Satz endet -- unabhaengig vom Waechter und vor ihm. Er muss deshalb
-        # dieselbe Frage stellen koennen: darf Ramzi gerade noch ohne meinen
-        # Namen antworten? Ohne diesen Haken war jede Bedingung im Waechter
-        # wirkungslos, weil die Musik da schon oben war. Genau daran sind am
-        # 15.08.2026 drei Anlaeufe gescheitert.
-        #
-        # Bewusst NUR mein eigenes Fenster (`_folge_bis_von_mir`): das grosse
-        # `folge_bis` steht bei ihm auf 45 Sekunden und haette die Musik nach
-        # jeder Antwort dreiviertel Minuten unten gehalten.
-        import voice_output as _vo
-        _vo.gespraech_offen = (
-            lambda: time.time() < getattr(self, '_folge_bis_von_mir', 0.0))
         self._laeuft = threading.Event()
 
         # Reflexe als BRUCHSTÜCKE statt als ganze Sätze.
@@ -953,11 +940,6 @@ class Assistent:
         # `offen`: er redet noch -- der Streifen bleibt stehen, egal wie kurz
         # die Haltezeit eingestellt ist. `vorschau`: das hier darf einem
         # fertigen Satz nicht ins Wort fallen (siehe _final_sperre_bis).
-        # Wann er zuletzt wirklich geredet hat -- daran haengt, wie lange die
-        # Musik noch unten bleibt (siehe `_lautstaerke_wache`). Hier und nicht
-        # beim fertigen Satz: es geht um "redet er GERADE noch", und das
-        # beantwortet das laufende Mitschreiben, nicht das Ende.
-        self._er_redete_zuletzt = time.time()
         _ramzi_untertitel(vorlaeufig, offen=True, vorschau=True)
         self.ohr.folge_bis = max(self.ohr.folge_bis,
                                  time.time() + einstellungen.hole('folge_sekunden'))
@@ -1411,11 +1393,7 @@ class Assistent:
                 if dauer <= 0:
                     continue
                 import warteschlange as _w
-                # `beschaeftigt()` mit dazu: ein Redezug laeuft schon, waehrend
-                # die Stimme erzeugt wird (gemessen 0,7-0,9 s). Ohne das faengt
-                # mein Fenster erst beim ersten Ton an zu zaehlen.
-                if not (_w.noor_spricht_gerade()
-                        or sprechzentrale.beschaeftigt()):
+                if not _w.noor_spricht_gerade():
                     continue
                 neu = max(self.ohr.folge_bis, time.time() + dauer)
                 self.ohr.folge_bis = neu
@@ -1447,47 +1425,34 @@ class Assistent:
                 import lautstaerke
                 if not lautstaerke.gedaempft():
                     continue
-                # SEIN GESPRAECHSFENSTER -- die eine Tuer von zweien.
+                # DIE MUSIK BLEIBT LEISE, SOLANGE ER OHNE MEINEN NAMEN REDEN
+                # DARF -- auch dann, wenn dieses Fenster von MIR kommt.
                 #
-                # Ramzis Wunsch vom 15.08.2026: die Musik bleibt leise, solange
-                # er nach meiner Antwort noch ohne meinen Namen reden darf.
-                # Damit hoert er, ob sein Fenster offen ist, und sein Mikrofon
-                # versteht ihn, weil die Lautsprecher unten sind.
+                # Hier stand bis zum 15.08.2026 das Gegenteil: ein Folgefenster
+                # aus `_gespraech_offen_halten` wurde ausdruecklich ignoriert,
+                # damit die Musik nach meinen Antworten nicht "zu leise" bleibt.
+                # Ramzi hat es an diesem Tag umgedreht, und seine Begruendung
+                # ist die bessere -- er hat aus der Nebenwirkung eine ANZEIGE
+                # gemacht:
                 #
-                # Dreimal daran gescheitert, und der Grund war nicht diese
-                # Zeile, sondern eine ZWEITE Stelle: `voice_output._leiser`
-                # stellt die Musik ebenfalls zurueck, sobald mein letzter Satz
-                # endet -- unabhaengig von diesem Waechter und vor ihm. Was
-                # hier entschieden wird, war dort laengst passiert. Beide
-                # Tueren tragen die Bedingung jetzt, sonst traegt sie keine.
-                if time.time() < getattr(self, '_folge_bis_von_mir', 0.0):
-                    continue
-                # NACH SEINEM REDEN ZAEHLT SEINE REDEPAUSE, NICHT DAS GROSSE
-                # FOLGEFENSTER.
+                #   "Solange die Musik noch leise ist, ist das fuer mich ein
+                #    Faktor, dass ich noch sprechen kann. Und sobald die Musik
+                #    lauter wird, weiss ich: okay, fluessiges Gespraech ist
+                #    vorbei."
                 #
-                # `folge_sekunden` steht bei ihm auf 45. Daran hing die Musik
-                # bisher, und deshalb blieb sie nach jedem seiner Saetze
-                # dreiviertel Minuten unten -- sein Befund vom 15.08.2026:
-                # "Es wurde leiser, aber dann habe ich fertig geredet und es
-                # wurde nicht wieder lauter."
+                # Damit ist ein Zustand hoerbar, der bisher nur auf der Tafel
+                # stand -- und zwar genau dort, wo er ohnehin hinhoert. Der
+                # zweite Gewinn ist ebenso praktisch: sein Mikrofon hoert die
+                # Lautsprecher mit, also war Musik nebenbei bisher der Grund,
+                # warum seine Saetze nicht ankamen. Ist sie waehrend des
+                # ganzen Fensters gedaempft, kommt er durch, ohne etwas
+                # anzufassen -- und danach wird es von selbst wieder laut.
                 #
-                # Die beiden Fragen gehoeren getrennt, und ich hatte sie an
-                # diesem Tag schon einmal verwechselt:
-                #
-                #   DARF er reden           -> `folge_sekunden` (45 s, bleibt
-                #                              grosszuegig, das ist gewollt)
-                #   HOERT er, dass er darf  -> seine Redepause (`stille_ms`)
-                #
-                # Die Musik beantwortet die zweite. Sobald er wirklich fertig
-                # ist -- also seine eigene Redepause verstrichen ist -- geht
-                # sie hoch. Reden darf er trotzdem weiter, nur ohne den
-                # akustischen Hinweis.
-                try:
-                    _pause = (einstellungen.hole('stille_ms') or 1600) / 1000.0
-                except Exception:
-                    _pause = 1.6
-                if (time.time() - getattr(self, '_er_redete_zuletzt', 0.0)
-                        < _pause + 1.0):
+                # Faengt er wirklich an zu reden, uebernimmt die Redepause: der
+                # `satz_laeuft`-Zweig gleich darunter haelt die Musik unten,
+                # bis er fertig ist, ganz ohne Uhr. Genau das wollte er: "dann
+                # gilt ja die Redepause".
+                if time.time() < self.ohr.folge_bis:
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
