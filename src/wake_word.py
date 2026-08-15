@@ -137,7 +137,12 @@ KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 # nur dann etwas, wenn er direkt auf mein letztes Wort losredet -- und dann
 # faengt seine Aufnahme eben eine Sekunde spaeter an, statt mit meinem eigenen
 # Satz zu beginnen.
-NACHHALL_SEK = 1.5
+#
+# Zweieinhalb statt anderthalb Sekunden seit dem 15.08.2026, 13:22: die Pause
+# ZWISCHEN zwei meiner Saetze zaehlt mit. Dort meldet der Sprecher kurz "ich
+# rede nicht", und mit 1,5 s rutschte genau in dieser Luecke eine Aufnahme
+# durch, die dann meinen ganzen naechsten Satz enthielt.
+NACHHALL_SEK = 2.5
 
 # Bis zu wie viel GESPROCHENER Zeit etwas ueberhaupt ein kurzer Befehl sein kann.
 #
@@ -1189,6 +1194,23 @@ class Weckwort:
         letzter = ''
         while not self._stop.is_set():
             time.sleep(0.3)
+            # GANZ OBEN, VOR JEDEM AUSSTIEG. Ramzis Befund vom 15.08.2026,
+            # 13:21: "Du hast dich wieder selber aufgenommen, und diesmal
+            # alles." -- mein kompletter Satz landete als SEIN Untertitel.
+            #
+            # Der Grund war diese Uhr: gefuehrt wurde sie erst weiter unten,
+            # also nur in Runden, in denen ueberhaupt Ton anlag. Zwischen zwei
+            # meiner Saetze liegt aber eine kurze Stille, in der genau das
+            # nicht der Fall ist -- und mein Sprecher meldet dort ausserdem
+            # kurz "ich rede nicht". Beides zusammen: die Uhr veraltete
+            # ausgerechnet in der Luecke, in der die naechste Aufnahme anfing,
+            # und der Nachhall schuetzte nicht mehr.
+            #
+            # Jetzt laeuft sie in JEDER Runde mit, unabhaengig davon, ob es
+            # etwas zu hoeren gibt. Eine Uhr, die nur manchmal gestellt wird,
+            # ist keine Uhr.
+            if warteschlange.noor_spricht_gerade():
+                self._ich_redete_zuletzt = time.time()
             with self._schloss:
                 schnipsel = self._laufend
             if not schnipsel:
