@@ -891,6 +891,7 @@ class Weckwort:
         # Pruefung. Eine zusaetzliche Schnittkante ist nichts Neues: bei jeder
         # Satzpause passiert genau dasselbe.
         ich_rede_vorher = False
+        bilder = 0            # Bildzaehler, nur fuer die Uhr weiter unten
         stueck_offen = False  # In dieser Aeusserung wurde schon ein Zwischenstueck
                               # abgegeben -- der Assistent sammelt also gerade einen
                               # Satz und wartet auf ein "fertig". Solange das gilt,
@@ -1129,6 +1130,33 @@ class Weckwort:
                 # der Mitlauscher stellt die Uhr ohnehin alle 0,3 s, und hier
                 # laeuft alle 30 ms ein Bild durch. Das enge Fenster ist
                 # Absicht -- Begruendung oben bei `mein_ton`.
+                # DIE UHR STELLE ICH HIER SELBST, nicht nur im Mitlauscher.
+                #
+                # Ramzis Befund vom 15.08.2026, 18:27: mein eigener Satz kam
+                # als SEINE Nachricht an, 148 Zeichen an Claude. Gemessen lagen
+                # die durchgerutschten Stuecke bei 55, 35 und 58 Prozent -- also
+                # knapp unter der Schwelle -- waehrend die anderen bei 87 bis
+                # 100 lagen und korrekt verworfen wurden.
+                #
+                # Die Schwelle war nicht schuld, die Uhr war es. Sie wurde nur
+                # vom Mitlauscher gestellt, und der rechnet nebenbei Whisper.
+                # Verspaetet sich sein Takt, fehlen bei einem kurzen Stueck von
+                # anderthalb Sekunden gleich mehrere Bilder, und der Anteil
+                # kippt. Eine Uhr, die nur manchmal gestellt wird, ist keine
+                # Uhr -- derselbe Satz steht seit dem 15.08. schon einmal in
+                # dieser Datei.
+                #
+                # Alle zehn Bilder, also dreimal je Sekunde, und es kostet ein
+                # getmtime: keine JSON-Datei, kein Modell, nichts, was warten
+                # koennte.
+                bilder += 1
+                if bilder % 10 == 0:
+                    try:
+                        if (warteschlange.noor_still_seit()
+                                < warteschlange.REDEZUG_ALTER):
+                            self._ich_redete_zuletzt = time.time()
+                    except Exception:
+                        pass
                 ich_rede_jetzt = (time.time() - self._ich_redete_zuletzt) < 0.6
 
                 # DER SCHNITT -- siehe `ich_rede_vorher` oben. Genau einmal,
