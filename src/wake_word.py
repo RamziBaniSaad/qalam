@@ -109,7 +109,14 @@ BLICKE_JE_AEUSSERUNG = 6
 # Also zwei Schwellen: wer weniger als KURZ_SPRACH_FRAMES gesprochen hat, ist
 # nach KURZE_STILLE_FRAMES fertig. Wer länger geredet hat, bekommt seine vollen
 # vier Sekunden Denkpause -- daran ändert sich nichts.
-KURZ_SPRACH_FRAMES = int(1.5 * 1000 / FRAME_MS)
+#
+# Die Grenze stand bis 15.08.2026 auf 1,5 Sekunden, auf Ramzis eigenen Wunsch
+# jetzt auf 1: "eine Sekunde machen wir, und nach dieser Sekunde habe ich
+# normal meine Redepause -- davor haben wir keine Redepause, sondern diese
+# ganz kurze Zeit, damit der Reflex auch wirklich schnell ankommt." Ein Reflex
+# wie "Stopp" oder "Musik" ist so kurz gesprochen, dass eine Sekunde reicht,
+# um ihn sauber von einem angefangenen, längeren Satz zu unterscheiden.
+KURZ_SPRACH_FRAMES = int(1.0 * 1000 / FRAME_MS)
 KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 
 # Bis zu wie viel GESPROCHENER Zeit etwas ueberhaupt ein kurzer Befehl sein kann.
