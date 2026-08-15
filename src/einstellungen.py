@@ -52,13 +52,13 @@ STANDARD = {
     # STEHT AUF 0, AUF RAMZIS AUSDRÜCKLICHEN WUNSCH VOM 14.08.2026: „Ich will
     # das eigentlich eher so haben, dass ich das drücken muss." Der Grund ist
     # nicht, dass ihm das Gespräch nicht gefällt -- es gefällt ihm sogar („das
-    # ist wirklich das flüssige Gespräch") -- sondern die MUSIK. Er hat den
+    # ist wirklich das Nachhören") -- sondern die MUSIK. Er hat den
     # ganzen Tag Musik laufen und redet nebenbei im Raum. Jedes offene Fenster
     # macht daraus einen Auftrag an mich.
     #
     # Warum es diesen Wert getrennt von `folge_sekunden` gibt: bis zum
     # 14.08.2026 war beides EIN Wert, und daran ist die Sache
-    # auseinandergefallen. Wer das flüssige Gespräch abschalten wollte, nahm
+    # auseinandergefallen. Wer das Nachhören abschalten wollte, nahm
     # damit gleichzeitig die Zeit weg, nach dem Weckwort loszulegen. Zwei
     # verschiedene Fragen brauchen zwei Werte.
     'gespraech_sekunden': 0,

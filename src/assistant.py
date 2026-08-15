@@ -1497,7 +1497,7 @@ class Assistent:
 
     # ------------------------------------------------------------------
     def _gespraech_offen_halten(self):
-        """Das flüssige Gespräch: solange ICH rede, läuft sein Fenster nicht ab.
+        """Das Nachhören: solange ICH rede, läuft sein Fenster nicht ab.
 
         HÄNGT SEIT DEM 14.08.2026 AN `gespraech_sekunden`, UND DER STEHT AUF 0
         -- also tut diese Wache normalerweise gar nichts. Warum, steht in der

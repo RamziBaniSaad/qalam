@@ -852,7 +852,7 @@ class Weckwort:
         # Gezaehlt wird je Bild, ohne eine einzige Datei anzufassen: der
         # Mitlauscher stellt `_ich_redete_zuletzt` ohnehin alle 0,3 s. Bewusst
         # ein enges Fenster (0,6 s) und NICHT der Nachhall: mit 2,5 s waere
-        # seine Antwort direkt nach meinem Satz -- das fluessige Gespraech, das
+        # seine Antwort direkt nach meinem Satz -- das Nachhoeren, das
         # heute nachweislich funktioniert -- als mein Echo verschwunden.
         #
         # ERSTE MESSUNG, 17:06: der Anteil ueber ALLE Bilder kam bei meinen
