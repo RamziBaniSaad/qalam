@@ -828,7 +828,7 @@ class Weckwort:
                 if endgueltig and stueck_offen:
                     print(f'[{time.strftime("%H:%M:%S")}] [Weckwort] fertig ohne '
                           f'neuen Ton -- gesammelter Satz wird abgeschickt')
-                    self._auftraege.put((None, True, self._angefangen_waehrend_ich_rede))
+                    self._auftraege.put((None, True, self._ist_echo()))
                     stueck_offen = False
                 puffer.clear()
                 with self._schloss:
@@ -840,8 +840,7 @@ class Weckwort:
             # angefangen hat. Bis dahin haette der Merker schon dem falschen
             # Ausschnitt gehoert -- ein Fehler, der nur manchmal auftritt und
             # sich deshalb nie zuverlaessig zeigen wuerde.
-            self._auftraege.put((list(puffer), endgueltig,
-                                 self._angefangen_waehrend_ich_rede))
+            self._auftraege.put((list(puffer), endgueltig, self._ist_echo()))
             stueck_offen = not endgueltig
             puffer.clear()
             with self._schloss:
@@ -1124,6 +1123,35 @@ class Weckwort:
                         gesamt_sprach = 0
                         self._gesamt_sprach = 0
                         self._kurz_erwartet = False
+
+    def _ist_echo(self):
+        """War dieser Ausschnitt wirklich nur ich selbst?
+
+        MEIN ECHO KANN MEINEN LAUTSPRECHER NICHT UEBERLEBEN. Das ist der ganze
+        Gedanke, und er ist Ramzis eigener Vorschlag vom 15.08.2026, nachdem
+        die erste Fassung ihm 44 Sekunden weggeworfen hatte.
+
+        Der Anfang allein reicht als Kennzeichen naemlich nicht. Er faengt an
+        zu reden, waehrend mein letzter Satz noch laeuft -- so redet ein Mensch,
+        und bei offenem Gespraechsfenster ist es sogar genau das, was er tun
+        soll. Fragte ich nur "hat es angefangen, waehrend ich sprach", waere
+        seine ganze Aeusserung mein Echo, auch die Minute, die danach noch kam.
+        Genau das ist passiert: seine Freude darueber, dass es endlich klappt,
+        landete im Nichts.
+
+        Also zwei Bedingungen statt einer. Echo ist es nur, wenn es
+        waehrend meines Redens ANGEFANGEN hat UND beim Abgeben immer noch
+        innerhalb meines Redens (samt Nachhall) liegt. Redet er darueber
+        hinaus, war er es -- ich bin ja laengst still.
+
+        Der Preis, und er ist bewusst gewaehlt: der ueberlappende ANFANG bleibt
+        Matsch, dort liegen zwei Stimmen uebereinander. Ein verhoerter erster
+        Halbsatz ist billiger als eine verlorene Minute.
+        """
+        if not self._angefangen_waehrend_ich_rede:
+            return False
+        return (warteschlange.noor_spricht_gerade()
+                or (time.time() - self._ich_redete_zuletzt) < NACHHALL_SEK)
 
     def _melde(self, rueckruf, *args):
         """Rückruf aufrufen, ohne dass ein Fehler darin das Ohr umbringt."""
