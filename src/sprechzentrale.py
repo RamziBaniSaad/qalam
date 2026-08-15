@@ -49,11 +49,28 @@ RANG_VORLESEN = 3
 #     Dreiviertelminute eher Laerm als Nachricht.
 #   Eine Antwort auf einen Zuruf ist am kuerzesten haltbar: er hat gefragt und
 #     wartet -- kommt sie eine halbe Minute spaeter, hat er die Frage vergessen.
+# ZWEI MINUTEN FUER ALLES, was ueberhaupt verfallen kann.
+#
+# Ramzi am 15.08.2026, 20:45, nachdem zwei Bloecke von mir verfallen sind,
+# waehrend er noch geredet hat: "Macht das mal bitte auf zwei Minuten hoch, so
+# dass du wirklich zwei Minuten in der Warteschlange warten kannst. Und wenn
+# das ueber diese zwei Minuten geht, dann wird das erst als ungesagt markiert.
+# Zwei Minuten ist ein sehr guter Wert."
+#
+# Die alten, feiner abgestuften Zahlen (30 / 90 / 45) waren aus dem gedacht,
+# was der INHALT aushaelt. Der Gedanke war nicht falsch, aber er hat den
+# haeufigsten Fall verfehlt: dass ER lange redet. Und genau dann ist es keine
+# Ruecksicht mehr, wenn meine Antwort verschwindet -- es sieht aus, als haette
+# ich nichts gesagt. Lieber etwas spaeter hoeren als gar nicht.
+#
+# Ausdruecklich KEINE Einstellung auf der Tafel: "wir brauchen nicht ins
+# Dashboard reinzumachen, das kann so bleiben."
+_ZWEI_MINUTEN = 120.0
 FRIST = {
     RANG_SOFORT: None,          # nie verfallen
-    RANG_ANTWORT: 30.0,
-    RANG_ZWISCHEN: 90.0,
-    RANG_VORLESEN: 45.0,
+    RANG_ANTWORT: _ZWEI_MINUTEN,
+    RANG_ZWISCHEN: _ZWEI_MINUTEN,
+    RANG_VORLESEN: _ZWEI_MINUTEN,
 }
 
 _sperre = threading.RLock()
