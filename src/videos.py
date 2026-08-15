@@ -60,10 +60,28 @@ NUR_DAEMPFEN = {'spotify.exe'}
 
 MERKER = os.path.join(os.environ.get('TEMP', '.'), 'noor-videos-angehalten.json')
 
+# Was hier wirklich passiert ist -- eine Zeile je Aufruf.
+#
+# DER GRUND IST EIN FEHLER VOM 15.08.2026: das Anhalten lief in einem eigenen
+# Prozess, und dessen Ausgabe ging nach DEVNULL. Ob ein Video angehalten wurde,
+# war damit NIRGENDS ablesbar; ich habe zwei Abende lang geraten statt gelesen.
+# Ein Vorgang, den man nicht nachsehen kann, ist ein Vorgang, ueber den man sich
+# streiten muss.
+PROTOKOLL = os.path.join(os.environ.get('TEMP', '.'), 'noor-videos.log')
+
 # Aelter als das, und der Merker gehoert zu einem Lauf, der abgestuerzt ist.
 # Dann nichts fortsetzen: lieber ein stehendes Video als eines, das Stunden
 # spaeter von allein losredet.
-HOECHSTALTER = 300
+#
+# 1800 STATT 300 SEIT DEM 15.08.2026: seit das Video bis zum Ende von Ramzis
+# Gespraechsfenster steht (und nicht mehr nur waehrend meines Satzes), kann die
+# Spanne lang werden -- eine lange Antwort plus sein Fenster. Lief die Uhr ab,
+# haette `fortsetzen` still nichts getan und sein Video waere stehengeblieben.
+# Genau der Fehler, den diese Datei an anderer Stelle als den schlimmeren
+# bezeichnet. Gegen den abgestuerzten Lauf sichert jetzt die Notbremse in
+# voice_output, die nicht auf die Uhr schaut, sondern darauf, ob es den
+# Waechter ueberhaupt gibt.
+HOECHSTALTER = 1800
 
 SPIELT = 5   # GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
 PAUSE = 4    # ... .PAUSED
@@ -194,18 +212,62 @@ async def _fortsetzen():
     return fortgesetzt
 
 
+def _notiz(text):
+    try:
+        with open(PROTOKOLL, 'a', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%H:%M:%S")} {text}\n')
+    except OSError:
+        pass
+
+
 def anhalten():
     try:
-        return asyncio.run(_anhalten())
-    except Exception:
+        apps = asyncio.run(_anhalten())
+        _notiz(f'anhalten -> {apps or "nichts (es spielte nichts)"}')
+        return apps
+    except Exception as e:
+        _notiz(f'anhalten GESCHEITERT: {e}')
         return []
 
 
 def fortsetzen():
     try:
-        return asyncio.run(_fortsetzen())
-    except Exception:
+        apps = asyncio.run(_fortsetzen())
+        _notiz(f'fortsetzen -> {apps or "nichts (kein Merker)"}')
+        return apps
+    except Exception as e:
+        _notiz(f'fortsetzen GESCHEITERT: {e}')
         return []
+
+
+def haengt_an():
+    """Steht gerade etwas, das ICH angehalten habe?
+
+    Der Waechter im Assistenten fragt das, bevor er aufgibt: waere er nur fuer
+    die Lautstaerke zustaendig, wuerde er an einem Abend ohne Musik gar nicht
+    erst hinschauen -- und Ramzis Video bliebe stehen."""
+    return os.path.exists(MERKER)
+
+
+def anstossen(an):
+    """Anhalten/Fortsetzen in einem EIGENEN PROZESS -- der einzige erlaubte Weg.
+
+    Diese Datei redet ueber COM/WinRT mit Windows, und genau diese Sorte Aufruf
+    hat am 31.07.2026 das Ohr getoetet (Begruendung in lautstaerke.py). Sie darf
+    im Ohr-Prozess nicht laufen, auch nicht in einem Faden.
+
+    Am 15.08.2026 hat mich derselbe Punkt ein zweites Mal erwischt, nur
+    andersherum: aus dem Ohr heraus kam die Medien-Abfrage gar nicht zurueck --
+    `Abfrage haengt laenger als 2s`, weil dort COM schon in einem anderen Modus
+    offen ist. Ein frischer Prozess hat beides Problem nicht.
+
+    Rueckgabe: der Prozess, damit der Aufrufer bei Bedarf abwarten kann."""
+    import subprocess
+    return subprocess.Popen(
+        [sys.executable, os.path.abspath(__file__),
+         '--anhalten' if an else '--fortsetzen'],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
 
 
 if __name__ == '__main__':

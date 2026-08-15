@@ -189,12 +189,8 @@ def _videos(an):
     """
     global _video_prozess
     try:
-        import subprocess
-        skript = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos.py')
-        p = subprocess.Popen(
-            [sys.executable, skript, '--anhalten' if an else '--fortsetzen'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        import videos
+        p = videos.anstossen(an)
         if an:
             _video_prozess = p
     except Exception:
@@ -255,7 +251,21 @@ def buehne_an():
 
 
 def buehne_aus():
-    """Loslassen. Das Video läuft erst weiter, wenn niemand mehr redet."""
+    """Loslassen. Das Video läuft erst weiter, wenn das GESPRÄCH vorbei ist.
+
+    RAMZIS BEFUND VOM 15.08.2026, und er hat ihn dreimal wiederholen müssen:
+    „Mein Fenster ist gerade offen, es läuft immer noch weiter." Genau hier lag
+    es. Vorher stand an dieser Stelle `_videos(False)`: mein letztes Wort ließ
+    das Video sofort wieder anlaufen -- und sein Gesprächsfenster fängt genau
+    da erst an. Das Video lief also durch die ganzen Sekunden, in denen er
+    antworten wollte; leise, weil die Lautstärke einer anderen Regel folgt,
+    aber es lief.
+
+    Fortgesetzt wird jetzt dort, wo auch die Musik wieder laut wird: im
+    Wächter des Assistenten (`_lautstaerke_wache`). Der kennt als einziger die
+    ganze Bedingung -- Folgefenster, angefangener Satz, Warteschlange, Diktat
+    -- und Ramzi hört an der Musik ohnehin, wann sie erfüllt ist. Zwei Stellen
+    mit derselben Zuständigkeit wären wieder der teuerste Fehler des Tages."""
     global _buehne_zahl
     with _buehne_sperre:
         if _buehne_zahl <= 0:
@@ -263,11 +273,30 @@ def buehne_aus():
         _buehne_zahl -= 1
         if _buehne_zahl > 0:
             return
-    # Fortgesetzt wird nur, was ich selbst angehalten habe (videos.py). Das
-    # Zurückstellen der Lautstärke gehört dem Wächter im Assistenten -- hier
-    # nur das Netz für den Fall, dass es den nicht gibt.
-    _videos(False)
+    # Beides gehört dem Wächter im Assistenten -- hier nur die Netze für den
+    # Fall, dass es den gar nicht gibt (Qalam allein, oder das Ohr ist tot).
+    _notbremse_videos()
     _notbremse_lautstaerke()
+
+
+def _notbremse_videos():
+    """Das Video wieder anlaufen lassen, falls es sonst niemand tut.
+
+    Anders als bei der Lautstärke ist hier KEINE Uhr das Kriterium, sondern die
+    Frage, ob es den Wächter überhaupt gibt. Der Grund ist der Unterschied im
+    Schadensfall: eine zu lange leise Musik merkt Ramzi und stellt sie lauter.
+    Ein Video, das für immer steht, sieht aus wie ein kaputter Rechner -- und
+    er wüsste nicht, dass ich es war.
+
+    Läuft das Ohr, passiert hier bewusst nichts: dann ist das Video noch
+    angehalten, WEIL sein Fenster noch offen ist."""
+    try:
+        import warteschlange
+        if warteschlange.waechter_lebt():
+            return
+    except Exception:
+        pass          # im Zweifel fortsetzen -- ein stehendes Video ist schlimmer
+    _videos(False)
 
 
 def _notbremse_lautstaerke():

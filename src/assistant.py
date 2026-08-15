@@ -946,6 +946,23 @@ class Assistent:
             lautstaerke.daempfen_im_hintergrund()
         except Exception:
             pass
+        # Und das Video ANHALTEN statt nur leiser -- Ramzis Unterscheidung vom
+        # 15.08.2026: Musik soll weiterlaufen, ein Video verpasst er sonst.
+        # Es bleibt stehen, bis `_lautstaerke_wache` sein Fenster für zu
+        # erklärt; dieselbe Bedingung, an der die Musik wieder hochgeht.
+        #
+        # `haengt_an` davor, nicht aus Sparsamkeit: ein zweites Anhalten fände
+        # nichts mehr spielen -- Chrome steht ja schon -- und dürfte den Merker
+        # keinesfalls überschreiben. Sonst wüsste hinterher niemand mehr, was
+        # fortzusetzen ist.
+        try:
+            import videos
+            if not videos.haengt_an():
+                print(f'[{time.strftime("%H:%M:%S")}] [Videos] anhalten '
+                      f'angestossen -- sein Fenster ist auf.', flush=True)
+                videos.anstossen(True)
+        except Exception:
+            pass
         # UND SEIN PLATZ, AB SOFORT. Der Merker hing bisher allein am
         # Mitlauscher, und der braucht erst einen erkannten Text -- ein bis
         # drei Sekunden, in denen sein Platz niemandem gehörte und mein
@@ -990,6 +1007,23 @@ class Assistent:
         try:
             import lautstaerke
             lautstaerke.daempfen_im_hintergrund()
+        except Exception:
+            pass
+        # Und das Video ANHALTEN statt nur leiser -- Ramzis Unterscheidung vom
+        # 15.08.2026: Musik soll weiterlaufen, ein Video verpasst er sonst.
+        # Es bleibt stehen, bis `_lautstaerke_wache` sein Fenster für zu
+        # erklärt; dieselbe Bedingung, an der die Musik wieder hochgeht.
+        #
+        # `haengt_an` davor, nicht aus Sparsamkeit: ein zweites Anhalten fände
+        # nichts mehr spielen -- Chrome steht ja schon -- und dürfte den Merker
+        # keinesfalls überschreiben. Sonst wüsste hinterher niemand mehr, was
+        # fortzusetzen ist.
+        try:
+            import videos
+            if not videos.haengt_an():
+                print(f'[{time.strftime("%H:%M:%S")}] [Videos] anhalten '
+                      f'angestossen -- sein Fenster ist auf.', flush=True)
+                videos.anstossen(True)
         except Exception:
             pass
         try:
@@ -1566,7 +1600,22 @@ class Assistent:
         deshalb als lebend (siehe warteschlange.waechter_lebt): die beiden
         Notbremsen in wake_word und voice_output greifen nur noch, wenn es sie
         wirklich nicht gibt. Eine Bedingung, die nur an einer von zwei Türen
-        hängt, ist keine Bedingung -- das war der teuerste Fehler des Tages."""
+        hängt, ist keine Bedingung -- das war der teuerste Fehler des Tages.
+
+        UND SEIT DEM 15.08.2026 GILT SIE AUCH FÜR DAS VIDEO (siehe videos.py).
+        Ramzis Wunsch: Musik nur leiser, Videos dagegen anhalten -- „bis mein
+        Fenster zu ist". Das Anhalten hing vorher an meinem Reden und ließ das
+        Video mit meinem letzten Wort wieder anlaufen, also genau zu Beginn
+        seines Fensters. Jetzt hängen beide an derselben Bedingung, und das ist
+        auch die ehrliche: die Musik IST für ihn die Anzeige dafür."""
+        # Wie lange am Stück nichts mehr passieren muss, bevor das Video
+        # weiterläuft. Bewusst grosszügig: zu spät weiterlaufen merkt Ramzi
+        # kaum, zu früh reisst es ihm den Satz entzwei -- und das war seine
+        # Beschwerde.
+        VIDEO_NACHLAUF = 4.0
+        video_angestossen = 0.0
+        video_ruhig_seit = 0.0
+        video_zuletzt_frei = 0.0
         while self._laeuft.is_set():
             time.sleep(0.4)
             try:
@@ -1576,7 +1625,11 @@ class Assistent:
                 # würden wieder mitreden.
                 _w.waechter_lebt_melden()
                 import lautstaerke
-                if not lautstaerke.gedaempft():
+                import videos
+                # Das Video zählt eigenständig mit: an einem Abend ohne Musik
+                # ist nichts gedämpft, und die Wache würde hier aussteigen --
+                # sein Video bliebe für immer stehen.
+                if not lautstaerke.gedaempft() and not videos.haengt_an():
                     continue
                 # Sein Fenster ist offen -- also bleibt die Musik leise, und
                 # genau das ist das Zeichen, an dem er es hört.
@@ -1608,6 +1661,51 @@ class Assistent:
                 if qalam_nimmt_auf():
                     continue        # Ramzi diktiert -- das dämpft selbst
                 lautstaerke.zuruecksetzen_im_hintergrund()
+
+                # --- Das Video zuletzt, und mit NACHLAUF -------------------
+                #
+                # RAMZI, 15.08.2026, 22:30: „Während ich rede startet das
+                # wieder, und das stört die ganze Zeit." Für die Musik ist ein
+                # paar Sekunden zu früh eine Kleinigkeit -- er dreht sie
+                # runter. Ein Video, das mitten in seinem Satz losläuft,
+                # verpasst er, und genau darum ging es bei diesem Wunsch.
+                #
+                # Deshalb reicht dem Video die Bedingung oben NICHT. Sein
+                # Fenster geht zu, während er noch redet (das ist ein eigener,
+                # noch offener Fehler) -- und in genau dem Moment stünde hier
+                # sonst „alles klar, weiterlaufen lassen".
+                #
+                # Der Nachlauf misst deshalb nicht die Uhr, sondern die RUHE:
+                # das Video läuft erst weiter, wenn diese Schleife mehrere
+                # Sekunden am Stück ohne einen einzigen Haltegrund bis hierher
+                # durchgekommen ist. Ein einziger blockierter Takt (er sagt
+                # noch etwas, die Zentrale hat noch etwas) setzt sie zurück.
+                jetzt = time.time()
+                if jetzt - video_zuletzt_frei > 0.6:
+                    # Die letzte Runde kam nicht bis hierher -- irgendetwas
+                    # hielt noch. Die Ruhe fängt von vorne an.
+                    video_ruhig_seit = jetzt
+                video_zuletzt_frei = jetzt
+                try:
+                    if _w.ramzi_redet():
+                        video_ruhig_seit = jetzt
+                except Exception:
+                    pass
+                if not videos.haengt_an():
+                    continue
+                if jetzt - video_ruhig_seit < VIDEO_NACHLAUF:
+                    continue
+                # Die 3 Sekunden Sperre sind gegen den Takt dieser Schleife:
+                # der abgesetzte Prozess braucht einen Moment, bis er den
+                # Merker löscht, und in der Zeit liefe sie sonst noch zweimal
+                # hier durch.
+                if jetzt - video_angestossen > 3:
+                    video_angestossen = jetzt
+                    print(f'[{time.strftime("%H:%M:%S")}] [Videos] fortsetzen '
+                          f'angestossen -- {VIDEO_NACHLAUF:.0f}s Ruhe, Fenster '
+                          f'seit {jetzt - self.ohr.folge_bis:.1f}s zu.',
+                          flush=True)
+                    videos.anstossen(False)
             except Exception:
                 continue
 
