@@ -846,6 +846,29 @@ class Weckwort:
         mein_ton = 0          # Bilder insgesamt, nur fuers Protokoll
         mein_sprach = 0       # davon: Sprach-Bilder waehrend meines Redens
         stueck_sprach = 0     # Sprach-Bilder in diesem Stueck insgesamt
+        # HOERE ICH AUF ZU REDEN, WIRD AN DIESER STELLE GESCHNITTEN.
+        #
+        # Ramzis Test 6: er faengt mitten in meinem letzten Satz an und redet
+        # ueber mein Ende hinaus weiter. Das gehoert IHM -- seine Regel, "mein
+        # Echo kann meinen Lautsprecher nicht ueberleben". Verworfen wurde es
+        # trotzdem, weil das ganze Stueck zu 85 bis 100 Prozent aus mir bestand.
+        #
+        # DER ERSTE VERSUCH WAR FALSCH und hat ihn handlungsunfaehig gemacht.
+        # Ich hatte die Echo-Bedingung aufgeweicht: "wird danach noch geredet,
+        # ist es nicht meins". Aber `ich_rede_jetzt` ist am ENDE meines Redens
+        # ungenau -- die Uhr wird alle 0,3 s gestellt, der Merker verfaellt
+        # nach 1,0 s -- und der Schwanz MEINER EIGENEN Stimme faellt genau in
+        # diese Luecke. Damit erfuellte praktisch jedes Echo-Stueck die
+        # Bedingung, und die Erkennung war faktisch aus. Sein Befund: "ich kann
+        # gerade nicht mehr reden, es bricht immer wieder ab."
+        #
+        # Also andersherum, und ohne die Pruefung anzufassen: nicht entscheiden,
+        # wem ein gemischtes Stueck gehoert, sondern es gar nicht erst mischen.
+        # Dann ist jedes der beiden Stuecke eindeutig -- das davor meins, das
+        # danach seins -- und beide gehen durch dieselbe, unveraenderte
+        # Pruefung. Eine zusaetzliche Schnittkante ist nichts Neues: bei jeder
+        # Satzpause passiert genau dasselbe.
+        ich_rede_vorher = False
         stueck_offen = False  # In dieser Aeusserung wurde schon ein Zwischenstueck
                               # abgegeben -- der Assistent sammelt also gerade einen
                               # Satz und wartet auf ein "fertig". Solange das gilt,
@@ -1085,6 +1108,16 @@ class Weckwort:
                 # laeuft alle 30 ms ein Bild durch. Das enge Fenster ist
                 # Absicht -- Begruendung oben bei `mein_ton`.
                 ich_rede_jetzt = (time.time() - self._ich_redete_zuletzt) < 0.6
+
+                # DER SCHNITT -- siehe `ich_rede_vorher` oben. Genau einmal,
+                # in dem Bild, in dem ich verstumme, und nur wenn ueberhaupt
+                # eine Aeusserung laeuft. Was bis hierher aufgelaufen ist, geht
+                # als eigenes Stueck zur unveraenderten Echo-Pruefung; alles,
+                # was er danach sagt, faengt sauber bei null an.
+                if ich_rede_vorher and not ich_rede_jetzt and in_sprache:
+                    abgeben(endgueltig=False, gesprochene_bilder=sprach)
+                    sprach = 0
+                ich_rede_vorher = ich_rede_jetzt
 
                 if not ist_sprache:
                     # Die Folge reisst bei JEDEM stillen Frame -- auch dann,
