@@ -940,6 +940,11 @@ class Assistent:
         # `offen`: er redet noch -- der Streifen bleibt stehen, egal wie kurz
         # die Haltezeit eingestellt ist. `vorschau`: das hier darf einem
         # fertigen Satz nicht ins Wort fallen (siehe _final_sperre_bis).
+        # Wann er zuletzt wirklich geredet hat -- daran haengt, wie lange die
+        # Musik noch unten bleibt (siehe `_lautstaerke_wache`). Hier und nicht
+        # beim fertigen Satz: es geht um "redet er GERADE noch", und das
+        # beantwortet das laufende Mitschreiben, nicht das Ende.
+        self._er_redete_zuletzt = time.time()
         _ramzi_untertitel(vorlaeufig, offen=True, vorschau=True)
         self.ohr.folge_bis = max(self.ohr.folge_bis,
                                  time.time() + einstellungen.hole('folge_sekunden'))
@@ -1475,7 +1480,33 @@ class Assistent:
                 # `_folge_bis_von_mir` ist genau der Zeitpunkt, den
                 # `_gespraech_offen_halten` gesetzt hat -- sein Regler und
                 # sonst nichts.
-                if time.time() < getattr(self, '_folge_bis_von_mir', 0.0):
+                # BEIDE, nicht eines von beiden. Der erste Anlauf hing nur am
+                # grossen Fenster (Musik wurde nie wieder laut), der zweite nur
+                # an seinem Regler -- und da fiel das Gegenstueck weg: waehrend
+                # ER redet, wurde die Musik zwischendurch laut. "Wenn ich die
+                # Taste druecke, wird das ganz kurz leise und dann direkt
+                # wieder laut."
+                #
+                # Aber NICHT `folge_bis`: das steht bei ihm auf 45 Sekunden und
+                # wird von jedem Zwischenstueck neu aufgezogen -- daran gehaengt
+                # bliebe die Musik dreiviertel Minuten nach seinem letzten Wort
+                # leise. Es beantwortet "darf er ohne meinen Namen reden", und
+                # das ist absichtlich grosszuegig.
+                #
+                # Was hier zaehlt, ist enger und heisst schlicht: redet er
+                # gerade noch. Das sind zwei Dinge -- sein Regler nach MEINER
+                # Antwort, und seine eigene Redepause nach SEINEM letzten Wort.
+                # Die zweite fehlte, und genau sie hat er vermisst: "Wenn ich
+                # die Taste druecke, wird das ganz kurz leise und dann direkt
+                # wieder laut." Zwischen zwei seiner Aeusserungen ist
+                # `satz_laeuft` naemlich kurz falsch.
+                try:
+                    _pause = (einstellungen.hole('stille_ms') or 1600) / 1000.0
+                except Exception:
+                    _pause = 1.6
+                if (time.time() < getattr(self, '_folge_bis_von_mir', 0.0)
+                        or time.time() - getattr(self, '_er_redete_zuletzt', 0.0)
+                        < _pause + 1.0):
                     continue
                 # Ein angefangener Satz von ihm haelt die Musik leise, ganz
                 # ohne Uhr. Ramzis Beschwerde vom 14.08.2026 -- die Musik ging
