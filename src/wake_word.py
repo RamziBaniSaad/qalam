@@ -142,10 +142,6 @@ KURZE_STILLE_FRAMES = int(0.8 * 1000 / FRAME_MS)
 # ZWISCHEN zwei meiner Saetze zaehlt mit. Dort meldet der Sprecher kurz "ich
 # rede nicht", und mit 1,5 s rutschte genau in dieser Luecke eine Aufnahme
 # durch, die dann meinen ganzen naechsten Satz enthielt.
-# Wie viel reine Sprache nach meinem letzten Ton reicht, damit ein Stueck IHM
-# gehoert. Siehe `nachrede` in _schleife -- Ramzis Test 6.
-NACHREDE_FRAMES = int(0.6 * 1000 / FRAME_MS)
-
 NACHHALL_SEK = 2.5
 
 # Bis zu wie viel GESPROCHENER Zeit etwas ueberhaupt ein kurzer Befehl sein kann.
@@ -847,24 +843,6 @@ class Weckwort:
         # Also wird ueber das gezaehlt, worum es geht: die SPRACH-Bilder. Von
         # allem, was in diesem Stueck nach Sprache klang -- wie viel davon lief,
         # waehrend ich redete?
-        # UND DER NACHLAUF -- Ramzis Test 6 am 15.08.2026, 17:49.
-        #
-        # Er hat mitten in meinem letzten Satz angefangen zu reden und ueber
-        # mein Ende hinaus weitergesprochen. Genau das soll IHM gehoeren, es
-        # ist seine eigene Regel: "Mein Echo kann meinen Lautsprecher nicht
-        # ueberleben." Verworfen wurde es trotzdem, mit 85 bis 100 Prozent
-        # Anteil -- der Anteil allein sieht eben nur, wie viel von mir drin
-        # war, nicht, ob danach noch jemand weiterredete.
-        #
-        # Zweites Symptom, gleiche Ursache: weil sein Reden verworfen wurde,
-        # wusste die Musik-Waechterin nichts davon und hat sofort nach meinem
-        # Ende wieder laut gestellt. Sein Wort: "ich hatte nicht die Chance zu
-        # sprechen."
-        #
-        # Also eine zweite Zahl: wie viele Sprach-Bilder kamen NACH meinem
-        # letzten? Der Zaehler faellt auf null zurueck, solange ich rede --
-        # gezaehlt wird damit nur der Schwanz, der mich ueberlebt hat.
-        nachrede = 0
         mein_ton = 0          # Bilder insgesamt, nur fuers Protokoll
         mein_sprach = 0       # davon: Sprach-Bilder waehrend meines Redens
         stueck_sprach = 0     # Sprach-Bilder in diesem Stueck insgesamt
@@ -916,7 +894,7 @@ class Weckwort:
                     self._auftraege.put((None, True, self._ist_echo(), 0.0))
                     stueck_offen = False
                 puffer.clear()
-                mein_ton = mein_sprach = stueck_sprach = nachrede = 0
+                mein_ton = mein_sprach = stueck_sprach = 0
                 with self._schloss:
                     self._laufend = None
                 return
@@ -944,16 +922,7 @@ class Weckwort:
             # etwa zwei Drittel dessen sprechen, was er waehrend meines Redens
             # gesagt hat -- und wer weiterredet, tut genau das.
             anteil = mein_sprach / max(1, stueck_sprach)
-            # UND DER NACHLAUF SCHLAEGT ALLES. Wer nach meinem letzten Ton noch
-            # deutlich weiterredet, war es selbst -- egal wie viel von diesem
-            # Stueck vorher in meine Stimme fiel. Das ist woertlich seine Regel
-            # und der Grund, warum Test 6 durchgefallen ist.
-            #
-            # 0,6 s reine Sprache: kurz genug, dass ein normaler Halbsatz
-            # reicht, lang genug, dass ein einzelnes Geraeusch nach meinem Ende
-            # nicht schon ein ganzes Echo rettet.
-            mein_echo = ((self._ist_echo() or anteil >= 0.6)
-                         and nachrede < NACHREDE_FRAMES)
+            mein_echo = self._ist_echo() or anteil >= 0.6
             # Der Echo-Merker reist MIT dem Ausschnitt, statt beim Auswerten neu
             # nachgesehen zu werden: der Arbeiter laeuft in einem eigenen Faden
             # und ist oft erst dran, wenn laengst die naechste Aeusserung
@@ -964,7 +933,7 @@ class Weckwort:
                                  round(anteil, 2)))
             stueck_offen = not endgueltig
             puffer.clear()
-            mein_ton = mein_sprach = stueck_sprach = nachrede = 0
+            mein_ton = mein_sprach = stueck_sprach = 0
             with self._schloss:
                 self._laufend = None
 
@@ -1004,7 +973,7 @@ class Weckwort:
                     self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
-                    mein_ton = mein_sprach = stueck_sprach = nachrede = 0
+                    mein_ton = mein_sprach = stueck_sprach = 0
                     # Aus demselben Grund wie in abbrechen(): was hier
                     # (Diktat -- der Puffer wird ohnehin verworfen.)
                     # weggeworfen wird, meldet nie ein "fertig". Bliebe der
@@ -1028,7 +997,7 @@ class Weckwort:
                     self._gesamt_sprach = 0
                     stueck_offen = False
                     self._kurz_erwartet = False
-                    mein_ton = mein_sprach = stueck_sprach = nachrede = 0
+                    mein_ton = mein_sprach = stueck_sprach = 0
                     with self._schloss:
                         self._laufend = None
                     continue
@@ -1172,9 +1141,6 @@ class Weckwort:
                     if ich_rede_jetzt:
                         mein_ton += 1
                         mein_sprach += 1
-                        nachrede = 0     # solange ich rede, gibt es keinen
-                    else:
-                        nachrede += 1    # das hier hat mich ueberlebt
                     # Nur einen Ausschnitt hinlegen, damit der Mitlauscher in
                     # seinem eigenen Faden etwas zu tun hat. Kopieren, nicht
                     # teilen: an der Deque wird gleich weitergearbeitet.
