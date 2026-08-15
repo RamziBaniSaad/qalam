@@ -331,6 +331,7 @@ class Assistent:
             'stopp':              lambda: self._still(),
             'weiterreden':        lambda: self._nochmal(),
             'umsaetze-eintragen': lambda: self._finanzen_eintragen(),
+            'claude-reparieren':  lambda: self._claude_reparieren(),
             'alles-laut':         lambda: self._alles_laut(),
             'songtext':           lambda: self._songtext(),
             'musik':              lambda: self._musik(),
@@ -457,6 +458,37 @@ class Assistent:
         except Exception:
             return 'Das hat nicht geklappt.'
         return 'Ich trage die Umsätze ein.'
+
+    def _claude_reparieren(self):
+        """Die Claude-App wieder startbar machen, ohne Neustart des Rechners.
+
+        Ramzis Problem vom 15.08.2026: die App aktualisiert sich taeglich
+        selbst, kann die neue Fassung aber nicht einrichten, solange sie
+        laeuft -- beim naechsten Start klemmt sie dann an einer Datei, die
+        noch offen ist. Er hat sich bisher jedes Mal mit einem Neustart
+        beholfen.
+
+        Genau dieser Reflex gehoert zu den wenigen, die es hier geben MUSS und
+        nicht bei mir: die Reparatur beendet die Claude-App, also auch jede
+        Sitzung darin. Qalam ist ein eigener Prozess und ueberlebt das -- ich
+        koennte mir selbst nicht helfen.
+
+        Kein Rueckgabetext ueber das Ergebnis: das Skript spricht selbst, und
+        es dauert seine halbe Minute. Was hier zurueckkommt, ist nur die
+        Ansage, dass es losgeht.
+        """
+        skript = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                              'noor-claude-reparieren.ps1')
+        if not os.path.exists(skript):
+            return 'Dafür fehlt mir das Skript.'
+        try:
+            subprocess.Popen(
+                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                 '-WindowStyle', 'Hidden', '-File', skript],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception:
+            return 'Das hat nicht geklappt.'
+        return 'Ich räume die Claude-App auf und mache sie wieder auf.'
 
     def _schwaerzen(self, einzeln=False):
         """Unterlagen unkenntlich machen, bevor ich sie lese.
