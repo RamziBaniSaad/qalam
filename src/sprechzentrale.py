@@ -180,6 +180,13 @@ def _darf_reden():
     """
     try:
         import einstellungen
+        # Seit 30.08.2026 entscheidet die Stufe. Nur 'aus' schweigt hier --
+        # 'einmal' braucht das Wissen, was eine Antwortrunde ist, und das hat
+        # allein noor-sprich.ps1 (Merker noor-schon-geredet). Diese Zentrale
+        # sieht einzelne Auftraege, keine Runden.
+        stufe = einstellungen.hole('redestufe')
+        if stufe:
+            return str(stufe) != 'aus'
         return bool(einstellungen.hole('reden'))
     except Exception:
         return True
