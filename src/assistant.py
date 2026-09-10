@@ -324,6 +324,7 @@ class Assistent:
             'aufwachen':          lambda: self._aufwachen(),
             'schwaerzen-eine':    lambda: self._schwaerzen(einzeln=True),
             'schwaerzen-alle':    lambda: self._schwaerzen(),
+            'beatmap-bauen':      lambda: self._beatmap_bauen(),
             'stopp':              lambda: self._still(),
             'weiterreden':        lambda: self._nochmal(),
             'umsaetze-eintragen': lambda: self._finanzen_eintragen(),
@@ -514,6 +515,30 @@ class Assistent:
             return 'Das Fenster ist auf. Füg den Pfad ein.'
         return ('Ich gehe durch deine Unterlagen. Was noch keine geschwärzte '
                 'Fassung hat, bekommt eine.')
+
+    def _beatmap_bauen(self):
+        """Aus einem YouTube-Link eine spielfertige osu!-Beatmap machen.
+
+        Ramzis Auftrag vom 10.09.2026, nachdem er sich zwei Download-Programme
+        eingerichtet hatte und dann selbst sagte: "ich muss mich mal daran
+        gewöhnen, dass du auch alles selber bauen kannst." Jetzt reicht der
+        Link -- Tonspur, Video und Titelbild holt das Skript selbst.
+
+        Ein Fenster, weil er den Link EINGIBT und beim Bauen zusehen will;
+        dieselbe Ausnahme wie beim Schwärzen eines einzelnen Zettels.
+        """
+        skript = os.path.join(os.path.expanduser('~'), 'noor', 'werkzeuge',
+                              'noor-beatmap-holen.ps1')
+        if not os.path.exists(skript):
+            return 'Dafür fehlt mir das Skript.'
+        try:
+            subprocess.Popen(
+                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                 '-WindowStyle', 'Hidden', '-File', skript],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception:
+            return 'Das hat nicht geklappt.'
+        return 'Das Fenster ist auf. Füg den YouTube-Link ein.'
 
     def _songtext(self):
         """Den Text zum gerade laufenden Lied aufmachen.
