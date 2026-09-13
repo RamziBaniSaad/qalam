@@ -11,16 +11,26 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 proj = fso.GetParentFolderName(WScript.ScriptFullName)
 pyw  = proj & "\venv\Scripts\pythonw.exe"
 
-' --- Pruefen, ob Qalam laeuft (pythonw aus DIESEM Projekt) ---
+' --- Pruefen, ob Qalam laeuft ---
+'  Gemeint ist das Programm selbst: run.py und alles unter src\. NICHT jeder
+'  Prozess, in dessen Befehlszeile "qalam" vorkommt -- den Interpreter aus
+'  der venv leihen sich auch andere Werkzeuge (Dashboard, Leucht-Rahmen), und
+'  der Tastenwaechter toggle_hotkey.py liegt in diesem Ordner und muss das
+'  Ausschalten gerade ueberleben.
 Set svc = GetObject("winmgmts:\\.\root\cimv2")
 Set procs = svc.ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'pythonw.exe'")
+
+Function IstQalam(befehl)
+    b = LCase(befehl)
+    IstQalam = (InStr(b, "\qalam\src\") > 0) Or (InStr(b, "qalam") > 0 And InStr(b, "run.py") > 0)
+End Function
 
 running = False
 Dim pids()
 n = 0
 For Each p In procs
     If Not IsNull(p.CommandLine) Then
-        If InStr(LCase(p.CommandLine), "qalam") > 0 Then
+        If IstQalam(p.CommandLine) Then
             ReDim Preserve pids(n)
             pids(n) = p.ProcessId
             n = n + 1
