@@ -212,10 +212,13 @@ STANDARD = {
     # Wie VIEL geredet wird -- Ramzis drei Stufen vom 30.08.2026:
     #   'aus'      gar nicht (ersetzt reden=False)
     #   'einmal'   hoechstens ein gesprochener Satz je Antwortrunde
-    #   'dauernd'  laufend Zwischenmeldungen waehrend der Arbeit
+    #   'staendig' laufend Zwischenmeldungen waehrend der Arbeit
+    #              (hiess bis 19.09.2026 'dauernd'; wer den alten Wert liest,
+    #              behandelt ihn wie 'staendig' -- nur 'aus' und 'einmal'
+    #              bedeuten etwas anderes)
     # 'reden' bleibt daneben bestehen und wird von der Tafel abgeleitet
     # mitgefuehrt, damit aeltere Leser nicht ins Leere greifen.
-    'redestufe': 'dauernd',
+    'redestufe': 'staendig',
 
     # DIESE ZWEI GEHÖREN HIERHER, auch wenn nur die Tafel sie setzt -- und das
     # ist kein Schönheitsfehler, sondern ein stiller Datenverlust, der hier
